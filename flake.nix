@@ -286,16 +286,26 @@
             "${modulesPath}/virtualisation/lxc-container.nix"
           ];
 
-          # These services are broken or unnecessary in droidspaces container
+          # These services are broken in droidspaces container
           systemd.services.nix-channel-init.enable = false;
           systemd.services.firewall.enable = false;
           systemd.services.wpa_supplicant.enable = false;
 
           networking.firewall.enable = false;
 
-          # Theoretically systemd should detect container environment and not run udev
-          # but we will disable it anyways
-          services.udev.enable = false;
+          # Restrict udev to Android-safe subsystems only (prevent coldplugging host hardware)
+          systemd.services.systemd-udev-trigger.serviceConfig.ExecStart = lib.mkForce [
+            ""
+            "-udevadm trigger --subsystem-match=usb --subsystem-match=block --subsystem-match=input --subsystem-match=tty --subsystem-match=net"
+          ];
+          # Clear ConditionPathIsReadWrite= from upstream units
+          systemd.services.systemd-udevd.unitConfig.ConditionPathIsReadWrite = lib.mkForce [];
+          systemd.services.systemd-udev-trigger.unitConfig.ConditionPathIsReadWrite = lib.mkForce [];
+          systemd.services.systemd-udev-settle.unitConfig.ConditionPathIsReadWrite = lib.mkForce [];
+          systemd.sockets.systemd-udevd-kernel.unitConfig.ConditionPathIsReadWrite = lib.mkForce [];
+          systemd.sockets.systemd-udevd-control.unitConfig.ConditionPathIsReadWrite = lib.mkForce [];
+
+          systemd.services.NetworkManager.enable = lib.mkDefault false;
 
           nix.settings.experimental-features = ["nix-command" "flakes"];
 
