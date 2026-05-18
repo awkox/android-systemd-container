@@ -18,6 +18,10 @@ This guide provides step-by-step instructions for enabling GPU acceleration in y
 
 Hardware acceleration on Android is achieved by bridging the container's graphics stack with a host-side X server (Termux-X11). Droidspaces handles the complex mount management and security contexts required to make this seamless.
 
+> [!TIP]
+>
+> If you want to enjoy an out-of-the-box XFCE desktop environment experience, you can download our pre-configured XFCE tarballs from the official [Droidspaces Rootfs Builder Releases](https://github.com/Droidspaces/Droidspaces-rootfs-builder/releases).
+
 <a id="termux-x11"></a>
 
 ### 01. Termux-X11 + llvmpipe
@@ -55,6 +59,12 @@ When you enable the **Termux X11** toggle in the Droidspaces app, the following 
 
 6. **Verify**: Run `glxgears` inside the container terminal. The output will render in the Termux-X11 app.
 
+7. **Start Desktop Environment**: To launch the full XFCE desktop (if installed), run:
+
+   ```bash
+   dbus-launch --exit-with-session startxfce4
+   ```
+
 ---
 
 <a id="virgl"></a>
@@ -89,6 +99,12 @@ This method provides **GPU acceleration for non-Qualcomm devices (Mali/PowerVR)*
    ```
 
 5. **Verify Acceleration**: Run `glxinfo -B` and look for "VirGL" in the renderer string.
+
+6. **Start Desktop Environment**: To launch the full XFCE desktop (if installed), run:
+
+   ```bash
+   dbus-launch --exit-with-session startxfce4
+   ```
 
 > [!TIP]
 >
@@ -135,8 +151,7 @@ For Qualcomm Adreno GPUs, Droidspaces supports **native hardware acceleration** 
    ```
 
 > [!TIP]
->
-> **If you encountered any problems related to dri3,** try edit `/data/adb/modules/droidspaces/etc/droidspaces.te` and uncomet line:
+> **If you encounter any problems related to DRI3,** try editing `/data/adb/modules/droidspaces/etc/droidspaces.te` and uncommenting the line:
 >
 > `allow untrusted_app_27 droidspacesd fd use`
 
