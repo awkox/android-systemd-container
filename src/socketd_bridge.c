@@ -356,6 +356,57 @@ static int socketd_append_container_record(
   return 0;
 }
 
+static int socketd_count_installed_containers(uint32_t *count_out) {
+  if (!count_out)
+    return -1;
+
+  *count_out = 0;
+
+  char containers_path[PATH_MAX];
+  snprintf(containers_path, sizeof(containers_path), "%s/Containers",
+           get_workspace_dir());
+
+  DIR *containers_dir = opendir(containers_path);
+  if (!containers_dir) {
+    if (errno == ENOENT)
+      return 0;
+    return -1;
+  }
+
+  uint32_t count = 0;
+  struct dirent *ent;
+
+  /*
+   * CONCERN(socketd-info):
+   * Treat the workspace inventory as the source of "installed" containers:
+   * only valid container-name entries with a loadable mirrored config count
+   * here. This keeps INFO aligned with the same installed-container view that
+   * the later LIST_IMAGES pass will expose.
+   */
+  while ((ent = readdir(containers_dir)) != NULL) {
+    if (ent->d_name[0] == '.')
+      continue;
+
+    if (!validate_container_name(ent->d_name))
+      continue;
+
+    struct ds_config cfg;
+    memset(&cfg, 0, sizeof(cfg));
+
+    if (ds_config_load_by_name(ent->d_name, &cfg) == 0 &&
+        cfg.config_file_existed) {
+      if (count < UINT32_MAX)
+        count++;
+    }
+
+    socketd_free_loaded_config(&cfg);
+  }
+
+  closedir(containers_dir);
+  *count_out = count;
+  return 0;
+}
+
 static void socketd_handle_conn(int conn) {
   struct ds_socketd_request_header req;
   memset(&req, 0, sizeof(req));
@@ -420,9 +471,51 @@ static void socketd_handle_conn(int conn) {
     uint32_t caps_be = htonl(DS_SOCKETD_CAP_PROTOCOL_V1 |
                              DS_SOCKETD_CAP_PING |
                              DS_SOCKETD_CAP_CAPABILITIES |
+                             DS_SOCKETD_CAP_INFO |
                              DS_SOCKETD_CAP_LIST_CONTAINERS);
     socketd_send_response(conn, DS_SOCKETD_STATUS_OK, &caps_be,
                           (uint32_t)sizeof(caps_be));
+    return;
+  }
+  
+    case DS_SOCKETD_OP_INFO: {
+    if (payload_len > 0 &&
+        socketd_discard_payload(conn, payload_len) < 0) {
+      socketd_send_response(conn, DS_SOCKETD_STATUS_BAD_REQUEST, NULL, 0);
+      return;
+    }
+
+    uint32_t installed_count = 0;
+    if (socketd_count_installed_containers(&installed_count) < 0) {
+      socketd_send_response(conn, DS_SOCKETD_STATUS_INTERNAL_ERROR, NULL, 0);
+      return;
+    }
+
+    int running_i = count_running_containers(NULL, 0);
+    uint32_t running_count =
+        running_i > 0 ? (uint32_t)running_i : 0u;
+
+    /*
+     * CONCERN(socketd-info):
+     * Running sidecar state and mirrored workspace-config state are maintained
+     * through separate recovery paths. Keep subtraction saturating so a
+     * transient metadata mismatch never underflows the wire-format stopped
+     * counter.
+     */
+    uint32_t stopped_count =
+        installed_count > running_count
+            ? installed_count - running_count
+            : 0u;
+
+    struct ds_socketd_info_payload info;
+    memset(&info, 0, sizeof(info));
+
+    info.containers_total_be = htonl(installed_count);
+    info.containers_running_be = htonl(running_count);
+    info.containers_stopped_be = htonl(stopped_count);
+
+    socketd_send_response(conn, DS_SOCKETD_STATUS_OK, &info,
+                          (uint32_t)sizeof(info));
     return;
   }
 
@@ -589,7 +682,6 @@ static void socketd_handle_conn(int conn) {
     return;
   }
 
-  case DS_SOCKETD_OP_INFO:
   case DS_SOCKETD_OP_INSPECT_CONTAINER:
   case DS_SOCKETD_OP_START_CONTAINER:
   case DS_SOCKETD_OP_STOP_CONTAINER:

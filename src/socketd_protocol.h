@@ -148,6 +148,12 @@ struct DS_SOCKETD_PACKED ds_socketd_image_record {
   uint8_t _pad[4];
 };
 
+struct DS_SOCKETD_PACKED ds_socketd_info_payload {
+  uint32_t containers_total_be;
+  uint32_t containers_running_be;
+  uint32_t containers_stopped_be;
+};
+
 /*
  * CONCERN(socketd-wire):
  * created_at_be is likewise a 64-bit network-order field and needs the same
