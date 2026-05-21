@@ -411,4 +411,10 @@
     <string name="custom_init_error_absolute">必須使用絕對路徑（以 / 開頭)</string>
     <string name="custom_init_warning">除非您完全清楚自己在做什麼，否則請勿更改此設定。設定錯誤的初始化二進位檔案將導致容器無法啟動。</string>
     <string name="custom_init_option">自定義Init</string>
+    <string name="notification_title">Droidspaces 終端</string>
+    <string name="notification_action_exit">離開</string>
+    <string name="notification_wakelock_on">喚醒鎖定：開啟</string>
+    <string name="notification_wakelock_off">喚醒鎖定：關閉</string>
+    <string name="notification_channel_name">終端會話</string>
+    <string name="notification_channel_desc">啟動的容器終端會話</string>
 </resources>
