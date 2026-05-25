@@ -165,7 +165,7 @@ fun RootfsRepoSheet(
                                 downloadStates = vm.downloadStates,
                                 onDownload     = { vm.startDownload(it) },
                                 onCancel       = { vm.cancelDownload(it) },
-                                onInstall      = { uri -> onDismiss(); onInstall(uri) },
+                                onInstall      = { uri -> onInstall(uri) },
                                 onRetry        = { vm.resetAsset(it.file) }
                             )
                         }
