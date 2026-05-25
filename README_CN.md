@@ -73,7 +73,7 @@ Droidspaces 的独特之处在于其对 Android 和 Linux 本身**零依赖**、
     </td>
     <td align="center" width="33%">
       <b>容器信息</b><br>
-      <i>一站式管理容器</i><br>
+      <i>一站式容器管理</i><br>
       <img src="Documentation/resources/gallery/8_container_information.png" width="95%">
     </td>
     <td align="center" width="33%">
@@ -95,18 +95,18 @@ Droidspaces 的独特之处在于其对 Android 和 Linux 本身**零依赖**、
     </td>
     <td align="center" width="33%">
       <b>隔离检查</b><br>
-      <i>挂载隔离的演示</i><br>
+      <i>挂载隔离演示</i><br>
       <img src="Documentation/resources/gallery/12_mnt_net_isolation.png" width="95%">
     </td>
   </tr>
   <tr valign="top">
     <td align="center" width="33%">
       <b>设置页面</b><br>
-      <i>检查需求，自定义设置</i><br>
+      <i>检查运行要求，也可做自定义设置</i><br>
       <img src="Documentation/resources/gallery/13_settings_screen.png" width="95%">
     </td>
     <td align="center" width="33%">
-      <b>需求检查器</b><br>
+      <b>要求检查器</b><br>
       <i>实时系统检查</i><br>
       <img src="Documentation/resources/gallery/14_built_in_requirements_checker.png" width="95%">
     </td>
@@ -124,9 +124,8 @@ Droidspaces 的独特之处在于其对 Android 和 Linux 本身**零依赖**、
 
 - [什么是 Droidspaces？](#what-is-droidspaces)
 - [功能特性](#features)
-- [安全与隔离理念](#security-model)
-- [Droidspaces vs Chroot](#droidspaces-vs-chroot)
-- [Droidspaces vs LXC/Docker（在 Android 上）](#droidspaces-vs-lxcdocker-on-android)
+- [安全与隔离的理念](#security-model)
+- [Droidspaces 与其他方案对比](#droidspaces-vs-the-alternatives)
 - [系统需求](#requirements)
     - [Android](#a-android-devices)
         - [Root 需求](#rooting-requirements)
@@ -136,6 +135,7 @@ Droidspaces 的独特之处在于其对 Android 和 Linux 本身**零依赖**、
             - [GKI（现代内核）](#GKI)
     - [Linux 桌面端](#b-linux-desktop)
 - [安装指南](#installation)
+- [社区支持的 Android 设备](./Documentation/community-supported-devices.md)
 - [使用指南](#usage)
 - [故障排除](./Documentation/Troubleshooting.md)
 - [更多文档](#additional-documentation)
