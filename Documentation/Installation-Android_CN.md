@@ -13,7 +13,7 @@ Droidspaces 在 Android 上旨在提供"零终端"体验。从首次安装到运
 ## 前提条件
 
 1. **已 Root 的设备**，使用[此处](../README.md#rooting-requirements)列出的受支持的 Root 方案
-2. **兼容的内核**，已启用 Droidspaces 支持（请参阅[内核配置指南](Kernel-Configuration.md)）
+2. **兼容的内核**，已启用 Droidspaces 支持（请参阅[内核配置指南](Kernel-Configuration_CN.md)）
 
 ## 第 1 步：安装应用
 
@@ -48,10 +48,10 @@ Droidspaces 在 Android 上旨在提供"零终端"体验。从首次安装到运
 你可以随时验证系统状态：
 1. 前往**设置**（齿轮图标）-> **需求**。
 2. 点击**检查需求**。这会在内部运行完整的 `droidspaces check` 套件。
-3. **内核配置**：如果你是一位内核开发者，你可以找到一���可复制的 `droidspaces.config` defconfig 片段，类似于[此页面](./Kernel-Configuration.md#required-kernel-configuration)，以确保你的内核与 Droidspaces 完全兼容。
+3. **内核配置**：如果你是一位内核开发者，你可以找到一���可复制的 `droidspaces.config` defconfig 片段，类似于[此页面](./Kernel-Configuration_CN.md#required-kernel-configuration)，以确保你的内核与 Droidspaces 完全兼容。
 
 ## 下一步
 
-- [Android 应用使用指南](Usage-Android-App.md)：了解管理详情。
-- [GPU 加速指南](GPU-Acceleration.md)：启用硬件加速的桌面环境。
-- [Linux CLI 指南](Linux-CLI.md)：提供专家级命令行访问。
+- [Android 应用使用指南](Usage-Android-App_CN.md)：了解管理详情。
+- [GPU 加速指南](GPU-Acceleration_CN.md)：启用硬件加速的桌面环境。
+- [Linux CLI 指南](Linux-CLI_CN.md)：提供专家级命令行访问。

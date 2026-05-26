@@ -120,5 +120,5 @@ sudo tar -xvf rootfs.tar.xz -C my-container
 
 ## 下一步
 
-- [Linux CLI 指南](Linux-CLI.md) 获取完整的命令和参数参考
-- [功能深入解析](Features.md) 了解每个功能的详细说明
+- [Linux CLI 指南](Linux-CLI_CN.md) 获取完整的命令和参数参考
+- [功能深入解析](Features_CN.md) 了解每个功能的详细说明
