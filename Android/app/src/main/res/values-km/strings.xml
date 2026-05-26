@@ -400,7 +400,7 @@
     <string name="starting_resizing">កំពុងចាប់ផ្តើមដំណើរការប្តូរទំហំ...</string>
     <string name="help_card_title">ទើបតែប្រើប្រាស់ Droidspaces មែនទេ?</string>
     <string name="help_card_message">ចុចទីនេះ ដើម្បីស្វែងយល់ពីរបៀបដំឡើងកុងតឺន័រ Linux ដំបូងរបស់អ្នក!</string>
-    <string name="help_card_url">https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Installation-Android.md</string>
+    <string name="help_card_url" translatable="false">https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Installation-Android.md</string>
     <string name="privileged_mode">របៀប Privileged</string>
     <string name="privileged_mode_description">កំណត់រចនាសម្ព័ន្ធបន្ធូរបន្ថយសន្តិសុខតាមកម្រិតលម្អិត សម្រាប់ការធ្វើនិម្មិតកម្មត្រួតគ្នា (Nested Virtualization) ឬការចូលប្រើប្រាស់ Hardware កម្រិតខ្ពស់។</string>
     <string name="privileged_nomask_desc">"បិទ Jail Masks ដើម្បីអនុញ្ញាតឱ្យមានសិទ្ធិកែប្រែ (Write Access) ទៅលើ /proc និង /sys។ សម្គាល់៖ /sys នៅតែរក្សាស្ថានភាពសម្រាប់តែអានប៉ុណ្ណោះ (Read-only) លុះត្រាតែមុខងារចូលប្រើប្រាស់ Hardware  ត្រូវបានបើកដំណើរការផងដែរ។"</string>

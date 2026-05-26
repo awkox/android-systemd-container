@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="get_started">Gapoan</string>
-
     <string name="root_check_title">Panang-chek na Root Access</string>
     <string name="checking_root">Tsek-tseken so root access…</string>
     <string name="root_granted">Inabuloyan so Root Access</string>
@@ -12,7 +11,6 @@
     <string name="root_available_message">Nayarian mon usaren so Droidspaces</string>
     <string name="skip">Laktawan</string>
     <string name="continue_button">Ituloy</string>
-
     <string name="home_title">Home</string>
     <string name="containers">Saray Container</string>
     <string name="panel">Panel</string>
@@ -22,10 +20,8 @@
     <string name="refresh">I-refresh</string>
     <string name="search">Anapen</string>
     <string name="clear">Buraen</string>
-
     <string name="container_singular">Container</string>
     <string name="running">Aandar</string>
-
     <string name="backend_checking">Backend: Tsek-tseken...</string>
     <string name="backend_installed">Backend: Nan-install</string>
     <string name="backend_update_available">Backend: Walay update ya available</string>
@@ -35,7 +31,6 @@
     <string name="grant_root_message">Ikdan na root access pian ituloy so pan-explore ed droidspaces !</string>
     <string name="unknown">Ag-amta</string>
     <string name="update_available_message">Walay available ya backend update, i-klik diya pian i-update</string>
-
     <string name="backend_section">Backend</string>
     <string name="reinstall_backend">I-reinstall so Backend</string>
     <string name="reinstall_backend_description">I-reinstall iray binary tan boot module</string>
@@ -57,13 +52,12 @@
     <string name="about_droidspaces">Nipaakar ed Droidspaces</string>
     <string name="about_description">LXC-Style ya container manager parad Android</string>
     <string name="developers">(Saray) Developer</string>
-    <string name="developer_ravindu644">ravindu644</string>
+    <string name="developer_ravindu644" translatable="false">ravindu644</string>
     <string name="developer_ravindu644_role">Backend, UI</string>
     <string name="telegram_channel">Telegram Channel</string>
     <string name="contributors">Saray Contributor</string>
     <string name="github">GitHub</string>
     <string name="ok">OK</string>
-
     <string name="no_containers_installed">Anggapoy aka-install ya container</string>
     <string name="install_container_description">Mang-install na container gamit so buton ed leksab</string>
     <string name="install_container">Mang-install na Container</string>
@@ -84,7 +78,6 @@
     <string name="view_logs">Nengnengen iray log</string>
     <string name="edit_container_configuration">I-edit so Container Configuration</string>
     <string name="uninstall_container_menu">I-uninstall so Container</string>
-
     <string name="status_running">AANDAR</string>
     <string name="status_restarting">MANRE-RESTART</string>
     <string name="status_stopped">TINMUNDA</string>
@@ -98,7 +91,6 @@
     <string name="storage_option">Storage</string>
     <string name="hw_option">HW</string>
     <string name="run_at_boot">Paanadaren ed Boot</string>
-
     <string name="container_info">Impormasyon na Container</string>
     <string name="distribution">Distribusyon</string>
     <string name="version">Bersyon</string>
@@ -109,7 +101,6 @@
     <string name="checking">Tsek-tseken</string>
     <string name="not_available">Ag Available</string>
     <string name="manage">Asikasoen</string>
-
     <string name="edit_container_title">I-edit so Container: %1$s</string>
     <string name="container_is_running">Aandar so container</string>
     <string name="changes_take_effect_after_restart">Na-apply iray anguman kayari na restart</string>
@@ -127,20 +118,17 @@
     <string name="saving">Is-save...</string>
     <string name="save_changes">I-save so Saray Anguman</string>
     <string name="failed_to_update_config">Ag a-update so configuration</string>
-
     <string name="container_setup">Container Setup</string>
     <string name="container_information">Impormasyon na Container</string>
     <string name="container_name_label">Ngaran na Container *</string>
-    <string name="container_name_placeholder">my-container</string>
+    <string name="container_name_placeholder" translatable="false">my-container</string>
     <string name="hostname_placeholder">Ikaingal ya anggapoy karga parad default</string>
     <string name="hostname_hint">No anggapoy karga, usaren so ngaran na container bilang hostname</string>
     <string name="container_name_exists">Wala lay container ya uusaren to yan ngaran</string>
     <string name="next_configuration">Ontumbok: Configuration</string>
-
     <string name="configuration_title">Configuration</string>
     <string name="container_options">Saray Opsyon na Container</string>
     <string name="next_storage">Ontumbok: Storage</string>
-
     <string name="installation_complete">Asumpal so Pan-install</string>
     <string name="installation_failed">Ag Agawa so Pan-install</string>
     <string name="installing_module">I-i-install so Module</string>
@@ -161,10 +149,8 @@
     <string name="installing_binary">I-i-install so binary: %1$s</string>
     <string name="granting_permissions">Mangiter na saray permiso...</string>
     <string name="preparing_installation">Ipararaan so pan-install...</string>
-
     <string name="no_containers_running">Anggapoy container ya aandar</string>
     <string name="start_container_first">Igapo ni so container pian nanengneng diya</string>
-
     <string name="systemd_services">Saray Serbisyo na Systemd</string>
     <string name="openrc_services">Saray Serbisyo na OpenRC</string>
     <string name="openrc">OpenRC</string>
@@ -187,7 +173,7 @@
     <string name="action_successful">Agawa so %1$s %2$s</string>
     <string name="failed_to_action">Ag agawa so %1$s %2$s</string>
     <string name="error_unknown">Eror: %1$s</string>
-    <string name="actioning_service">%1$sing %2$s...</string>
+    <string name="actioning_service" translatable="false">%1$sing %2$s...</string>
     <string name="no_services_found">Anggapoy Aromog ya Serbisyo</string>
     <string name="no_running_services">Anggapoy aandar ya serbisyo</string>
     <string name="no_enabled_services">Anggapoy naka-enable ya serbisyo</string>
@@ -195,34 +181,27 @@
     <string name="no_static_services">Anggapoy abnormal ya serbisyo</string>
     <string name="no_abnormal_services">Anggapoy abnormal ya serbisyo</string>
     <string name="no_masked_services">Anggapoy naka-mask ya serbisyo</string>
-
     <string name="kernel">Kernel</string>
     <string name="selinux_status">Kagagawa na SELinux</string>
     <string name="android_version">Bersyon na Android</string>
     <string name="architecture">Architecture</string>
     <string name="supported_abis">Saray Suportadon ABI</string>
     <string name="loading">Ilo-load...</string>
-
     <string name="backend_not_available">Ag available so Backend</string>
     <string name="backend_not_available_description">Ag aka-install o corrupted so backend. I-install ni saya.</string>
     <string name="root_access_not_available">Ag available so root access</string>
     <string name="root_access_not_available_description">Naka-disable yan pahina ta ag available so root access</string>
-
     <string name="operation_failed_title">Ag Agawa so Operasyon</string>
     <string name="no_output_available">Anggapoy output ya available</string>
     <string name="dismiss">Paandien</string>
-
     <string name="available_users">Saray Available ya User</string>
     <string name="login_command_copied">Akopya so login command parad user ya %1$s</string>
     <string name="refresh_users">I-refresh iray user</string>
     <string name="no_local_users_found">Anggapoy aromog ya local users</string>
     <string name="select_user">Manpili na User</string>
     <string name="copy_login">Kopyaen so login</string>
-
-
     <string name="comma">,</string>
     <string name="gb_size">%1$dGB</string>
-
     <string name="sparse_image_configuration">Configuration na Sparse Image</string>
     <string name="storage_configuration">Configuration na Storage</string>
     <string name="about_sparse_images">Nipaakar ed Saray Sparse Image</string>
@@ -237,16 +216,12 @@
     <string name="maximum_size_512gb">Say maximum ya kabaleg et 512 GB</string>
     <string name="size_gb">Kabaleg (GB)</string>
     <string name="enter_size_between_4_512_gb">I-enter so kabaleg ed nanleletan na 4 tan 512 GB</string>
-
     <string name="logs_title">Saray Log: %1$s</string>
     <string name="clear_logs">Buraen iray log</string>
     <string name="copy_logs">Kopyaen iray log</string>
-
     <string name="error_container_name_empty">Ag nayarin anggapoy karga so ngaran na container</string>
     <string name="error_container_name_invalid">Say ngaran na container et nayari labat ya walaay letra, numero, gitling (-), underscores (_), tuldok (.), tan espasyo</string>
     <string name="error_hostname_invalid">Say hostname et nayari labat ya walaay letra, numero, tan gitling (-)</string>
-
-
     <string name="check_requirements">I-chek iray Kaukolan</string>
     <string name="requirements_check_title">Pan-chek na saray Kaukolan</string>
     <string name="requirements_for_droidspaces">Saray Kaukolan parad Droidspaces</string>

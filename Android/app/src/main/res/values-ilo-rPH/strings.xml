@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="get_started">Mangrugi</string>
-
     <string name="root_check_title">Panang-tsek ti Root Access</string>
     <string name="checking_root">Suksukimaten ti root access…</string>
     <string name="root_granted">Naipalubos ti Root Access</string>
@@ -12,7 +11,6 @@
     <string name="root_available_message">Mabalinmo nga usaren ti Droidspaces</string>
     <string name="skip">Laktawan</string>
     <string name="continue_button">Ituloy</string>
-
     <string name="home_title">Home</string>
     <string name="containers">Dagiti Container</string>
     <string name="panel">Panel</string>
@@ -22,10 +20,8 @@
     <string name="refresh">I-refresh</string>
     <string name="search">Sapulen</string>
     <string name="clear">Daldalen</string>
-
     <string name="container_singular">Container</string>
     <string name="running">Agtartaray</string>
-
     <string name="backend_checking">Backend: Suksukimaten...</string>
     <string name="backend_installed">Backend: Nakainstalar</string>
     <string name="backend_update_available">Backend: Adda update nga available</string>
@@ -35,7 +31,6 @@
     <string name="grant_root_message">Ikkan ti root access tapno ituloy ti panag-explore iti droidspaces !</string>
     <string name="unknown">Saan nga ammo</string>
     <string name="update_available_message">Adda backend update, i-klik ditoy tapno i-update</string>
-
     <string name="backend_section">Backend</string>
     <string name="reinstall_backend">I-install manen ti Backend</string>
     <string name="reinstall_backend_description">I-install manen dagiti binary ken boot module</string>
@@ -57,13 +52,12 @@
     <string name="about_droidspaces">Maipanggep iti Droidspaces</string>
     <string name="about_description">LXC-Style container manager para iti Android</string>
     <string name="developers">(Dagiti) Developer</string>
-    <string name="developer_ravindu644">ravindu644</string>
+    <string name="developer_ravindu644" translatable="false">ravindu644</string>
     <string name="developer_ravindu644_role">Backend, UI</string>
     <string name="telegram_channel">Telegram Channel</string>
     <string name="contributors">Dagiti Contributor</string>
     <string name="github">GitHub</string>
     <string name="ok">OK</string>
-
     <string name="no_containers_installed">Awan ti naka-install a container</string>
     <string name="install_container_description">I-install ti container babaen ti button iti baba</string>
     <string name="install_container">I-install ti Container</string>
@@ -84,7 +78,6 @@
     <string name="view_logs">Kitaen dagiti log</string>
     <string name="edit_container_configuration">I-edit ti Container Configuration</string>
     <string name="uninstall_container_menu">I-uninstall ti Container</string>
-
     <string name="status_running">AGTARTARAY</string>
     <string name="status_restarting">AG-RESTART</string>
     <string name="status_stopped">NAGSARDENG</string>
@@ -97,7 +90,6 @@
     <string name="ipv6_option">IPv6</string>
     <string name="storage_option">Storage</string>
     <string name="hw_option">HW</string>
-
     <string name="container_info">Impormasyon ti Container</string>
     <string name="distribution">Distribusyon</string>
     <string name="version">Bersyon</string>
@@ -108,7 +100,6 @@
     <string name="checking">Suksukimaten</string>
     <string name="not_available">Saan nga Available</string>
     <string name="manage">Imatonan</string>
-
     <string name="edit_container_title">I-edit ti Container: %1$s</string>
     <string name="container_is_running">Agtartaray ti container</string>
     <string name="changes_take_effect_after_restart">Maipatungpal dagiti nabaliwan kalpasan ti restart</string>
@@ -127,20 +118,17 @@
     <string name="saving">Is-save...</string>
     <string name="save_changes">I-save dagiti Panagbalbaliw</string>
     <string name="failed_to_update_config">Napaay nga i-update ti configuration</string>
-
     <string name="container_setup">Panag-setup ti Container</string>
     <string name="container_information">Impormasyon ti Container</string>
     <string name="container_name_label">Nagan ti Container *</string>
-    <string name="container_name_placeholder">my-container</string>
+    <string name="container_name_placeholder" translatable="false">my-container</string>
     <string name="hostname_placeholder">Ibati nga awan karga para iti default</string>
     <string name="hostname_hint">No awan karga, usaren ti nagan ti container a kas hostname</string>
     <string name="container_name_exists">Adda container nga agtagikua iti daytoy a nagan</string>
     <string name="next_configuration">Sumaruno: Configuration</string>
-
     <string name="configuration_title">Configuration</string>
     <string name="container_options">Dagiti Opsyon ti Container</string>
     <string name="next_storage">Sumaruno: Storage</string>
-
     <string name="installation_complete">Nalpasen ti Panag-install</string>
     <string name="installation_failed">Napaay ti Panag-install</string>
     <string name="installing_module">In-install ti Module</string>
@@ -161,10 +149,8 @@
     <string name="installing_binary">In-install ti binary: %1$s</string>
     <string name="granting_permissions">Mangmangted kadagiti permiso...</string>
     <string name="preparing_installation">Is-isagana ti panag-install...</string>
-
     <string name="no_containers_running">Awan ti agtartaray a container</string>
     <string name="start_container_first">Mangirugi nga umuna ti container tapno makitam ditoy</string>
-
     <string name="systemd_services">Dagiti Serbisyo ti Systemd</string>
     <string name="openrc_services">Dagiti Serbisyo ti OpenRC</string>
     <string name="openrc">OpenRC</string>
@@ -187,7 +173,7 @@
     <string name="action_successful">Nagballigi ti %1$s %2$s</string>
     <string name="failed_to_action">Napaay ti %1$s %2$s</string>
     <string name="error_unknown">Error: %1$s</string>
-    <string name="actioning_service">%1$sing %2$s...</string>
+    <string name="actioning_service" translatable="false">%1$sing %2$s...</string>
     <string name="no_services_found">Awan ti Nasarakan a Serbisyo</string>
     <string name="no_running_services">Awan ti agtartaray a serbisyo</string>
     <string name="no_enabled_services">Awan ti naka-enable a serbisyo</string>
@@ -195,34 +181,27 @@
     <string name="no_static_services">Awan ti abnormal a serbisyo</string>
     <string name="no_abnormal_services">Awan ti abnormal a serbisyo</string>
     <string name="no_masked_services">Awan ti naka-mask a serbisyo</string>
-
     <string name="kernel">Kernel</string>
     <string name="selinux_status">Kasasaad ti SELinux</string>
     <string name="android_version">Bersyon ti Android</string>
     <string name="architecture">Architecture</string>
     <string name="supported_abis">Dagiti Suportado nga ABI</string>
     <string name="loading">Aglo-load...</string>
-
     <string name="backend_not_available">Saan nga available ti Backend</string>
     <string name="backend_not_available_description">Saan a nakainstalar wenno corrupted ti backend. Pakainstalar yo nga umuna daytoy.</string>
     <string name="root_access_not_available">Saan nga available ti root access</string>
     <string name="root_access_not_available_description">Naka-disable daytoy a panid gapu ta awan ti root access</string>
-
     <string name="operation_failed_title">Napaay ti Operasyon</string>
     <string name="no_output_available">Awan ti output nga available</string>
     <string name="dismiss">Iwaksi</string>
-
     <string name="available_users">Dagiti Available a User</string>
     <string name="login_command_copied">Nakopia ti login command para iti user a %1$s</string>
     <string name="refresh_users">I-refresh dagiti user</string>
     <string name="no_local_users_found">Awan ti nasarakan a local users</string>
     <string name="select_user">Piliem ti User</string>
     <string name="copy_login">Kopiaen ti login</string>
-
-
     <string name="comma">,</string>
     <string name="gb_size">%1$dGB</string>
-
     <string name="sparse_image_configuration">Configuration ti Sparse Image</string>
     <string name="storage_configuration">Configuration ti Storage</string>
     <string name="about_sparse_images">Maipanggep kadagiti Sparse Image</string>
@@ -237,16 +216,12 @@
     <string name="maximum_size_512gb">Ti maximum a kadakkel ket 512 GB</string>
     <string name="size_gb">Kadakkel (GB)</string>
     <string name="enter_size_between_4_512_gb">Ilanad ti kadakkel iti nagbaetan ti 4 ken 512 GB</string>
-
     <string name="logs_title">Dagiti Log: %1$s</string>
     <string name="clear_logs">Daldalen dagiti log</string>
     <string name="copy_logs">Kopiaen dagiti log</string>
-
     <string name="error_container_name_empty">Saan a mabalin nga awan nagan ti container</string>
     <string name="error_container_name_invalid">Ti nagan ti container ket mabalin laeng nga aglaon kadagiti letra, numero, gitling (-), underscores (_), tuldok (.), ken espasyo</string>
     <string name="error_hostname_invalid">Ti hostname ket mabalin laeng nga aglaon kadagiti letra, numero, ken gitling (-)</string>
-
-
     <string name="check_requirements">I-tsek dagiti Kasapulan</string>
     <string name="requirements_check_title">Panag-tsek kadagiti Kasapulan</string>
     <string name="requirements_for_droidspaces">Dagiti Kasapulan para iti Droidspaces</string>

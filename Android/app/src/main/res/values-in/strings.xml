@@ -395,7 +395,7 @@
     <string name="export_container">Ekspor container sebagai tarball</string>
     <string name="export_container_failed">Gagal mengekspor container %1$s</string>
     <string name="starting_export">Memulai ekspor...</string>
-    <string name="help_card_url">https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Installation-Android.md</string>
+    <string name="help_card_url" translatable="false">https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Installation-Android.md</string>
     <string name="error_container_name_too_long">Nama terlalu panjang - maksimal 17 karakter (batas panjang path perangkat loop kernel)</string>
     <string name="network_mode_nat_short">NAT</string>
     <string name="network_mode_none_short">Tidak ada</string>

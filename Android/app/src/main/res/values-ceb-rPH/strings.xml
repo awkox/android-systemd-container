@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="get_started">Pagsugod</string>
-
     <string name="root_check_title">Pagsusi sa Root Access</string>
     <string name="checking_root">Gisusi ang root access…</string>
     <string name="root_granted">Gitugotan ang Root Access</string>
@@ -12,7 +11,6 @@
     <string name="root_available_message">Mahimo na nimo gamiton ang Droidspaces</string>
     <string name="skip">Laktawi</string>
     <string name="continue_button">Padayon</string>
-
     <string name="home_title">Home</string>
     <string name="containers">Mga Container</string>
     <string name="panel">Panel</string>
@@ -22,10 +20,8 @@
     <string name="refresh">I-refresh</string>
     <string name="search">Pangitaa</string>
     <string name="clear">Papasa</string>
-
     <string name="container_singular">Container</string>
     <string name="running">Nagdagan</string>
-
     <string name="backend_checking">Backend: Gisusi...</string>
     <string name="backend_installed">Backend: Naka-install</string>
     <string name="backend_update_available">Backend: Nay update nga available</string>
@@ -35,7 +31,6 @@
     <string name="grant_root_message">Hatagi og root access aron magpadayon sa pagsuhid sa droidspaces !</string>
     <string name="unknown">Wala mahibal-an</string>
     <string name="update_available_message">Adunay available nga backend update, i-klik dinhi aron ma-update</string>
-
     <string name="backend_section">Backend</string>
     <string name="reinstall_backend">I-install pag-usab ang Backend</string>
     <string name="reinstall_backend_description">I-install pag-usab ang mga binary ug boot module</string>
@@ -57,13 +52,12 @@
     <string name="about_droidspaces">Mahitungod sa Droidspaces</string>
     <string name="about_description">LXC-Style nga container manager alang sa Android</string>
     <string name="developers">(Mga) Developer</string>
-    <string name="developer_ravindu644">ravindu644</string>
+    <string name="developer_ravindu644" translatable="false">ravindu644</string>
     <string name="developer_ravindu644_role">Backend, UI</string>
     <string name="telegram_channel">Telegram Channel</string>
     <string name="contributors">Mga Contributor</string>
     <string name="github">GitHub</string>
     <string name="ok">OK</string>
-
     <string name="no_containers_installed">Walay na-install nga mga container</string>
     <string name="install_container_description">Pag-install og container gamit ang button sa ubos</string>
     <string name="install_container">Pag-install og Container</string>
@@ -84,7 +78,6 @@
     <string name="view_logs">Tan-awa ang mga log</string>
     <string name="edit_container_configuration">I-edit ang Container Configuration</string>
     <string name="uninstall_container_menu">I-uninstall ang Container</string>
-
     <string name="status_running">NAGDAGAN</string>
     <string name="status_restarting">NAG-RESTART</string>
     <string name="status_stopped">MIHUNONG</string>
@@ -97,7 +90,6 @@
     <string name="ipv6_option">IPv6</string>
     <string name="storage_option">Storage</string>
     <string name="hw_option">HW</string>
-
     <string name="container_info">Impormasyon sa Container</string>
     <string name="distribution">Distribusyon</string>
     <string name="version">Bersyon</string>
@@ -108,7 +100,6 @@
     <string name="checking">Gisusi</string>
     <string name="not_available">Dili Magamit</string>
     <string name="manage">Dumala</string>
-
     <string name="edit_container_title">I-edit ang Container: %1$s</string>
     <string name="container_is_running">Nagdagan ang container</string>
     <string name="changes_take_effect_after_restart">Ang mga kausaban mo-epekto pagkahuman sa restart</string>
@@ -127,20 +118,17 @@
     <string name="saving">Gi-save...</string>
     <string name="save_changes">I-save ang mga Kausaban</string>
     <string name="failed_to_update_config">Napakyas sa pag-update sa configuration</string>
-
     <string name="container_setup">Container Setup</string>
     <string name="container_information">Impormasyon sa Container</string>
     <string name="container_name_label">Ngalan sa Container *</string>
-    <string name="container_name_placeholder">my-container</string>
+    <string name="container_name_placeholder" translatable="false">my-container</string>
     <string name="hostname_placeholder">Biyai nga walay sulod para sa default</string>
     <string name="hostname_hint">Kung walay sulod, gamiton ang ngalan sa container isip hostname</string>
     <string name="container_name_exists">Aduna nay container nga naggamit niini nga ngalan</string>
     <string name="next_configuration">Sunod: Configuration</string>
-
     <string name="configuration_title">Configuration</string>
     <string name="container_options">Mga Opsyon sa Container</string>
     <string name="next_storage">Sunod: Storage</string>
-
     <string name="installation_complete">Kompleto na ang Pag-install</string>
     <string name="installation_failed">Napakyas ang Pag-install</string>
     <string name="installing_module">Gi-install ang Module</string>
@@ -161,10 +149,8 @@
     <string name="installing_binary">Gi-install ang binary: %1$s</string>
     <string name="granting_permissions">Naghatag og mga permiso...</string>
     <string name="preparing_installation">Giandam ang pag-install...</string>
-
     <string name="no_containers_running">Walay container nga nagdagan</string>
     <string name="start_container_first">Pagsugod una og container aron makita kini dinhi</string>
-
     <string name="systemd_services">Mga Serbisyo sa Systemd</string>
     <string name="openrc_services">Mga Serbisyo sa OpenRC</string>
     <string name="openrc">OpenRC</string>
@@ -187,7 +173,7 @@
     <string name="action_successful">Nagmalampuson ang %1$s %2$s</string>
     <string name="failed_to_action">Napakyas sa %1$s %2$s</string>
     <string name="error_unknown">Error: %1$s</string>
-    <string name="actioning_service">Gina-%1$s ang %2$s...</string>
+    <string name="actioning_service" translatable="false">Gina-%1$s ang %2$s...</string>
     <string name="no_services_found">Walay Nakit-an nga Serbisyo</string>
     <string name="no_running_services">Walay serbisyo nga nagdagan</string>
     <string name="no_enabled_services">Walay serbisyo nga naka-enable</string>
@@ -195,34 +181,27 @@
     <string name="no_static_services">Walay serbisyo nga abnormal</string>
     <string name="no_abnormal_services">Walay serbisyo nga abnormal</string>
     <string name="no_masked_services">Walay serbisyo nga naka-mask</string>
-
     <string name="kernel">Kernel</string>
     <string name="selinux_status">Status sa SELinux</string>
     <string name="android_version">Bersyon sa Android</string>
     <string name="architecture">Architecture</string>
     <string name="supported_abis">Mga Gisuportahan nga ABI</string>
     <string name="loading">Nag-load...</string>
-
     <string name="backend_not_available">Dili magamit ang Backend</string>
     <string name="backend_not_available_description">Ang backend wala naka-install o na-corrupt. Palihug i-install una kini.</string>
     <string name="root_access_not_available">Dili magamit ang root access</string>
     <string name="root_access_not_available_description">Kini nga panid naka-disable tungod kay dili magamit ang root access</string>
-
     <string name="operation_failed_title">Napakyas ang Operasyon</string>
     <string name="no_output_available">Walay output nga available</string>
     <string name="dismiss">Isalikway</string>
-
     <string name="available_users">Mga Available nga User</string>
     <string name="login_command_copied">Nakopya ang login command para sa user nga %1$s</string>
     <string name="refresh_users">I-refresh ang mga user</string>
     <string name="no_local_users_found">Walay nakit-an nga local users</string>
     <string name="select_user">Pagpili og User</string>
     <string name="copy_login">Kopyaha ang login</string>
-
-
     <string name="comma">,</string>
     <string name="gb_size">%1$dGB</string>
-
     <string name="sparse_image_configuration">Configuration sa Sparse Image</string>
     <string name="storage_configuration">Configuration sa Storage</string>
     <string name="about_sparse_images">Mahitungod sa mga Sparse Image</string>
@@ -237,16 +216,12 @@
     <string name="maximum_size_512gb">Ang maximum nga gidak-on kay 512 GB</string>
     <string name="size_gb">Gidak-on (GB)</string>
     <string name="enter_size_between_4_512_gb">Isulod ang gidak-on tali sa 4 ug 512 GB</string>
-
     <string name="logs_title">Mga Log: %1$s</string>
     <string name="clear_logs">Papasa ang mga log</string>
     <string name="copy_logs">Kopyaha ang mga log</string>
-
     <string name="error_container_name_empty">Dili mahimong walay sulod ang ngalan sa container</string>
     <string name="error_container_name_invalid">Ang ngalan sa container mahimo lang maglangkob og mga letra, numero, hyphen (-), underscore (_), tuldok (.), ug space</string>
     <string name="error_hostname_invalid">Ang hostname mahimo lang maglangkob og mga letra, numero, ug dash (-)</string>
-
-
     <string name="check_requirements">Susiha ang mga Kinahanglanon</string>
     <string name="requirements_check_title">Pagsusi sa mga Kinahanglanon</string>
     <string name="requirements_for_droidspaces">Mga Kinahanglanon para sa Droidspaces</string>
@@ -254,4 +229,3 @@
     <string name="requirements_check_completed_with_errors">Nahuman ang pagsusi sa mga kinahanglanon nga adunay mga error</string>
     <string name="kernel_requirements_copied">Nakopya ang mga kinahanglanon sa kernel sa clipboard</string>
 </resources>
-

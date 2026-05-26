@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="get_started">Empeza</string>
-
     <string name="root_check_title">Chequeo de Acceso Root</string>
     <string name="checking_root">Ta chequea el acceso root…</string>
     <string name="root_granted">Ya Dale Acceso Root</string>
@@ -12,7 +11,6 @@
     <string name="root_available_message">Puede ya tu usa el Droidspaces</string>
     <string name="skip">Salta</string>
     <string name="continue_button">Continua</string>
-
     <string name="home_title">Home</string>
     <string name="containers">Maga Container</string>
     <string name="panel">Panel</string>
@@ -22,10 +20,8 @@
     <string name="refresh">Hace Refresh</string>
     <string name="search">Busca</string>
     <string name="clear">Bura</string>
-
     <string name="container_singular">Container</string>
     <string name="running">Ta anda</string>
-
     <string name="backend_checking">Backend: Ta chequea...</string>
     <string name="backend_installed">Backend: Instalado</string>
     <string name="backend_update_available">Backend: Tiene update disponible</string>
@@ -35,7 +31,6 @@
     <string name="grant_root_message">Dale acceso root para continua explora el droidspaces !</string>
     <string name="unknown">Hende sabe</string>
     <string name="update_available_message">Tiene backend update disponible, hace click aqui para hace update</string>
-
     <string name="backend_section">Backend</string>
     <string name="reinstall_backend">Instala otra vez el Backend</string>
     <string name="reinstall_backend_description">Instala otra vez el maga binary y boot module</string>
@@ -57,13 +52,12 @@
     <string name="about_droidspaces">Acerca de Droidspaces</string>
     <string name="about_description">LXC-Style container manager para na Android</string>
     <string name="developers">(Maga) Developer</string>
-    <string name="developer_ravindu644">ravindu644</string>
+    <string name="developer_ravindu644" translatable="false">ravindu644</string>
     <string name="developer_ravindu644_role">Backend, UI</string>
     <string name="telegram_channel">Telegram Channel</string>
     <string name="contributors">Maga Contributor</string>
     <string name="github">GitHub</string>
     <string name="ok">OK</string>
-
     <string name="no_containers_installed">No hay maga container instalao</string>
     <string name="install_container_description">Instala un container usando el boton abajo</string>
     <string name="install_container">Instala Container</string>
@@ -84,7 +78,6 @@
     <string name="view_logs">Mira el maga log</string>
     <string name="edit_container_configuration">Revisa el Container Configuration</string>
     <string name="uninstall_container_menu">Hace Uninstall el Container</string>
-
     <string name="status_running">TA ANDA</string>
     <string name="status_restarting">TA HACE RESTART</string>
     <string name="status_stopped">PARAO</string>
@@ -97,7 +90,6 @@
     <string name="ipv6_option">IPv6</string>
     <string name="storage_option">Storage</string>
     <string name="hw_option">HW</string>
-
     <string name="container_info">Informacion del Container</string>
     <string name="distribution">Distribucion</string>
     <string name="version">Version</string>
@@ -108,7 +100,6 @@
     <string name="checking">Ta chequea</string>
     <string name="not_available">Hende Disponible</string>
     <string name="manage">Maneja</string>
-
     <string name="edit_container_title">Revisa el Container: %1$s</string>
     <string name="container_is_running">Ta anda el container</string>
     <string name="changes_take_effect_after_restart">El maga cambio hay tene efecto despues hace restart</string>
@@ -127,20 +118,17 @@
     <string name="saving">Ta save...</string>
     <string name="save_changes">Save el Maga Cambio</string>
     <string name="failed_to_update_config">Fallo el update del configuracion</string>
-
     <string name="container_setup">Container Setup</string>
     <string name="container_information">Informacion del Container</string>
     <string name="container_name_label">Nombre del Container *</string>
-    <string name="container_name_placeholder">mi-container</string>
+    <string name="container_name_placeholder" translatable="false">mi-container</string>
     <string name="hostname_placeholder">Deja vacio para default</string>
     <string name="hostname_hint">Si vacio, usa el nombre del container como hostname</string>
     <string name="container_name_exists">Tiene ya container con este nombre</string>
     <string name="next_configuration">Siguiente: Configuracion</string>
-
     <string name="configuration_title">Configuracion</string>
     <string name="container_options">Maga Opcion del Container</string>
     <string name="next_storage">Siguiente: Storage</string>
-
     <string name="installation_complete">Completo el Instalacion</string>
     <string name="installation_failed">Fallo el Instalacion</string>
     <string name="installing_module">Ta instala el Module</string>
@@ -161,10 +149,8 @@
     <string name="installing_binary">Ta instala binary: %1$s</string>
     <string name="granting_permissions">Ta dale maga permiso...</string>
     <string name="preparing_installation">Ta prepara el instalacion...</string>
-
     <string name="no_containers_running">No hay container ta anda</string>
     <string name="start_container_first">Empeza un container anay para mira aqui</string>
-
     <string name="systemd_services">Maga Servicio del Systemd</string>
     <string name="openrc_services">Maga Servicio del OpenRC</string>
     <string name="openrc">OpenRC</string>
@@ -187,7 +173,7 @@
     <string name="action_successful">El %1$s %2$s ay exitoso</string>
     <string name="failed_to_action">Fallo na %1$s %2$s</string>
     <string name="error_unknown">Error: %1$s</string>
-    <string name="actioning_service">Ta %1$s %2$s...</string>
+    <string name="actioning_service" translatable="false">Ta %1$s %2$s...</string>
     <string name="no_services_found">No hay ya encontra servicio</string>
     <string name="no_running_services">No hay maga servicio ta anda</string>
     <string name="no_enabled_services">No hay maga servicio habilitao</string>
@@ -195,34 +181,27 @@
     <string name="no_static_services">No hay maga servicio abnormal</string>
     <string name="no_abnormal_services">No hay maga servicio abnormal</string>
     <string name="no_masked_services">No hay maga servicio masked</string>
-
     <string name="kernel">Kernel</string>
     <string name="selinux_status">Estado del SELinux</string>
     <string name="android_version">Version del Android</string>
     <string name="architecture">Architecture</string>
     <string name="supported_abis">Maga Suportao ABI</string>
     <string name="loading">Ta load...</string>
-
     <string name="backend_not_available">Backend hende disponible</string>
     <string name="backend_not_available_description">El backend no hay instalado o corrupto. Por favor instala primero con este.</string>
     <string name="root_access_not_available">Acceso root hende disponible</string>
     <string name="root_access_not_available_description">Este pagina deshabilitao cay no hay acceso root</string>
-
     <string name="operation_failed_title">Fallo el Operacion</string>
     <string name="no_output_available">No hay output disponible</string>
     <string name="dismiss">Descarta</string>
-
     <string name="available_users">Maga Disponible User</string>
     <string name="login_command_copied">Ya copia el login command para na user %1$s</string>
     <string name="refresh_users">Hace refresh el maga user</string>
     <string name="no_local_users_found">No hay local users ya encontra</string>
     <string name="select_user">Escoge User</string>
     <string name="copy_login">Copia login</string>
-
-
     <string name="comma">,</string>
     <string name="gb_size">%1$dGB</string>
-
     <string name="sparse_image_configuration">Configuracion del Sparse Image</string>
     <string name="storage_configuration">Configuracion del Storage</string>
     <string name="about_sparse_images">Acerca de Sparse Images</string>
@@ -237,16 +216,12 @@
     <string name="maximum_size_512gb">El maximo tamaño 512 GB</string>
     <string name="size_gb">Tamaño (GB)</string>
     <string name="enter_size_between_4_512_gb">Pone tamaño entre 4 y 512 GB</string>
-
     <string name="logs_title">Maga Log: %1$s</string>
     <string name="clear_logs">Bura maga log</string>
     <string name="copy_logs">Copia maga log</string>
-
     <string name="error_container_name_empty">El nombre del container hende puede vacio</string>
     <string name="error_container_name_invalid">El nombre del container puede lang tene maga letra, numero, hyphen (-), underscore (_), punto (.), y espacio</string>
     <string name="error_hostname_invalid">El hostname puede lang tene maga letra, numero, y dash (-)</string>
-
-
     <string name="check_requirements">Chequea maga Requisito</string>
     <string name="requirements_check_title">Chequeo de maga Requisito</string>
     <string name="requirements_for_droidspaces">Maga Requisito para na Droidspaces</string>

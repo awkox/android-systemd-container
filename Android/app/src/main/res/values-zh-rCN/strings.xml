@@ -193,7 +193,7 @@
     <string name="size_gb">容量（GB）</string>
     <string name="options_label">选项：%1$s</string>
     <string name="requirements_check_completed_with_errors">运行要求检查已完成，存在错误</string>
-    <string name="help_card_url">https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Installation-Android.md</string>
+    <string name="help_card_url" translatable="false">https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Installation-Android.md</string>
     <string name="logs_title">日志：%1$s</string>
     <string name="systemd">Systemd</string>
     <string name="image_size">镜像大小</string>
@@ -442,4 +442,18 @@
     <string name="repo_status_downloading">下载中</string>
     <string name="repo_status_failed">失败</string>
     <string name="notification_action_exit">退出</string>
+    <string name="repo_banner_url" translatable="false">https://github.com/Droidspaces/Droidspaces-rootfs-builder</string>
+    <string name="repo_custom_remove">移除</string>
+    <string name="repo_custom_url_invalid">URL 必须以 https:// 开头</string>
+    <string name="repo_banner_text">在 \"Droidspaces developers\" 下的 Rootfs Tar 包是开源且透明的，你可以通过点击这个卡片来手动下载它们或者检查我们的更改。</string>
+    <string name="repo_custom_name_hint">仓库名称</string>
+    <string name="repo_not_found_in_repo">仓库中未找到 %1$s</string>
+    <string name="repo_manage_custom">管理仓库</string>
+    <string name="repo_no_custom">没有自定义仓库订阅。</string>
+    <string name="repo_custom_add">订阅</string>
+    <string name="repo_custom_name_empty">名称不能为空</string>
+    <string name="repo_manager_subtitle">订阅自定义 rootfs.json 源。</string>
+    <string name="repo_custom_url_hint">rootfs.json URL</string>
+    <string name="repo_custom_url_empty">URL 不能为空</string>
+    <string name="repo_add_custom">添加自定义仓库</string>
 </resources>
