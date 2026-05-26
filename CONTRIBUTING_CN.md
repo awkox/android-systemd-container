@@ -74,7 +74,7 @@ int is_android(void) {
 
 ## SoC 和 OEM 覆盖范围（Android）
 
-Droidspaces 运行在高通、Exynos、联发科和紫光展锐芯片上，这些芯片搭载的
+Droidspaces 运行在高通、猎户座、联发科和紫光展锐芯片上，这些芯片搭载的
 OEM 内核与主线存在显著偏差。你的补丁在提交前，必须经过具有代表性的设备
 测试。
 
