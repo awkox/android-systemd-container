@@ -83,10 +83,7 @@ of this landscape before submission.
 State explicitly in your PR which devices and kernel versions you have tested on. Untested
 claims of compatibility will be treated as untested.
 
-Patches that address a quirk specific to one SoC family or OEM kernel are acceptable **only
-if Droidspaces can adapt to the quirk at runtime** - via detection, a conditional code path,
-or a graceful fallback - without regressing behavior on unaffected hardware. If the fix
-cannot be generalized in this way, it belongs in a downstream fork, not in core.
+Patches that address a quirk specific to one SoC family or OEM kernel are acceptable **only if Droidspaces can adapt to the quirk at runtime** - via detection, a conditional code path,or a graceful fallback - without regressing behavior on unaffected hardware. If the fix cannot be generalized in this way, it belongs in a downstream fork, not in core.
 
 ---
 

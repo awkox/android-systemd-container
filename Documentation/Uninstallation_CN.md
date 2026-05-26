@@ -8,7 +8,7 @@ keywords: uninstall, droidspaces, remove, android, delete, rootfs, cleanup, cont
 
 # 卸载指南
 
-本指南说明如何从你的系统中安全、彻底地删除 Droidspaces。
+本指南将讲述如何从你的系统中安全、彻底地删除 Droidspaces。
 
 ---
 

@@ -298,7 +298,7 @@ chcon u:object_r:vold_data_file:s0 /path/to/rootfs.img
 
 <a id="nuke-wifi-powersave"></a>
 
-## Wi-Fi `Power save: on` 导致Android网络体验卡顿
+## Wi-Fi `Power save: on` 导致 Android 网络体验卡顿
 
 **症状：** 当设备屏幕关闭时，Android 会自动将 Wi-Fi 硬件置于省电模式。这可能导致容器内网络卡顿或连接中断。由于 Android 用户空间没有通用开关来禁用此行为，您必须使用后台服务显式强制将省电状态设为"关闭"。
 
@@ -320,7 +320,7 @@ while true; do
     # 检查省电模式是否为 "on"
     if /usr/sbin/iw dev wlan0 get power_save 2>/dev/null | grep -q "on"; then
         /usr/sbin/iw dev wlan0 set power_save off
-        echo "$(date): WiFi 省电模式已开启。已强制关闭。" >> /tmp/wifi-fix.log
+        echo "$(date): WiFi 省电模式为开启状态。现已强制关闭。" >> /tmp/wifi-fix.log
     fi
     sleep 60
 done
@@ -348,7 +348,7 @@ description="确保 wlan0 省电模式保持关闭"
 # 使用循环脚本的路径
 command="/usr/local/bin/wifi-watchdog.sh"
 
-# 这告诉 OpenRC 处理后台运行和 PID 创建
+# 让 OpenRC 去处理后台运行和 PID 创建
 command_background=true
 pidfile="/run/${RC_SVCNAME}.pid"
 
@@ -399,7 +399,7 @@ systemctl start wifi-watchdog
 ```
 
 > [!NOTE]
-> 此变通方案**需要宿主网络模式**（`--net=host`）。脚本需要直接访问 Android 的 `wlan0` 接口，该接口在 `NAT` 或 `None` 模式下不可见。我们建议专门为此看门狗使用一个小型"一次性"容器。
+> 此变通方案**需要Host模式**（`--net=host`）。脚本需要直接访问 Android 的 `wlan0` 接口，该接口在 `NAT` 或 `None` 模式下不可见。我们建议专门为此 Watchdog 使用一个小型"一次性"容器。
 
 ---
 
