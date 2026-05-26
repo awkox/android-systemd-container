@@ -10,7 +10,7 @@ keywords: droidspaces, supported, devices, android, device, compatibility, kerne
 
 > [!NOTE]
 >
-> 如果你想将自己的 Droidspaces 内核添加到此表格，请查看[贡献指南](#contribution-guidelines)部分。
+> 如果你想将自己的 Droidspaces 内核添加到此表格，请查看[贡献指南](#贡献指南)部分。
 
 > [!WARNING]
 >
