@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="welcome_title">Bem-vindo ao Droidspaces</string>
-    <string name="welcome_subtitle">Gestor de contentores Linux estilo LXC para Android!</string>
     <string name="get_started">Começar</string>
     <string name="root_check_title">Verificação de Acesso Root</string>
     <string name="checking_root">A verificar o acesso root…</string>
@@ -29,8 +27,6 @@
     <string name="backend_corrupted">Backend: Corrompido</string>
     <string name="root_unavailable">O acesso root não está disponível.</string>
     <string name="grant_root_message">Conceda acesso root para continuar a explorar o Droidspaces!</string>
-    <string name="version_label">Versão: %1$s</string>
-    <string name="root_provider_label">Provedor de Root: %1$s</string>
     <string name="unknown">Desconhecido</string>
     <string name="update_available_message">Atualização do backend disponível, clique aqui para atualizar</string>
     <string name="backend_section">Backend</string>
@@ -165,14 +161,12 @@
     <string name="unmask">Desmascarar</string>
     <string name="enable_service">Ativar</string>
     <string name="disable_service">Desativar</string>
-    <string name="more_options">Mais opções</string>
     <string name="restart_service">Reiniciar serviço</string>
     <string name="mask_service">Mascarar serviço</string>
     <string name="action_successful">%1$s %2$s com sucesso</string>
     <string name="failed_to_action">Falha ao %1$s %2$s</string>
     <string name="error_unknown">Erro: %1$s</string>
     <string name="no_services_found">Nenhum serviço encontrado</string>
-    <string name="no_systemd_services">Nenhum serviço systemd disponível</string>
     <string name="no_running_services">Nenhum serviço em execução</string>
     <string name="no_enabled_services">Nenhum serviço ativado</string>
     <string name="no_disabled_services">Nenhum serviço desativado</string>
@@ -214,7 +208,6 @@
     <string name="maximum_size_512gb">O tamanho máximo é 512 GB</string>
     <string name="size_gb">Tamanho (GB)</string>
     <string name="enter_size_between_4_512_gb">Digite um tamanho entre 4 e 512 GB</string>
-    <string name="next_summary">Próximo: Resumo</string>
     <string name="clear_logs">Limpar logs</string>
     <string name="error_container_name_empty">O nome do contentor não pode estar vazio</string>
     <string name="error_container_name_invalid">O nome do contentor pode conter apenas letras, números, hífens (-), sublinhados (_), pontos (.) e espaços</string>

@@ -12,11 +12,11 @@ This guide provides step-by-step instructions for enabling GPU acceleration in y
 
 ### Quick Navigation
 
-- [**Android Devices**](#android)
-    - [01. Termux-X11 + llvmpipe (Software Rendering)](#termux-x11)
-    - [02. Termux-X11 + VirGL (Non-Qualcomm GPUs)](#virgl)
-    - [03. Turnip (Native Qualcomm/Adreno)](#turnip)
-- [**Linux Desktop (AMD/Intel)**](#linux)
+- [**Android Devices**](#android)  
+    - [01. Termux-X11 + llvmpipe (Software Rendering)](#termux-x11)  
+    - [02. Termux-X11 + VirGL (Non-Qualcomm GPUs)](#virgl)  
+    - [03. Turnip (Native Qualcomm/Adreno)](#turnip)  
+- [**Linux Desktop (AMD/Intel)**](#linux)  
 
 ---
 

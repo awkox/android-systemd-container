@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="welcome_title">Naragsak a isasangbay sa Droidspaces</string>
-    <string name="welcome_subtitle">LXC-style a taga-imaton ti Linux container para iti Android !</string>
     <string name="get_started">Mangrugi</string>
 
     <string name="root_check_title">Panang-tsek ti Root Access</string>
@@ -35,8 +33,6 @@
     <string name="backend_corrupted">Backend: Corrupted</string>
     <string name="root_unavailable">Saan nga available ti root access.</string>
     <string name="grant_root_message">Ikkan ti root access tapno ituloy ti panag-explore iti droidspaces !</string>
-    <string name="version_label">Bersyon: %1$s</string>
-    <string name="root_provider_label">Root Provider: %1$s</string>
     <string name="unknown">Saan nga ammo</string>
     <string name="update_available_message">Adda backend update, i-klik ditoy tapno i-update</string>
 
@@ -186,7 +182,6 @@
     <string name="unmask">I-unmask</string>
     <string name="enable_service">I-enable</string>
     <string name="disable_service">I-disable</string>
-    <string name="more_options">Dadduma pay nga opsyon</string>
     <string name="restart_service">I-restart ti serbisyo</string>
     <string name="mask_service">I-mask ti serbisyo</string>
     <string name="action_successful">Nagballigi ti %1$s %2$s</string>
@@ -194,7 +189,6 @@
     <string name="error_unknown">Error: %1$s</string>
     <string name="actioning_service">%1$sing %2$s...</string>
     <string name="no_services_found">Awan ti Nasarakan a Serbisyo</string>
-    <string name="no_systemd_services">Awan ti available a systemd services</string>
     <string name="no_running_services">Awan ti agtartaray a serbisyo</string>
     <string name="no_enabled_services">Awan ti naka-enable a serbisyo</string>
     <string name="no_disabled_services">Awan ti naka-disable a serbisyo</string>
@@ -243,7 +237,6 @@
     <string name="maximum_size_512gb">Ti maximum a kadakkel ket 512 GB</string>
     <string name="size_gb">Kadakkel (GB)</string>
     <string name="enter_size_between_4_512_gb">Ilanad ti kadakkel iti nagbaetan ti 4 ken 512 GB</string>
-    <string name="next_summary">Sumaruno: Summary</string>
 
     <string name="logs_title">Dagiti Log: %1$s</string>
     <string name="clear_logs">Daldalen dagiti log</string>

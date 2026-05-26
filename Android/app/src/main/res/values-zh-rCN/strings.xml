@@ -47,7 +47,6 @@
     <string name="disable_ipv6">禁用 IPV6</string>
     <string name="android_storage">Android 存储</string>
     <string name="android_storage_description">挂载Android 存储</string>
-    <string name="welcome_title">欢迎使用 Droidspaces</string>
     <string name="get_started">开始使用</string>
     <string name="home_title">主页</string>
     <string name="check_root_access_click">点击下方以检查 Root 权限</string>
@@ -59,8 +58,6 @@
     <string name="backend_corrupted">后端：已损坏</string>
     <string name="root_unavailable">Root 权限不可用。</string>
     <string name="grant_root_message">请授予 Root 权限以继续使用 Droidspaces！</string>
-    <string name="version_label">版本: %1$s</string>
-    <string name="root_provider_label">Root 实现: %1$s</string>
     <string name="update_available_message">有可用的后端更新，点击此处更新</string>
     <string name="backend_section">后端</string>
     <string name="reinstall_backend">重新安装后端</string>
@@ -119,7 +116,6 @@
     <string name="force_cgroupv1_description">强制使用旧版 Cgroup V1 层级结构</string>
     <string name="manual_deadlock_shield">手动死锁防护</string>
     <string name="manual_deadlock_shield_description">通过阻止嵌套命名空间的创建，防止旧版内核（如 4.14.x）上出现内核级 VFS 死锁。\n\n警告：启用此项将屏蔽容器内对 Docker、Podman、LXC 及 Systemd 沙盒功能的支持。</string>
-    <string name="welcome_subtitle">适用于 Android 的 LXC 风格 Linux 容器管理器！</string>
     <string name="reinstall_backend_description">重新安装二进制文件和模块</string>
     <string name="copy">复制</string>
     <string name="unknown">未知</string>
@@ -184,7 +180,6 @@
     <string name="grant_permission">授予权限</string>
     <string name="container_name_placeholder" translatable="false">my-container</string>
     <string name="reboot_recommended">建议重启以应用 SELinux 策略并在开机时启动守护进程。</string>
-    <string name="next_summary">下一步：概览</string>
     <string name="check_requirements">检查要求</string>
     <string name="notification_permission_rationale">Droidspaces 需要显示一个常驻通知，以保持您的终端会话在后台运行。否则，Android 系统（尤其是三星设备）可能会意外终止终端服务。</string>
     <string name="invalid_number">无效的数字</string>
@@ -240,7 +235,6 @@
     <string name="binary_installation_failed">二进制文件安装失败</string>
     <string name="verifying_installation">正在验证安装...</string>
     <string name="hardware_access_description">完整的硬件访问权限</string>
-    <string name="no_systemd_services">没有可用的 systemd 服务</string>
     <string name="disabled_legend">已禁用</string>
     <string name="module_installed_success">Magisk 模块安装成功</string>
     <string name="directory_label">目录</string>
@@ -301,7 +295,6 @@
     <string name="installation_complete">安装完成</string>
     <string name="static_legend">静态</string>
     <string name="hostname_hint">若留空，将使用容器名称作为主机名</string>
-    <string name="more_options">更多选项</string>
     <string name="not_configured">未配置</string>
     <string name="failed_to_update_config">更新配置失败</string>
     <string name="error_octet_range">范围：1-254</string>
@@ -432,7 +425,6 @@
     <string name="repo_install">安装</string>
     <string name="repo_retry">重试</string>
     <string name="repo_notification_description">下载 Droidspaces 根文件系统</string>
-    <string name="repo_error_server_http">服务器返回 HTTP %1$d</string>
     <string name="repo_error_no_assets">最新发布版中未找到根文件系统压缩包</string>
     <string name="repo_error_network">网络错误</string>
     <string name="repo_dl_error_unknown">未知错误</string>
@@ -449,6 +441,5 @@
     <string name="repo_status_ready">就绪</string>
     <string name="repo_status_downloading">下载中</string>
     <string name="repo_status_failed">失败</string>
-    <string name="repo_downloads_count">%1$s 个下载</string>
     <string name="notification_action_exit">退出</string>
 </resources>

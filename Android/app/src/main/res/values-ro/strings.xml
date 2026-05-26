@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">Droidspaces</string>
-    <string name="welcome_title">Bun venit la Droidspaces</string>
-    <string name="welcome_subtitle">Manager de containere în stil LXC pentru Android !</string>
     <string name="root_check_title">Verificatul permisiunilor de root</string>
     <string name="checking_root">Se verifică accesul permisiunilor de root...</string>
     <string name="root_granted">Permisiunile de root au fost acordate</string>
@@ -31,8 +29,6 @@
     <string name="backend_corrupted">Backend: Corupt</string>
     <string name="root_unavailable">Accesul la root este indisponibil.</string>
     <string name="grant_root_message">Permite accesul la root pentru a continua utilizarea droidspaces !</string>
-    <string name="version_label">Versiunea: %1$s</string>
-    <string name="root_provider_label">Furnizorul de root: %1$s</string>
     <string name="unknown">Necunoscut</string>
     <string name="update_available_message">Actualizare la backend disponibilă, apasă aici pentru a actualiza</string>
     <string name="reinstall_backend">Reinstalează backend-ul</string>
@@ -221,14 +217,12 @@
     <string name="unmask">Deblochează (activează)</string>
     <string name="enable_service">Activează</string>
     <string name="disable_service">Dezactivează</string>
-    <string name="more_options">Mai multe opțiuni</string>
     <string name="restart_service">Repornește serviciul</string>
     <string name="mask_service">Blochează serviciul</string>
     <string name="action_successful">%1$s %2$s cu succes</string>
     <string name="failed_to_action">Nu s-a putut %1$s %2$s</string>
     <string name="error_unknown">Eroare: %1$s</string>
     <string name="no_services_found">Niciun serviciu nu a fost găsit</string>
-    <string name="no_systemd_services">Niciun serviciu systemd este disponibil</string>
     <string name="no_running_services">Niciun serviciu în execuție</string>
     <string name="no_enabled_services">Niciun serviciu activat</string>
     <string name="no_disabled_services">Niciun serviciu dezactivat</string>
@@ -267,7 +261,6 @@
     <string name="maximum_size_512gb">Dimensiunea maximă este de 512 GB</string>
     <string name="size_gb">Dimensiune (GB)</string>
     <string name="enter_size_between_4_512_gb">Introdu o dimensiune între 4 și 512 GB (acestea incluse)</string>
-    <string name="next_summary">Următorul: Rezumat</string>
     <string name="logs_title">Jurnale: %1$s</string>
     <string name="clear_logs">Șterge jurnalele</string>
     <string name="copy_logs">Copiază jurnalele</string>

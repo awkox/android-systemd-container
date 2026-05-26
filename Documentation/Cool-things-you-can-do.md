@@ -13,21 +13,21 @@ keywords: droidspaces, projects, android, server, tailscale, ufw, failban, conta
 
 ### Quick Navigation
 
-- [1. Setting Up a Secure "Mobile Server" (Tailscale + UFW + Fail2Ban)](#1-setting-up-a-secure-mobile-server-tailscale--ufw--fail2ban)
-    - [Prerequisites](#prerequisites)
-    - [Step 1: Install Networking Tools & Compatibility Layer](#step-1-install-networking-tools--compatibility-layer)
-    - [Step 2: Personal User Setup & SSH Hardening](#step-2-personal-user-setup--ssh-hardening)
-    - [Step 3: Set Up Tailscale](#step-3-set-up-tailscale)
-    - [Step 4: Secure the Container with UFW (Firewall)](#step-4-secure-the-container-with-ufw-firewall)
-    - [Step 5: Add Brute-Force Protection with Fail2Ban](#step-5-add-brute-force-protection-with-fail2ban)
-- [2. Running Docker Containers (Nested Containerization)](#2-running-docker-containers-nested-containerization)
-    - [Prerequisites](#prerequisites-1)
-    - [Step 1: Ensure NAT Networking](#step-1-ensure-nat-networking)
-    - [Step 2: Compatibility Layer (iptables-legacy)](#step-2-compatibility-layer-iptables-legacy)
-    - [Step 3: Install Docker](#step-3-install-docker)
-    - [Step 4: Non-Root User Setup](#step-4-non-root-user-setup)
-    - [Step 5: Verify Installation](#step-5-verify-installation)
-    - ["Last Resort" for Host Mode or Legacy Kernels (Old Kernels Only)](#last-resort-for-host-mode-or-legacy-kernels-old-kernels-only)
+- [1. Setting Up a Secure "Mobile Server" (Tailscale + UFW + Fail2Ban)](#1-setting-up-a-secure-mobile-server-tailscale--ufw--fail2ban)  
+    - [Prerequisites](#prerequisites)  
+    - [Step 1: Install Networking Tools & Compatibility Layer](#step-1-install-networking-tools--compatibility-layer)  
+    - [Step 2: Personal User Setup & SSH Hardening](#step-2-personal-user-setup--ssh-hardening)  
+    - [Step 3: Set Up Tailscale](#step-3-set-up-tailscale)  
+    - [Step 4: Secure the Container with UFW (Firewall)](#step-4-secure-the-container-with-ufw-firewall)  
+    - [Step 5: Add Brute-Force Protection with Fail2Ban](#step-5-add-brute-force-protection-with-fail2ban)  
+- [2. Running Docker Containers (Nested Containerization)](#2-running-docker-containers-nested-containerization)  
+    - [Prerequisites](#prerequisites-1)  
+    - [Step 1: Ensure NAT Networking](#step-1-ensure-nat-networking)  
+    - [Step 2: Compatibility Layer (iptables-legacy)](#step-2-compatibility-layer-iptables-legacy)  
+    - [Step 3: Install Docker](#step-3-install-docker)  
+    - [Step 4: Non-Root User Setup](#step-4-non-root-user-setup)  
+    - [Step 5: Verify Installation](#step-5-verify-installation)  
+    - ["Last Resort" for Host Mode or Legacy Kernels (Old Kernels Only)](#last-resort-for-host-mode-or-legacy-kernels-old-kernels-only)  
 
 ---
 

@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="welcome_title">Masantos ya isabi ed Droidspaces</string>
-    <string name="welcome_subtitle">LXC-style ya manag-asikaso na Linux container parad Android !</string>
     <string name="get_started">Gapoan</string>
 
     <string name="root_check_title">Panang-chek na Root Access</string>
@@ -35,8 +33,6 @@
     <string name="backend_corrupted">Backend: Corrupted</string>
     <string name="root_unavailable">Ag-available so root access.</string>
     <string name="grant_root_message">Ikdan na root access pian ituloy so pan-explore ed droidspaces !</string>
-    <string name="version_label">Bersyon: %1$s</string>
-    <string name="root_provider_label">Root Provider: %1$s</string>
     <string name="unknown">Ag-amta</string>
     <string name="update_available_message">Walay available ya backend update, i-klik diya pian i-update</string>
 
@@ -186,7 +182,6 @@
     <string name="unmask">I-unmask</string>
     <string name="enable_service">I-enable</string>
     <string name="disable_service">I-disable</string>
-    <string name="more_options">Arum ni ray opsyon</string>
     <string name="restart_service">I-restart so serbisyo</string>
     <string name="mask_service">I-mask so serbisyo</string>
     <string name="action_successful">Agawa so %1$s %2$s</string>
@@ -194,7 +189,6 @@
     <string name="error_unknown">Eror: %1$s</string>
     <string name="actioning_service">%1$sing %2$s...</string>
     <string name="no_services_found">Anggapoy Aromog ya Serbisyo</string>
-    <string name="no_systemd_services">Anggapoy available ya systemd services</string>
     <string name="no_running_services">Anggapoy aandar ya serbisyo</string>
     <string name="no_enabled_services">Anggapoy naka-enable ya serbisyo</string>
     <string name="no_disabled_services">Anggapoy naka-disable ya serbisyo</string>
@@ -243,7 +237,6 @@
     <string name="maximum_size_512gb">Say maximum ya kabaleg et 512 GB</string>
     <string name="size_gb">Kabaleg (GB)</string>
     <string name="enter_size_between_4_512_gb">I-enter so kabaleg ed nanleletan na 4 tan 512 GB</string>
-    <string name="next_summary">Ontumbok: Summary</string>
 
     <string name="logs_title">Saray Log: %1$s</string>
     <string name="clear_logs">Buraen iray log</string>

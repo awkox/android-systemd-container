@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="welcome_title">Maligayang pagdating sa Droidspaces</string>
-    <string name="welcome_subtitle">LXC-style na tagapamahala ng Linux container para sa Android !</string>
     <string name="get_started">Magsimula</string>
 
     <string name="root_check_title">Pagsusuri ng Root Access</string>
@@ -35,8 +33,6 @@
     <string name="backend_corrupted">Backend: Corrupted</string>
     <string name="root_unavailable">Hindi available ang root access.</string>
     <string name="grant_root_message">Magbigay ng root access upang patuloy na galugarin ang droidspaces !</string>
-    <string name="version_label">Bersyon: %1$s</string>
-    <string name="root_provider_label">Root Provider: %1$s</string>
     <string name="unknown">Hindi alam</string>
     <string name="update_available_message">May available na backend update, i-click dito upang mag-update</string>
 
@@ -186,7 +182,6 @@
     <string name="unmask">I-unmask</string>
     <string name="enable_service">I-enable</string>
     <string name="disable_service">I-disable</string>
-    <string name="more_options">Higit pang opsyon</string>
     <string name="restart_service">I-restart ang serbisyo</string>
     <string name="mask_service">I-mask ang serbisyo</string>
     <string name="action_successful">Ang %1$s %2$s ay matagumpay</string>
@@ -194,7 +189,6 @@
     <string name="error_unknown">Error: %1$s</string>
     <string name="actioning_service">%1$sing %2$s...</string>
     <string name="no_services_found">Walang Serbisyong Nakita</string>
-    <string name="no_systemd_services">Walang systemd services na available</string>
     <string name="no_running_services">Walang gumaganang serbisyo</string>
     <string name="no_enabled_services">Walang naka-enable na serbisyo</string>
     <string name="no_disabled_services">Walang naka-disable na serbisyo</string>
@@ -243,7 +237,6 @@
     <string name="maximum_size_512gb">Ang maximum na laki ay 512 GB</string>
     <string name="size_gb">Laki (GB)</string>
     <string name="enter_size_between_4_512_gb">Ilagay ang laki sa pagitan ng 4 at 512 GB</string>
-    <string name="next_summary">Sunod: Buod</string>
 
     <string name="logs_title">Logs: %1$s</string>
     <string name="clear_logs">I-clear ang logs</string>

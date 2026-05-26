@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">Droidspaces</string>
-    <string name="welcome_title">Droidspaces\'a hoşgeldin</string>
-    <string name="welcome_subtitle">Android için LXC tarzı linux konteyner yöneticisi!</string>
     <string name="get_started">Başla</string>
     <string name="root_check_title">Root Erişimi Kontrolü</string>
     <string name="checking_root">Root erişimi kontrol ediliyor...</string>
@@ -32,8 +30,6 @@
     <string name="running">Çalışıyor</string>
     <string name="root_unavailable">Root erişimi mevcut değil.</string>
     <string name="grant_root_message">Droidspaces\'i kullanmaya devam etmek için root erişimi verin!</string>
-    <string name="version_label">Versiyon: %1$s</string>
-    <string name="root_provider_label">Root Uygulaması: %1$s</string>
     <string name="unknown">Bilinmeyen</string>
     <string name="update_available_message">Backend güncellemesi mevcut; güncellemek için buraya tıklayın</string>
     <string name="backend_section">Backend</string>
@@ -248,7 +244,6 @@
     <string name="unmask">Açığa Çıkar</string>
     <string name="enable_service">Etkinleştir</string>
     <string name="disable_service">Devre Dışı Bırak</string>
-    <string name="more_options">Diğer seçenekler</string>
     <string name="restart_service">Servisi yeniden başlat</string>
     <string name="mask_service">Servisi Gizle</string>
     <string name="action_successful">%1$s %2$s başarılı</string>
@@ -256,7 +251,6 @@
     <string name="error_unknown">Hata: %1$s</string>
     <string name="actioning_service" translatable="false">%1$sing %2$s...</string>
     <string name="no_services_found">Servis Bulunamadı</string>
-    <string name="no_systemd_services">Kullanılabilir systemd servisi yok</string>
     <string name="no_running_services">Çalışan servis yok</string>
     <string name="no_enabled_services">Etkin servis yok</string>
     <string name="no_disabled_services">Devre disi servis yok</string>
@@ -298,7 +292,6 @@
     <string name="maximum_size_512gb">Maksimum boyut 512 GB\'dir</string>
     <string name="size_gb">Boyut (GB)</string>
     <string name="enter_size_between_4_512_gb">4 ile 512 GB arasında bir boyut girin</string>
-    <string name="next_summary">Sonraki: Özet</string>
     <string name="logs_title">Loglar: %1$s</string>
     <string name="clear_logs">Logları temizle</string>
     <string name="copy_logs">Logları kopyala</string>

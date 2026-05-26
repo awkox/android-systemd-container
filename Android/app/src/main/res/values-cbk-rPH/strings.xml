@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="welcome_title">Bienvenido na Droidspaces</string>
-    <string name="welcome_subtitle">LXC-style Linux container manager para na Android !</string>
     <string name="get_started">Empeza</string>
 
     <string name="root_check_title">Chequeo de Acceso Root</string>
@@ -35,8 +33,6 @@
     <string name="backend_corrupted">Backend: Corrupto</string>
     <string name="root_unavailable">Hende disponible el acceso root.</string>
     <string name="grant_root_message">Dale acceso root para continua explora el droidspaces !</string>
-    <string name="version_label">Version: %1$s</string>
-    <string name="root_provider_label">Root Provider: %1$s</string>
     <string name="unknown">Hende sabe</string>
     <string name="update_available_message">Tiene backend update disponible, hace click aqui para hace update</string>
 
@@ -186,7 +182,6 @@
     <string name="unmask">Unmask</string>
     <string name="enable_service">Habilita</string>
     <string name="disable_service">Deshabilita</string>
-    <string name="more_options">Mas opcion</string>
     <string name="restart_service">Hace restart el servicio</string>
     <string name="mask_service">Mask el servicio</string>
     <string name="action_successful">El %1$s %2$s ay exitoso</string>
@@ -194,7 +189,6 @@
     <string name="error_unknown">Error: %1$s</string>
     <string name="actioning_service">Ta %1$s %2$s...</string>
     <string name="no_services_found">No hay ya encontra servicio</string>
-    <string name="no_systemd_services">No hay systemd services disponible</string>
     <string name="no_running_services">No hay maga servicio ta anda</string>
     <string name="no_enabled_services">No hay maga servicio habilitao</string>
     <string name="no_disabled_services">No hay maga servicio deshabilitao</string>
@@ -243,7 +237,6 @@
     <string name="maximum_size_512gb">El maximo tamaño 512 GB</string>
     <string name="size_gb">Tamaño (GB)</string>
     <string name="enter_size_between_4_512_gb">Pone tamaño entre 4 y 512 GB</string>
-    <string name="next_summary">Siguiente: Resumen</string>
 
     <string name="logs_title">Maga Log: %1$s</string>
     <string name="clear_logs">Bura maga log</string>

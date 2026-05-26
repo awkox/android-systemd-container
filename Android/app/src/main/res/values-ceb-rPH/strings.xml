@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="welcome_title">Maayong pag-abot sa Droidspaces</string>
-    <string name="welcome_subtitle">LXC-style nga tigdumala sa Linux container alang sa Android !</string>
     <string name="get_started">Pagsugod</string>
 
     <string name="root_check_title">Pagsusi sa Root Access</string>
@@ -35,8 +33,6 @@
     <string name="backend_corrupted">Backend: Corrupted</string>
     <string name="root_unavailable">Dili magamit ang root access.</string>
     <string name="grant_root_message">Hatagi og root access aron magpadayon sa pagsuhid sa droidspaces !</string>
-    <string name="version_label">Bersyon: %1$s</string>
-    <string name="root_provider_label">Root Provider: %1$s</string>
     <string name="unknown">Wala mahibal-an</string>
     <string name="update_available_message">Adunay available nga backend update, i-klik dinhi aron ma-update</string>
 
@@ -186,7 +182,6 @@
     <string name="unmask">I-unmask</string>
     <string name="enable_service">I-enable</string>
     <string name="disable_service">I-disable</string>
-    <string name="more_options">Dugang mga opsyon</string>
     <string name="restart_service">I-restart ang serbisyo</string>
     <string name="mask_service">I-mask ang serbisyo</string>
     <string name="action_successful">Nagmalampuson ang %1$s %2$s</string>
@@ -194,7 +189,6 @@
     <string name="error_unknown">Error: %1$s</string>
     <string name="actioning_service">Gina-%1$s ang %2$s...</string>
     <string name="no_services_found">Walay Nakit-an nga Serbisyo</string>
-    <string name="no_systemd_services">Walay available nga systemd services</string>
     <string name="no_running_services">Walay serbisyo nga nagdagan</string>
     <string name="no_enabled_services">Walay serbisyo nga naka-enable</string>
     <string name="no_disabled_services">Walay serbisyo nga naka-disable</string>
@@ -243,7 +237,6 @@
     <string name="maximum_size_512gb">Ang maximum nga gidak-on kay 512 GB</string>
     <string name="size_gb">Gidak-on (GB)</string>
     <string name="enter_size_between_4_512_gb">Isulod ang gidak-on tali sa 4 ug 512 GB</string>
-    <string name="next_summary">Sunod: Summary</string>
 
     <string name="logs_title">Mga Log: %1$s</string>
     <string name="clear_logs">Papasa ang mga log</string>

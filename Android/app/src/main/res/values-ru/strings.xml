@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Welcome Screen -->
-    <string name="welcome_title">Добро пожаловать в Droidspaces</string>
-    <string name="welcome_subtitle">Менеджер Linux-контейнеров в стиле LXC для Android!</string>
     <string name="get_started">Начать</string>
     <!-- Root Check Screen -->
     <string name="root_check_title">Проверка Root-доступа</string>
@@ -36,8 +34,6 @@
     <string name="backend_corrupted">Backend: Повреждён</string>
     <string name="root_unavailable">Root-доступ недоступен.</string>
     <string name="grant_root_message">Предоставьте root-доступ для продолжения работы с Droidspaces!</string>
-    <string name="version_label">Версия: %1$s</string>
-    <string name="root_provider_label">Провайдер Root: %1$s</string>
     <string name="unknown">Неизвестно</string>
     <string name="update_available_message">Доступно обновление бэкенда, нажмите здесь для обновления</string>
     <!-- Settings Screen -->
@@ -187,7 +183,6 @@
     <string name="unmask">Снять маску</string>
     <string name="enable_service">Включить</string>
     <string name="disable_service">Отключить</string>
-    <string name="more_options">Дополнительные опции</string>
     <string name="restart_service">Перезапустить службу</string>
     <string name="mask_service">Замаскировать службу</string>
     <string name="action_successful">%1$s %2$s выполнено успешно</string>
@@ -195,7 +190,6 @@
     <string name="error_unknown">Ошибка: %1$s</string>
     <string name="actioning_service" translatable="false">%1$s %2$s...</string>
     <string name="no_services_found">Службы не найдены</string>
-    <string name="no_systemd_services">Нет доступных служб systemd</string>
     <string name="no_running_services">Нет запущенных служб</string>
     <string name="no_enabled_services">Нет включённых служб</string>
     <string name="no_disabled_services">Нет отключённых служб</string>
@@ -245,7 +239,6 @@
     <string name="maximum_size_512gb">Максимальный размер 512 ГБ</string>
     <string name="size_gb">Размер (ГБ)</string>
     <string name="enter_size_between_4_512_gb">Введите размер от 4 до 512 ГБ</string>
-    <string name="next_summary">Далее: Сводка</string>
     <!-- Container Log Viewer -->
     <string name="logs_title">Логи: %1$s</string>
     <string name="clear_logs">Очистить логи</string>

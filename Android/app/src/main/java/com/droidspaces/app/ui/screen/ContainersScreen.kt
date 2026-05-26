@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -743,10 +744,13 @@ fun ContainersScreen(
 
         // Repo bottom sheet
         if (showRepoSheet) {
-            RootfsRepoSheet(
-                onDismiss = { showRepoSheet = false },
-                onInstall = { uri -> onNavigateToInstallation(uri) }
-            )
+            val orientation = LocalConfiguration.current.orientation
+            key(orientation) {
+                RootfsRepoSheet(
+                    onDismiss = { showRepoSheet = false },
+                    onInstall = { uri -> onNavigateToInstallation(uri) }
+                )
+            }
         }
 
         // SNACKBAR LAYER (Highest Z-index in the root Box)

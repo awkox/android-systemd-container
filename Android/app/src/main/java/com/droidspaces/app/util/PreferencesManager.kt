@@ -259,6 +259,49 @@ class PreferencesManager private constructor(context: Context) {
         }
     }
 
+    // ---------------------------------------------------------------------------
+    // Custom rootfs repository subscriptions
+    // Stored as a JSON array string: [{"name":"...","url":"..."},...]
+    // ---------------------------------------------------------------------------
+
+    fun getCustomRepos(): List<Pair<String, String>> {
+        val raw = prefs.getString(KEY_CUSTOM_REPOS, null) ?: return emptyList()
+        return try {
+            val arr = org.json.JSONArray(raw)
+            buildList {
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    add(obj.optString("name", "") to obj.optString("url", ""))
+                }
+            }.filter { it.first.isNotBlank() && it.second.isNotBlank() }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun addCustomRepo(name: String, url: String) {
+        val current = getCustomRepos().toMutableList()
+        if (current.any { it.second == url }) return
+        current.add(name to url)
+        saveCustomRepos(current)
+    }
+
+    fun removeCustomRepo(url: String) {
+        val current = getCustomRepos().filter { it.second != url }
+        saveCustomRepos(current)
+    }
+
+    private fun saveCustomRepos(repos: List<Pair<String, String>>) {
+        val arr = org.json.JSONArray()
+        repos.forEach { (name, url) ->
+            arr.put(org.json.JSONObject().apply {
+                put("name", name)
+                put("url", url)
+            })
+        }
+        prefs.edit().putString(KEY_CUSTOM_REPOS, arr.toString()).apply()
+    }
+
     /**
      * Clear cached container OS info.
      */
@@ -333,6 +376,7 @@ class PreferencesManager private constructor(context: Context) {
         private const val KEY_CONTAINER_OS_INFO_PREFIX = Constants.KEY_CONTAINER_OS_INFO_PREFIX
         private const val KEY_CACHED_CONTAINER_NAMES = Constants.KEY_CACHED_CONTAINER_NAMES
         private const val KEY_CACHED_CONTAINER_CONFIG_PREFIX = Constants.KEY_CACHED_CONTAINER_CONFIG_PREFIX
+        private const val KEY_CUSTOM_REPOS = Constants.KEY_CUSTOM_REPOS
 
         // Double-checked locking pattern for thread-safe singleton
         // @Volatile ensures visibility across threads without full synchronization

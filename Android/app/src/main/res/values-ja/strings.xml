@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">Droidspaces</string>
-    <string name="welcome_subtitle">LXC風なAndroid用のLinuxコンテナマネージャ！</string>
     <string name="get_started">始める</string>
     <string name="root_check_title">ルートアクセス権限の確認</string>
     <string name="checking_root">ルートアクセス権限を確認中…</string>
@@ -9,7 +8,6 @@
     <string name="root_denied">ルートアクセス権限が拒否されました</string>
     <string name="root_required_message">コンテナを管理するにはルート権限が必要です。</string>
     <string name="check_root_access">ルートアクセス権限を確認</string>
-    <string name="welcome_title">ドロイドスペースにようこそ</string>
     <string name="root_available_message">ドロイドスペースが利用可能になりました</string>
     <string name="skip">後で</string>
     <string name="continue_button">続ける</string>
@@ -31,8 +29,6 @@
     <string name="backend_corrupted">バックエンド: 破損</string>
     <string name="root_unavailable">ルートアクセス権限が利用できません。</string>
     <string name="grant_root_message">ドロイドスペースを探求し続けるにはルートアクセス権限を付与してください！</string>
-    <string name="version_label">バージョン: %1$s</string>
-    <string name="root_provider_label">ルート権限管理アプリ: %1$s</string>
     <string name="unknown">不明</string>
     <string name="check_root_access_click">この下をクリックしてルートアクセス権限を確認</string>
     <string name="backend_section">バックエンド</string>
@@ -191,7 +187,6 @@
     <string name="all_legend">全て</string>
     <string name="enable_service">有効</string>
     <string name="disable_service">無効</string>
-    <string name="more_options">その他のオプション</string>
     <string name="restart_service">サービスの再起動</string>
     <string name="comma">、</string>
     <string name="gb_size">%1$dGB</string>
@@ -301,7 +296,6 @@
     <string name="use_sparse_image">スパース・イメージを使う</string>
     <string name="use_sparse_image_description">コンテナをスパース・イメージのファイル内に作成する</string>
     <string name="image_size">イメージの容量</string>
-    <string name="next_summary">次へ: 要覧</string>
     <string name="logs_title">記録: %1$s</string>
     <string name="migrate_to_sparse_image">スパース・イメージに移行する</string>
     <string name="resize_sparse_image">スパース・イメージの容量を変更する</string>
@@ -320,7 +314,6 @@
     <string name="mask_service">サービスを隠す</string>
     <string name="actioning_service" translatable="false">%1$sing %2$s...</string>
     <string name="no_services_found">サービスが見つかりませんでした</string>
-    <string name="no_systemd_services">利用可能なsystemdサービスはありません</string>
     <string name="no_running_services">実行中のサービスはありません</string>
     <string name="no_masked_services">隠匿中のサービスはありません</string>
     <string name="supported_abis">アプリケーションバイナリインタフェースの互換性</string>

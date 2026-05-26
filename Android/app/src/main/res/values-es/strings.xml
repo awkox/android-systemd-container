@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="welcome_title">Bienvenido a Droidspaces</string>
-    <string name="welcome_subtitle">Gestor de contenedores Linux (estilo LXC) para Android !</string>
     <string name="get_started">Comenzar</string>
     <string name="root_check_title">Verificar Acceso Root</string>
     <string name="checking_root">Verificando acceso root…</string>
@@ -31,8 +29,6 @@
     <string name="backend_corrupted">Backend: Corrupto</string>
     <string name="root_unavailable">Acceso root no Disponible.</string>
     <string name="grant_root_message">Concede acceso root para seguir usando Droidspaces</string>
-    <string name="version_label">Versión: %1$s</string>
-    <string name="root_provider_label">Proveedor de Root: %1$s</string>
     <string name="unknown">Desconocido</string>
     <string name="update_available_message">Actualización del Backend Disponible, toca para actualizar</string>
     <string name="backend_section">Backend</string>
@@ -172,7 +168,6 @@
     <string name="unmask">Desenmascarar</string>
     <string name="enable_service">Habilitar</string>
     <string name="disable_service">Deshabilitar</string>
-    <string name="more_options">Más opciones</string>
     <string name="restart_service">Reiniciar servicio</string>
     <string name="mask_service">Enmascarar servicio</string>
     <string name="action_successful">%1$s de %2$s exitoso</string>
@@ -180,7 +175,6 @@
     <string name="error_unknown">Error: %1$s</string>
     <string name="actioning_service" translatable="false">Procesando %1$s en %2$s…</string>
     <string name="no_services_found">No se encontraron servicios</string>
-    <string name="no_systemd_services">No hay servicios systemd disponibles</string>
     <string name="no_running_services">No hay servicios en ejecución</string>
     <string name="no_enabled_services">No hay servicios habilitados</string>
     <string name="no_disabled_services">No hay servicios deshabilitados</string>
@@ -222,7 +216,6 @@
     <string name="maximum_size_512gb">Máximo 512 GB</string>
     <string name="size_gb">Tamaño (GB)</string>
     <string name="enter_size_between_4_512_gb">Introduce un tamaño entre 4 y 512 GB</string>
-    <string name="next_summary">Siguiente: Resumen</string>
     <string name="logs_title">Logs: %1$s</string>
     <string name="clear_logs">Limpiar logs</string>
     <string name="copy_logs">Copiar logs</string>

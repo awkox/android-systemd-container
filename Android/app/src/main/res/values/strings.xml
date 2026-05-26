@@ -4,8 +4,6 @@
     <string name="app_name">Droidspaces</string>
 
     <!-- Welcome Screen -->
-    <string name="welcome_title">Welcome to Droidspaces</string>
-    <string name="welcome_subtitle">LXC-style Linux container manager for Android !</string>
     <string name="welcome_tagline">Linux containers. Native. No overhead.</string>
     <string name="get_started">Get Started</string>
     <!-- Welcome feature cards -->
@@ -61,8 +59,6 @@
     <string name="backend_corrupted">Backend: Corrupted</string>
     <string name="root_unavailable">Root access is unavailable.</string>
     <string name="grant_root_message">Grant root access to continue exploring droidspaces !</string>
-    <string name="version_label">Version: %1$s</string>
-    <string name="root_provider_label">Root Provider: %1$s</string>
     <string name="unknown">Unknown</string>
     <string name="update_available_message">Backend update available, click here to update</string>
     <string name="backend_attention_required">Backend: Action required</string>
@@ -359,7 +355,6 @@
     <string name="unmask">Unmask</string>
     <string name="enable_service">Enable</string>
     <string name="disable_service">Disable</string>
-    <string name="more_options">More options</string>
     <string name="restart_service">Restart service</string>
     <string name="mask_service">Mask service</string>
     <string name="action_successful">%1$s %2$s successful</string>
@@ -367,7 +362,7 @@
     <string name="error_unknown">Error: %1$s</string>
     <string name="actioning_service">%1$sing %2$s...</string>
     <string name="no_services_found">No Services Found</string>
-    <string name="no_systemd_services">No systemd services available</string>
+    <string name="repo_not_found_in_repo">&quot;%1$s&quot; not found in the repository</string>
     <string name="no_running_services">No running services</string>
     <string name="no_enabled_services">No enabled services</string>
     <string name="no_disabled_services">No disabled services</string>
@@ -424,7 +419,6 @@
     <string name="maximum_size_512gb">Maximum size is 512 GB</string>
     <string name="size_gb">Size (GB)</string>
     <string name="enter_size_between_4_512_gb">Enter size between 4 and 512 GB</string>
-    <string name="next_summary">Next: Summary</string>
 
     <!-- Container Log Viewer -->
     <string name="logs_title">Logs: %1$s</string>
@@ -505,13 +499,14 @@
     <string name="repo_title">Rootfs Repository</string>
     <string name="repo_fab_label">Repository</string>
     <string name="repo_refresh">Refresh</string>
+    <string name="repo_banner_text">Rootfs tarballs under \"Droidspaces developers\" are open-source and transparent. You can manually download or inspect our changes by tapping this card.</string>
+    <string name="repo_banner_url">https://github.com/Droidspaces/Droidspaces-rootfs-builder</string>
     <string name="repo_failed_to_load">Failed to load repository</string>
     <string name="repo_download">Download</string>
     <string name="repo_cancel">Cancel</string>
     <string name="repo_install">Install</string>
     <string name="repo_retry">Retry</string>
     <string name="repo_notification_description">Droidspaces rootfs download</string>
-    <string name="repo_error_server_http">Server returned HTTP %1$d</string>
     <string name="repo_error_no_assets">No rootfs tarballs found in latest release</string>
     <string name="repo_error_network">Network error</string>
     <string name="repo_dl_error_unknown">Unknown error</string>
@@ -528,5 +523,15 @@
     <string name="repo_status_ready">READY</string>
     <string name="repo_status_downloading">DOWNLOADING</string>
     <string name="repo_status_failed">FAILED</string>
-    <string name="repo_downloads_count">%1$s downloads</string>
+    <string name="repo_add_custom">Add Custom Repository</string>
+    <string name="repo_manage_custom">Manage Repositories</string>
+    <string name="repo_manager_subtitle">Subscribe to custom rootfs.json feeds.</string>
+    <string name="repo_custom_name_hint">Repository name</string>
+    <string name="repo_custom_url_hint">rootfs.json URL</string>
+    <string name="repo_custom_add">Subscribe</string>
+    <string name="repo_custom_remove">Remove</string>
+    <string name="repo_custom_name_empty">Name cannot be empty</string>
+    <string name="repo_custom_url_empty">URL cannot be empty</string>
+    <string name="repo_custom_url_invalid">URL must start with https://</string>
+    <string name="repo_no_custom">No custom repositories subscribed yet.</string>
 </resources>

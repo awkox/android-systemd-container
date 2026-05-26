@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Welcome Screen -->
-    <string name="welcome_title">Droidspaces में आपका स्वागत है</string>
-    <string name="welcome_subtitle">Android के लिए LXC-शैली का Linux कंटेनर मैनेजर!</string>
     <string name="get_started">शुरू करें</string>
     <!-- Root Check Screen -->
     <string name="root_check_title">रूट एक्सेस जांच</string>
@@ -36,8 +34,6 @@
     <string name="backend_corrupted">Backend: दूषित</string>
     <string name="root_unavailable">रूट एक्सेस उपलब्ध नहीं है।</string>
     <string name="grant_root_message">Droidspaces का उपयोग जारी रखने के लिए रूट एक्सेस दें!</string>
-    <string name="version_label">संस्करण: %1$s</string>
-    <string name="root_provider_label">रूट प्रदाता: %1$s</string>
     <string name="unknown">अज्ञात</string>
     <string name="update_available_message">बैकएंड अपडेट उपलब्ध है, अपडेट करने के लिए यहां क्लिक करें</string>
     <!-- Settings Screen -->
@@ -187,7 +183,6 @@
     <string name="unmask">अनमास्क</string>
     <string name="enable_service">सक्रिय करें</string>
     <string name="disable_service">निष्क्रिय करें</string>
-    <string name="more_options">और विकल्प</string>
     <string name="restart_service">सेवा पुनः प्रारंभ करें</string>
     <string name="mask_service">सेवा मास्क करें</string>
     <string name="action_successful">%1$s %2$s सफल</string>
@@ -195,7 +190,6 @@
     <string name="error_unknown">त्रुटि: %1$s</string>
     <string name="actioning_service" translatable="false">%1$sing %2$s...</string>
     <string name="no_services_found">कोई सेवाएँ नहीं मिलीं</string>
-    <string name="no_systemd_services">कोई systemd सेवाएँ उपलब्ध नहीं</string>
     <string name="no_running_services">कोई चल रही सेवाएँ नहीं</string>
     <string name="no_enabled_services">कोई सक्रिय सेवाएँ नहीं</string>
     <string name="no_disabled_services">कोई निष्क्रिय सेवाएँ नहीं</string>
@@ -245,7 +239,6 @@
     <string name="maximum_size_512gb">अधिकतम आकार 512 GB है</string>
     <string name="size_gb">आकार (GB)</string>
     <string name="enter_size_between_4_512_gb">4 और 512 GB के बीच आकार दर्ज करें</string>
-    <string name="next_summary">अगला: सारांश</string>
     <!-- Container Log Viewer -->
     <string name="logs_title">लॉग्स: %1$s</string>
     <string name="clear_logs">लॉग साफ करें</string>

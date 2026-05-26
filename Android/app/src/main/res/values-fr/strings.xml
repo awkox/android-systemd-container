@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Welcome Screen -->
-    <string name="welcome_title">Bienvenue dans Droidspaces</string>
-    <string name="welcome_subtitle">Gestionnaire de conteneurs Linux de style LXC pour Android !</string>
     <string name="get_started">Commencer</string>
     <!-- Root Check Screen -->
     <string name="root_check_title">Vérification de l\'accès root</string>
@@ -36,8 +34,6 @@
     <string name="backend_corrupted">Backend : Corrompu</string>
     <string name="root_unavailable">L\'accès root n\'est pas disponible.</string>
     <string name="grant_root_message">Accordez l\'accès root pour continuer à explorer Droidspaces !</string>
-    <string name="version_label">Version : %1$s</string>
-    <string name="root_provider_label">Fournisseur root : %1$s</string>
     <string name="unknown">Inconnu</string>
     <string name="update_available_message">Mise à jour du backend disponible, cliquez ici pour mettre à jour</string>
     <!-- Settings Screen -->
@@ -187,7 +183,6 @@
     <string name="unmask">Unmask</string>
     <string name="enable_service">Activer</string>
     <string name="disable_service">Désactiver</string>
-    <string name="more_options">Plus d\'options</string>
     <string name="restart_service">Redémarrer le service</string>
     <string name="mask_service">Masquer le service</string>
     <string name="action_successful">%1$s %2$s réussi</string>
@@ -195,7 +190,6 @@
     <string name="error_unknown">Erreur : %1$s</string>
     <string name="actioning_service" translatable="false">%1$sing %2$s...</string>
     <string name="no_services_found">Aucun service trouvé</string>
-    <string name="no_systemd_services">Aucun service systemd disponible</string>
     <string name="no_running_services">Aucun service en cours</string>
     <string name="no_enabled_services">Aucun service activé</string>
     <string name="no_disabled_services">Aucun service désactivé</string>
@@ -245,7 +239,6 @@
     <string name="maximum_size_512gb">La taille maximale est de 512 GB</string>
     <string name="size_gb">Taille (GB)</string>
     <string name="enter_size_between_4_512_gb">Entrez une taille entre 4 et 512 GB</string>
-    <string name="next_summary">Suivant : Résumé</string>
     <!-- Container Log Viewer -->
     <string name="logs_title">Logs : %1$s</string>
     <string name="clear_logs">Effacer les logs</string>

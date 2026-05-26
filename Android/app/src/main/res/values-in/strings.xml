@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="welcome_title">Selamat Datang di Droidspaces</string>
-    <string name="welcome_subtitle">LXC-style Linux kontainer manajer untuk Android !</string>
     <string name="get_started">Mulai</string>
     <string name="root_check_title">Cek Akses Root</string>
     <string name="checking_root">Mengecek akses root...</string>
@@ -31,8 +29,6 @@
     <string name="backend_corrupted">Backend: Rusak</string>
     <string name="root_unavailable">Akses Root tidak tersedia.</string>
     <string name="grant_root_message">Beri akses root untuk lanjut menjelajah droidspaces !</string>
-    <string name="version_label">Versi: %1$s</string>
-    <string name="root_provider_label">Penyedia Root: %1$s</string>
     <string name="unknown">Tidak diketahui</string>
     <string name="update_available_message">Update Backend tersedia, klik disini untuk update</string>
     <string name="backend_section">Backend</string>
@@ -240,13 +236,11 @@
     <string name="all_legend">Semua</string>
     <string name="enable_service">Aktifkan</string>
     <string name="disable_service">Nonaktifkan</string>
-    <string name="more_options">Opsi lebih</string>
     <string name="restart_service">Mulai ulang layanan</string>
     <string name="action_successful">%1$s %2$s berhasil</string>
     <string name="failed_to_action">Gagal untuk %1$s %2$s</string>
     <string name="error_unknown">Eror: %1$s</string>
     <string name="no_services_found">Tidak ada layanan di temukan</string>
-    <string name="no_systemd_services">Tidak ada layanan systemd yang tersedia</string>
     <string name="no_running_services">Tidak ada layanan yang sedang berjalan</string>
     <string name="no_enabled_services">Tidak ada layanan yang diaktifkan</string>
     <string name="no_disabled_services">Tidak ada layanan yang di nonaktifkan</string>
@@ -285,7 +279,6 @@
     <string name="maximum_size_512gb">Ukuran maximal adalah 512 GB</string>
     <string name="size_gb">Ukuran (GB)</string>
     <string name="enter_size_between_4_512_gb">Masukan ukuran diantara 4 dan 512 GB</string>
-    <string name="next_summary">Selanjutnya: Ringkasan</string>
     <string name="logs_title">Log: %1$s</string>
     <string name="clear_logs">Bersihkan log</string>
     <string name="copy_logs">Salin Log</string>

@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.droidspaces.app.util.DownloadStatus
+import com.droidspaces.app.util.PreferencesManager
 import com.droidspaces.app.util.RepoResult
 import com.droidspaces.app.util.RootfsAsset
 import com.droidspaces.app.util.RootfsDownloadManager
@@ -50,7 +51,7 @@ class RootfsRepoViewModel(application: Application) : AndroidViewModel(applicati
         val prev = (uiState as? RepoUiState.Success)?.assets ?: emptyList()
         uiState = RepoUiState.Loading(prev)
         viewModelScope.launch {
-            when (val result = RootfsRepository.fetchAssets(getApplication())) {
+            when (val result = RootfsRepository.fetchAllAssets(getApplication())) {
                 is RepoResult.Success -> {
                     val ctx = getApplication<Application>()
                     val prePopulated = result.assets.mapNotNull { asset ->
@@ -150,4 +151,17 @@ class RootfsRepoViewModel(application: Application) : AndroidViewModel(applicati
     fun resetAsset(assetFile: String) {
         downloadStates = downloadStates.toMutableMap().apply { put(assetFile, AssetDownloadState.Idle) }
     }
+
+    fun addCustomRepo(name: String, url: String) {
+        PreferencesManager.getInstance(getApplication()).addCustomRepo(name, url)
+        load()
+    }
+
+    fun removeCustomRepo(url: String) {
+        PreferencesManager.getInstance(getApplication()).removeCustomRepo(url)
+        load()
+    }
+
+    fun getCustomRepos(): List<Pair<String, String>> =
+        PreferencesManager.getInstance(getApplication()).getCustomRepos()
 }

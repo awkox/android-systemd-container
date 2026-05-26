@@ -53,6 +53,9 @@ object Constants {
     const val KEY_CACHED_CONTAINER_NAMES = "cached_container_names"
     const val KEY_CACHED_CONTAINER_CONFIG_PREFIX = "cached_container_config_"
 
+    // Custom rootfs repository subscriptions
+    const val KEY_CUSTOM_REPOS = "custom_rootfs_repos"
+
     // Minimum storage requirements
     const val MIN_STORAGE_GB = 4
 

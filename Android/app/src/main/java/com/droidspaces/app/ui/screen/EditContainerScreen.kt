@@ -34,6 +34,7 @@ import com.droidspaces.app.util.ContainerInfo
 import com.droidspaces.app.util.ContainerManager
 import com.droidspaces.app.util.SystemInfoManager
 import com.droidspaces.app.util.Constants
+import com.droidspaces.app.util.ValidationUtils
 import com.droidspaces.app.ui.viewmodel.ContainerViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -79,6 +80,15 @@ fun EditContainerScreen(
 
     // State for editable fields
     var hostname by remember { mutableStateOf(container.hostname) }
+    var hostnameError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(hostname) {
+        hostnameError = ValidationUtils.validateHostname(
+            hostname.ifEmpty { ValidationUtils.sanitizeHostname(container.name) },
+            context
+        ).errorMessage
+    }
+
     var netMode by remember { mutableStateOf(container.netMode) }
     var disableIPv6 by remember { mutableStateOf(container.disableIPv6) }
     var enableAndroidStorage by remember { mutableStateOf(container.enableAndroidStorage) }
@@ -171,9 +181,10 @@ fun EditContainerScreen(
             errorMessage = null
 
             try {
+                val finalHostname = hostname.ifEmpty { ValidationUtils.sanitizeHostname(container.name) }
                 // Create updated ContainerInfo with new values
                 val updatedConfig = container.copy(
-                    hostname = hostname,
+                    hostname = finalHostname,
                     netMode = netMode,
                     disableIPv6 = disableIPv6,
                     enableAndroidStorage = enableAndroidStorage,
@@ -203,7 +214,8 @@ fun EditContainerScreen(
                 result.fold(
                     onSuccess = {
                         // Success - update saved baseline values to current values
-                        savedHostname = hostname
+                        hostname = finalHostname
+                        savedHostname = finalHostname
                         savedNetMode = netMode
                         savedDisableIPv6 = disableIPv6
                         savedEnableAndroidStorage = enableAndroidStorage
@@ -386,7 +398,7 @@ fun EditContainerScreen(
         },
         bottomBar = {
             val btnShape = RoundedCornerShape(20.dp)
-            val isReadyToSave = !isSaving && !isSaved && hasChanges && (netMode != "nat" || upstreamInterfaces.isNotEmpty())
+            val isReadyToSave = !isSaving && !isSaved && hasChanges && (netMode != "nat" || upstreamInterfaces.isNotEmpty()) && hostnameError == null
             val targetBtnColor = when {
                 isSaved -> MaterialTheme.colorScheme.primaryContainer
                 isSaving || isReadyToSave -> MaterialTheme.colorScheme.primary
@@ -543,6 +555,11 @@ fun EditContainerScreen(
                 value = hostname,
                 onValueChange = { hostname = it },
                 label = { Text(context.getString(R.string.hostname)) },
+                placeholder = { Text(ValidationUtils.sanitizeHostname(container.name)) },
+                isError = hostnameError != null,
+                supportingText = hostnameError?.let { { Text(it) } } ?: {
+                    Text(context.getString(R.string.hostname_hint))
+                },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 shape = modernFieldShape,
