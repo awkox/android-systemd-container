@@ -310,13 +310,13 @@ Android 内核通常经过大量修改，关键的容器功能可能被禁用。
 
 ##### Non-GKI（旧内核）
 适用于内核：**3.10, 3.18, 4.4, 4.9, 4.14, 4.19**。添加所需的配置片段后，这些内核即可即插即用。
-参见：[旧版内核配置](Documentation/Kernel-Configuration_CN.md#configuring-non-gki-kernels-legacy-kernels)
+参见：[旧版内核配置](Documentation/Kernel-Configuration_CN.md#non-gki)
 
 <a id="GKI"></a>
 
 ##### GKI（现代内核）
 适用于内核：**5.4, 5.10, 5.15, 6.1+**。这些内核需要额外步骤来处理因配置更改导致的 ABI 破坏。
-参见：[现代 GKI 内核配置](Documentation/Kernel-Configuration_CN.md#configuring-gki-kernels)
+参见：[现代 GKI 内核配置](Documentation/Kernel-Configuration_CN.md#gki)
 
 **内核支持的后续步骤：**
 - **自动检查**：使用 Android 应用内置的需求检查器（**设置** -> **需求**）。

@@ -11,7 +11,7 @@ keywords: droidspaces, 故障排除, systemd, 挂起, 修复, 网络, 问题, se
 常见问题、原因及修复方法。
 
 ### 快速导航
-- [现代发行版（Arch、Fedora 等）在旧内核上启动失败](#modern-distros-arch-fedora-etc-failure-on-legacy-kernels)
+- [现代发行版（Arch、Fedora 等）在旧内核上启动失败](#modern-distros)
 - ["Required key not available" (ENOKEY)](#required-key-not-available)
 - [内核 4.14 上的挂载错误](#mount-errors-on-kernel-414)
 - [OverlayFS 不受支持 (f2fs)](#overlayfs-not-supported-f2fs)
@@ -72,6 +72,7 @@ Systemd 的开发理念越来越趋向于针对现代 Linux 环境。从 v258（
 
 ---
 
+<a id="mount-errors-on-kernel-414"></a>
 ## 内核 4.14 上的挂载错误
 
 **症状：** 停止后的首次容器启动尝试因挂载错误而失败，但第二次尝试成功。
@@ -87,6 +88,7 @@ Systemd 的开发理念越来越趋向于针对现代 Linux 环境。从 v258（
 
 ---
 
+<a id="overlayfs-not-supported-f2fs"></a>
 ## OverlayFS 不受支持 (f2fs)
 
 **症状：** 使用 `--volatile` 启动容器时失败，提示 OverlayFS 不受支持或 f2fs 不兼容。
@@ -105,6 +107,7 @@ droidspaces --name=test --rootfs-img=/data/rootfs.img --volatile start
 
 ---
 
+<a id="container-name-conflicts"></a>
 ## 容器名称冲突
 
 **症状：** 启动容器失败，因为同名容器已在运行，或发生 PID 文件冲突。
@@ -128,6 +131,7 @@ droidspaces --name=test --rootfs-img=/data/rootfs.img --volatile start
 
 ---
 
+<a id="systemd-hangs-on-older-kernels"></a>
 ## Systemd 在旧内核上挂起
 
 **症状：** 在旧内核（3.18、4.4、4.9、4.14、4.19）上启动容器时，整个 systemd 挂起或无响应。
@@ -138,6 +142,7 @@ droidspaces --name=test --rootfs-img=/data/rootfs.img --volatile start
 
 ---
 
+<a id="container-wont-stop"></a>
 ## 容器无法停止
 
 **症状：** `droidspaces stop` 需要超过 15 秒来停止容器，最终失败。
@@ -148,6 +153,7 @@ droidspaces --name=test --rootfs-img=/data/rootfs.img --volatile start
 
 ---
 
+<a id="rootfs-image-io-errors-on-android"></a>
 ## Android 上 Rootfs 镜像 I/O 错误
 
 **症状：** 对 rootfs 镜像进行 loop 挂载时静默失败。
@@ -188,6 +194,7 @@ chcon u:object_r:vold_data_file:s0 /path/to/rootfs.img
 
 ---
 
+<a id="dns--name-resolution-issues"></a>
 ## DNS / 域名解析问题
 
 **症状：** 互联网可以访问（可以 ping 通 IP 地址），但域名解析失败，即使 `/etc/resolv.conf` 中有正确的 DNS 名称服务器。此问题在使用移动数据时尤其常见，但在某些 ISP 的 WiFi 上也可能发生。
@@ -206,6 +213,7 @@ chcon u:object_r:vold_data_file:s0 /path/to/rootfs.img
 
 ---
 
+<a id="ipv4-quirks"></a><a id="wifimobile-data-disconnects"></a>
 ## WiFi/移动数据断连
 
 **症状：** 在容器启动或停止过程中，宿主设备的 WiFi 或移动数据永久停止工作。不重启设备可能无法重新开启。
@@ -225,6 +233,7 @@ chcon u:object_r:vold_data_file:s0 /path/to/rootfs.img
 
 ---
 
+<a id="selinux-induced-rootfs-corruption-directory-mode"></a>
 ## SELinux 导致的 Rootfs 损坏（目录模式）
 
 **症状：** 符号链接大小意外变化（例如 `dpkg` 发出关于 `libstdc++.so.6` 的警告）、共享库加载失败（`LD_LIBRARY_PATH` 问题）或随机二进制崩溃。
@@ -244,6 +253,7 @@ chcon u:object_r:vold_data_file:s0 /path/to/rootfs.img
 
 ---
 
+<a id="systemd-service-sandboxing-conflicts-legacy-kernels"></a>
 ## Systemd 服务沙箱冲突（旧内核）
 
 **症状：** 像 `redis`、`mysql` 或 `apache` 这样的服务启动失败，并报 `exit-code` 或 `status=226/NAMESPACE` 错误，即使相同的配置在其他地方可以正常工作。
@@ -403,6 +413,7 @@ systemctl start wifi-watchdog
 
 ---
 
+<a id="getting-help"></a>
 ## 获取帮助
 
 如果您的问题未在此列出：

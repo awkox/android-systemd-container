@@ -85,6 +85,7 @@ mkdir my-container
 sudo tar -xvf rootfs.tar.xz -C my-container
 ```
 
+<a id="option-b-create-an-ext4-image-recommended"></a>
 ### 方案 B：创建 ext4 镜像（推荐）
 将你的 rootfs 封装在一个 `.img` 文件中，可提供更好的可移植性并避免与宿主机文件系统冲突。
 
