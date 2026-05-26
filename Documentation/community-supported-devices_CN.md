@@ -12,6 +12,14 @@ keywords: droidspaces, supported, devices, android, device, compatibility, kerne
 >
 > 如果你想将自己的 Droidspaces 内核添加到此表格，请查看[贡献指南](#contribution-guidelines)部分。
 
+> [!WARNING]
+>
+> 刷写自定义内核需要解锁引导加载程序（bootloader）。Droidspaces 开发者不对任何设备变砖、数据丢失或因内核安装导致的硬件损坏负责。
+>
+> 本列表仅供帮助你定位特定设备的源代码。
+>
+> 这些仓库未经 Droidspaces 团队深度审计或审查。请自行承担风险。
+
 本文档是社区维护的已知可成功运行 Droidspaces 的 Android 设备兼容性列表。旨在帮助人们选择用于自托管的手机，尤其是在购买二手硬件时。
 
 ## Non-GKI 设备（内核 4.19 及更低版本）

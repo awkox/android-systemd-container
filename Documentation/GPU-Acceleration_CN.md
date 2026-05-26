@@ -12,11 +12,11 @@ keywords: gpu, acceleration, droidspaces, termux, virgl, turnip, adreno, contain
 
 ### 快速导航
 
-- [**Android 设备**](#android)
-    - [01. Termux-X11 + llvmpipe（软件渲染）](#termux-x11)
-    - [02. Termux-X11 + VirGL（非 Qualcomm GPU）](#virgl)
-    - [03. Turnip（原生 Qualcomm/Adreno）](#turnip)
-- [**Linux 桌面（AMD/Intel）**](#linux)
+- [**Android 设备**](#android)  
+    - [01. Termux-X11 + llvmpipe（软件渲染）](#termux-x11)  
+    - [02. Termux-X11 + VirGL（非 Qualcomm GPU）](#virgl)  
+    - [03. Turnip（原生 Qualcomm/Adreno）](#turnip)  
+- [**Linux 桌面（AMD/Intel）**](#linux)  
 
 ---
 

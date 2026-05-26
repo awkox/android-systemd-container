@@ -13,21 +13,21 @@ keywords: droidspaces, projects, android, server, tailscale, ufw, failban, conta
 
 ### 快速导航
 
-- [1. 搭建安全的"移动服务器"（Tailscale + UFW + Fail2Ban）](#1-setting-up-a-secure-mobile-server-tailscale--ufw--fail2ban)
-    - [前提条件](#prerequisites)
-    - [步骤 1：安装网络工具和兼容层](#step-1-install-networking-tools--compatibility-layer)
-    - [步骤 2：个人用户设置与 SSH 加固](#step-2-personal-user-setup--ssh-hardening)
-    - [步骤 3：设置 Tailscale](#step-3-set-up-tailscale)
-    - [步骤 4：使用 UFW（防火墙）保护容器](#step-4-secure-the-container-with-ufw-firewall)
-    - [步骤 5：使用 Fail2Ban 添加暴力破解防护](#step-5-add-brute-force-protection-with-fail2ban)
-- [2. 运行 Docker 容器（嵌套容器化）](#2-running-docker-containers-nested-containerization)
-    - [前提条件](#prerequisites-1)
-    - [步骤 1：确保使用 NAT 网络](#step-1-ensure-nat-networking)
-    - [步骤 2：兼容层（iptables-legacy）](#step-2-compatibility-layer-iptables-legacy)
-    - [步骤 3：安装 Docker](#step-3-install-docker)
-    - [步骤 4：非 root 用户设置](#step-4-non-root-user-setup)
-    - [步骤 5：验证安装](#step-5-verify-installation)
-    - [Host 模式或旧版内核的"最后手段"（仅限旧内核）](#last-resort-for-host-mode-or-legacy-kernels-old-kernels-only)
+- [1. 搭建安全的"移动服务器"（Tailscale + UFW + Fail2Ban）](#1-setting-up-a-secure-mobile-server-tailscale--ufw--fail2ban)  
+    - [前提条件](#prerequisites)  
+    - [步骤 1：安装网络工具和兼容层](#step-1-install-networking-tools--compatibility-layer)  
+    - [步骤 2：个人用户设置与 SSH 加固](#step-2-personal-user-setup--ssh-hardening)  
+    - [步骤 3：设置 Tailscale](#step-3-set-up-tailscale)  
+    - [步骤 4：使用 UFW（防火墙）保护容器](#step-4-secure-the-container-with-ufw-firewall)  
+    - [步骤 5：使用 Fail2Ban 添加暴力破解防护](#step-5-add-brute-force-protection-with-fail2ban)  
+- [2. 运行 Docker 容器（嵌套容器化）](#2-running-docker-containers-nested-containerization)  
+    - [前提条件](#prerequisites-1)  
+    - [步骤 1：确保使用 NAT 网络](#step-1-ensure-nat-networking)  
+    - [步骤 2：兼容层（iptables-legacy）](#step-2-compatibility-layer-iptables-legacy)  
+    - [步骤 3：安装 Docker](#step-3-install-docker)  
+    - [步骤 4：非 root 用户设置](#step-4-non-root-user-setup)  
+    - [步骤 5：验证安装](#step-5-verify-installation)  
+    - [Host 模式或旧版内核的"最后手段"（仅限旧内核）](#last-resort-for-host-mode-or-legacy-kernels-old-kernels-only)  
 
 ---
 
