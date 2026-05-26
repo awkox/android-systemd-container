@@ -9,6 +9,8 @@
 
 # Droidspaces
 
+English | [简体中文](./README_CN.md)
+
 **Droidspaces** is a lightweight, portable Linux containerization tool that lets you run full Linux environments on top of Android, Linux, or even in **minimal environments like Android recovery/Ramdisks**, with complete init system support including **systemd**, **OpenRC**, and other init systems (runit, s6, etc.).
 
 What makes Droidspaces unique is its **zero-dependency, native execution** on both Android and Linux. It's statically compiled against musl libc. If your device runs a Linux kernel, Droidspaces runs on it. No Termux, no middlemen, no setup overhead.
