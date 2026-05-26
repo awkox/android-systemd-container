@@ -27,7 +27,7 @@ keywords: droidspaces, projects, android, server, tailscale, ufw, failban, conta
     - [步骤 3：安装 Docker](#step-3-install-docker)  
     - [步骤 4：非 root 用户设置](#step-4-non-root-user-setup)  
     - [步骤 5：验证安装](#step-5-verify-installation)  
-    - [Host 模式或旧版内核的"最后手段"（仅限旧内核）](#last-resort-for-host-mode-or-legacy-kernels-old-kernels-only)  
+    - [Host 模式或旧版内核的"最后手段"（仅限老内核）](#last-resort-for-host-mode-or-legacy-kernels-old-kernels-only)  
 
 ---
 
@@ -37,7 +37,7 @@ keywords: droidspaces, projects, android, server, tailscale, ufw, failban, conta
 
 ### 前提条件
 
-- **内核支持**：此设置需要多个 Netfilter 和 IPSet 模块。请参阅 [UFW/Fail2ban 的附加内核配置](./Kernel-Configuration.md#additional-kernel-configuration-for-ufwfail2ban) 查看所需选项的完整列表。
+- **内核支持**：此设置需要多个 Netfilter 和 IPSet 模块。请参阅 [UFW/Fail2ban 的附加内核配置](./Kernel-Configuration_CN.md#additional-kernel-configuration-for-ufwfail2ban) 查看所需选项的完整列表。
 - **LTS 发行版**：强烈建议使用长期支持（LTS）发行版，如 **Ubuntu 24.04 LTS** 或 **Debian 12**，以获得最佳的稳定性和软件包支持。
 - **Root 用户**：本指南中的所有步骤都必须在容器内以 **root** 用户身份运行。
 - **包管理器**：以下命令使用 `apt`，仅在 Debian 和 Ubuntu 系列的发行版中可用。
@@ -191,7 +191,7 @@ Droidspaces 支持在所有受支持的内核版本上于容器内原生运行 D
 ### 前提条件
 
 - **LTS 发行版**：如果你的内核版本低于 **5.x.x**，强烈建议使用 LTS 发行版，如 **Ubuntu 24.04 LTS**，以获得最佳兼容性。
-- **内核配置**：确保你的内核已启用所需的 Droidspaces 选项。参见[所需的内核配置](./Kernel-Configuration.md#required-kernel-configuration)。
+- **内核配置**：确保你的内核已启用所需的 Droidspaces 选项。参见[所需的内核配置](./Kernel-Configuration_CN.md#required-kernel-configuration)。
 - **存储模式**：你**必须**使用 **ext4 /data** 或 **rootfs.img 模式**（推荐）。
     - *为什么？* Android 默认的 `f2fs` 文件系统不支持 Docker 的 `overlay2` 存储驱动所需的 overlay 特性。使用 `rootfs.img` 可以确保你运行在原生的 ext4 文件系统上。
 - **NAT 模式**：**必填。** Docker 需要 NAT 网络来创建其内部 `docker0` 网桥并为嵌套容器提供互联网访问。
