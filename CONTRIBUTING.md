@@ -4,7 +4,11 @@
 
 > A feature that doesn't exist is better than a broken implementation.
 
-Droidspaces runs on two distinct platforms - Android (on hardware ranging from ancient vendor-frozen 3.10 kernels to modern GKI devices, across dozens of SoCs and OEMs) and Linux desktop environments. A patch that works on your setup and breaks on someone else's is not a contribution - it is a regression. Every change introduced into core must uphold this contract without exception.
+Droidspaces runs on two distinct platforms - Android (on hardware ranging from ancient
+vendor-frozen 3.10 kernels to modern GKI devices, across dozens of SoCs and OEMs) and
+Linux desktop environments. A patch that works on your setup and breaks on someone
+else's is not a contribution - it is a regression. Every change introduced into core must
+uphold this contract without exception.
 
 ---
 
@@ -79,12 +83,10 @@ of this landscape before submission.
 State explicitly in your PR which devices and kernel versions you have tested on. Untested
 claims of compatibility will be treated as untested.
 
-Patches that address a quirk specific to one SoC family or OEM kernel are acceptable **only if Droidspaces can adapt to the quirk at runtime** 
-
-- via detection, a conditional code path,or a graceful fallback 
-- without regressing behavior on unaffected hardware. 
-
-If the fix cannot be generalized in this way, it belongs in a downstream fork, not in core.
+Patches that address a quirk specific to one SoC family or OEM kernel are acceptable **only
+if Droidspaces can adapt to the quirk at runtime** - via detection, a conditional code path,
+or a graceful fallback - without regressing behavior on unaffected hardware. If the fix
+cannot be generalized in this way, it belongs in a downstream fork, not in core.
 
 ---
 
