@@ -122,7 +122,7 @@ sudo droidspaces --name=web,db,app stop
 |--------|------|-------------|
 | `--foreground` | `-f` | 启动时附加到容器控制台以查看 init 日志。 |
 | `--volatile` | `-V` | 临时模式。更改存储在 RAM 中，退出后丢失。 |
-| `--hw-access` | `-H` | 暴露主机硬件（GPU、USB 等）。自动检测 GPU 组 ID 并在容器内创建匹配的组。挂载 X11 socket 以支持 GUI 应用（Android 上为 Termux X11，Linux 上为 `/tmp/.X11-unix`）。参见[安全警告](Features.md#hardware-access-mode)。 |
+| `--hw-access` | `-H` | 暴露主机硬件（GPU、USB 等）。自动检测 GPU 组 ID 并在容器内创建匹配的组。挂载 X11 socket 以支持 GUI 应用（Android 上为 Termux X11，Linux 上为 `/tmp/.X11-unix`）。参见[安全警告](Features_CN.md#hardware-access-mode)。 |
 | `--gpu` | | 仅启用 GPU 加速。扫描主机 `/dev` 中的已知 GPU 节点，并仅将其安全映射到容器中，不暴露其他主机硬件。（若已传入 `-H`，此选项将被忽略）。 |
 | `--termux-x11`| `-X` | 挂载 X11 socket 以支持 Termux-X11 显示（仅限 Android）。 |
 | `--enable-android-storage`| | 挂载 `/storage/emulated/0`（仅限 Android）。 |
@@ -293,11 +293,11 @@ sudo droidspaces scan
 sudo droidspaces check
 ```
 
-有关技术要求的深入探讨，请参阅[内核配置指南](Kernel-Configuration.md)。
+有关技术要求的深入探讨，请参阅[内核配置指南](Kernel-Configuration_CN.md)。
 
 ---
 
 ## 下一步
-- [功能深入解析](Features.md)
-- [故障排除](Troubleshooting.md)
-- [Android App 使用指南](Usage-Android-App.md)
+- [功能深入解析](Features_CN.md)
+- [故障排除](Troubleshooting_CN.md)
+- [Android App 使用指南](Usage-Android-App_CN.md)
