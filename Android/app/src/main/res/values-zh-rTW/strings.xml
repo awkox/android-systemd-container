@@ -438,4 +438,17 @@
     <string name="repo_status_ready">已準備好</string>
     <string name="repo_status_downloading">下載中</string>
     <string name="repo_status_failed">失敗</string>
+    <string name="repo_not_found_in_repo">儲存庫中未找到 %1$s</string>
+    <string name="repo_banner_text">「Droidspaces developers」下的Rootfs壓縮包是開源且透明的。您可以點擊此卡片手動下載或查看我們的變更。</string>
+    <string name="repo_add_custom">新增自訂儲存庫</string>
+    <string name="repo_manage_custom">管理儲存庫</string>
+    <string name="repo_manager_subtitle">訂閱自訂 rootfs.json 來源。</string>
+    <string name="repo_custom_name_hint">儲存庫名稱</string>
+    <string name="repo_custom_url_hint">rootfs.json URL</string>
+    <string name="repo_custom_add">訂閱</string>
+    <string name="repo_custom_remove">移除</string>
+    <string name="repo_custom_name_empty">名稱不可為空</string>
+    <string name="repo_custom_url_empty">URL不可為空</string>
+    <string name="repo_custom_url_invalid">網址必須以 https:// 開頭</string>
+    <string name="repo_no_custom">目前還沒有訂閱任何自訂儲存庫。</string>
 </resources>

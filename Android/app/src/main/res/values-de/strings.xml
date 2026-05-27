@@ -37,7 +37,7 @@
     <string name="root_unavailable">Root-Zugriff ist nicht verfügbar.</string>
     <string name="grant_root_message">Gewähren Sie Root-Zugriff, um Droidspaces weiter zu verwenden!</string>
     <string name="unknown">Unbekannt</string>
-    <string name="update_available_message">Backend-Update verfügbar, hier klicken, um zu aktualisieren</string>
+    <string name="update_available_message">Backend-Update verfügbar - zum Aktualisieren hier tippen</string>
     <!-- Settings Screen -->
     <string name="backend_section">Backend</string>
     <string name="reinstall_backend">Backend neu installieren</string>
@@ -117,7 +117,7 @@
     <string name="changes_take_effect_after_restart">Änderungen werden nach Neustart wirksam</string>
     <string name="disable_ipv6">IPv6 deaktivieren</string>
     <string name="disable_ipv6_description">IPv6 in diesem Container deaktivieren. Das Deaktivieren von IPv6 kann VPN-Apps auf dem Host beeinträchtigen.</string>
-    <string name="disable_ipv6_nat_forced">IPv6 ist in den Modi NAT und None immer deaktiviert.</string>
+    <string name="disable_ipv6_nat_forced">IPv6 ist in den Modi NAT und ohne Netzwerk immer deaktiviert.</string>
     <string name="android_storage">Android-Speicher</string>
     <string name="android_storage_description">Android-Speicher einbinden</string>
     <string name="hardware_access">Hardware-Zugriff</string>
@@ -133,10 +133,10 @@
     <!-- Container Name Screen -->
     <string name="container_setup">Container-Einrichtung</string>
     <string name="container_information">Container-Informationen</string>
-    <string name="container_name_label">Container-Name *</string>
+    <string name="container_name_label">Name des Containers *</string>
     <string name="container_name_placeholder" translatable="false">mein-container</string>
     <string name="hostname_placeholder">Leer lassen für Standard</string>
-    <string name="hostname_hint">Wenn leer, wird der Container-Name als Hostname verwendet</string>
+    <string name="hostname_hint">Wenn leer, wird der Name des Containers als Hostname verwendet</string>
     <string name="container_name_exists">Ein Container mit diesem Namen existiert bereits</string>
     <string name="next_configuration">Weiter: Konfiguration</string>
     <!-- Container Config Screen -->
@@ -165,7 +165,7 @@
     <string name="granting_permissions">Berechtigungen werden vergeben...</string>
     <string name="preparing_installation">Vorbereitung der Installation...</string>
     <!-- Control Panel Screen -->
-    <string name="no_containers_running">Keine Container laufen</string>
+    <string name="no_containers_running">Keine laufenden Container</string>
     <string name="start_container_first">Starten Sie zuerst einen Container, um ihn hier zu sehen</string>
     <!-- Systemd Screen -->
     <string name="systemd_services">Systemd-Dienste</string>
@@ -291,7 +291,7 @@
     <string name="gpu_option">GPU</string>
     <string name="x11_option">X11</string>
     <string name="selinux_permissive_option">SELinux Permissive</string>
-    <string name="volatile_option">Volatile</string>
+    <string name="volatile_option">Flüchtig</string>
     <string name="cgroup_v1_option">Cgroup V1</string>
     <string name="deadlock_shield_option">Deadlock-Schutz</string>
     <string name="privileged_option">Privilegiert</string>
@@ -320,13 +320,13 @@
     <string name="network_mode">Netzwerkmodus</string>
     <string name="network_mode_host">Host</string>
     <string name="network_mode_nat">NAT (Standard)</string>
-    <string name="network_mode_none">Keine (ohne Netzwerkverbindung)</string>
+    <string name="network_mode_none">Ohne Netzwerk</string>
     <string name="network_mode_host_short">Host</string>
     <string name="network_mode_nat_short">NAT</string>
-    <string name="network_mode_none_short">Keine</string>
+    <string name="network_mode_none_short">Ohne</string>
     <string name="nat_settings">NAT Einstellungen</string>
     <string name="upstream_interfaces_mandatory">Upstream-Schnittstellen (obligatorisch)</string>
-    <string name="upstream_interfaces_required_error">Für den NAT-Modus müssen Sie mindestens eine Upstream-Schnittstelle angeben.</string>
+    <string name="upstream_interfaces_required_error">Für den NAT-Modus muss mindestens eine Upstream-Schnittstelle angeben werden.</string>
     <string name="add_upstream_interface">Upstream-Schnittstelle hinzufügen</string>
     <string name="available_system_interfaces">Verfügbare Systemschnittstellen:</string>
     <string name="enter_manually">Oder manuell eingeben (Platzhalter werden ebenfalls unterstützt):</string>
@@ -351,8 +351,8 @@
     <string name="static_ip_description">Festlegen einer statischen IPv4-Adresse für diesen Container im Subnetz 172.28.x.x. Feld leer lassen, damit die Adresse beim ersten Start automatisch zugewiesen wird.</string>
     <string name="octet_label">Oktett %1$d</string>
     <string name="error_octet_range">Bereich: 1-254</string>
-    <string name="error_ip_collision">Diese IP-Adresse ist bereits \"%1$s“ zugewiesen.</string>
-    <string name="volatile_mode">Volatile-Modus</string>
+    <string name="error_ip_collision">Diese IP-Adresse ist bereits \"%1$s“ zugewiesen</string>
+    <string name="volatile_mode">Flüchtiger Modus</string>
     <string name="volatile_mode_description">Arbeitsspeicher-Modus (Änderungen gehen nach dem Beenden verloren)</string>
     <string name="bind_mounts">Bind Mounts</string>
     <string name="add">Hinzufügen</string>
@@ -463,11 +463,24 @@
     <string name="repo_dl_error_too_many_redirects">Zu viele Weiterleitungen</string>
     <string name="repo_dl_error_code">Fehlercode %1$d</string>
     <string name="repo_download">Herunterladen</string>
-    <string name="repo_status_downloading">HERUNTERLADEN</string>
+    <string name="repo_status_downloading">WIRD GELADEN</string>
     <string name="repo_cancel">Abbrechen</string>
     <string name="privileged_confirm_instruction">Zur Bestätigung bitte genau den Satz \"ICH WERDE KEINE FEHLER MELDEN“ in Großbuchstaben eingeben:</string>
     <string name="repo_error_no_assets">In der neuesten Version wurden keine Rootfs-Tarballs gefunden</string>
     <string name="repo_status_ready">BEREIT</string>
     <string name="repo_status_failed">FEHLGESCHLAGEN</string>
     <string name="repo_dl_error_unknown">Unbekannter Fehler</string>
+    <string name="repo_not_found_in_repo">%1$s nicht in der Repository gefunden</string>
+    <string name="repo_banner_text">Die Rootfs-Tarballs unter \"Droidspaces developers“ sind Open Source und transparent. Du kannst unsere Änderungen manuell herunterladen oder einsehen, indem du auf diese Karte tippst.</string>
+    <string name="repo_add_custom">Benutzerdefiniertes Repository hinzufügen</string>
+    <string name="repo_manage_custom">Repositories verwalten</string>
+    <string name="repo_manager_subtitle">Abonnieren Sie benutzerdefinierte rootfs.json-Feeds.</string>
+    <string name="repo_custom_name_hint">Name des Repositorys</string>
+    <string name="repo_custom_url_hint">rootfs.json URL</string>
+    <string name="repo_custom_add">Abonnieren</string>
+    <string name="repo_custom_remove">Entfernen</string>
+    <string name="repo_custom_name_empty">Name darf nicht leer sein</string>
+    <string name="repo_custom_url_empty">URL darf nicht leer sein</string>
+    <string name="repo_custom_url_invalid">URL muss mit https:// anfangen</string>
+    <string name="repo_no_custom">Keine benutzerdefinierten Repositories abonniert.</string>
 </resources>
