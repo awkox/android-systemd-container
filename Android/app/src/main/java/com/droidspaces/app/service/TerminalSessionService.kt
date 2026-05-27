@@ -76,6 +76,7 @@ class TerminalSessionService : Service() {
                                 @Suppress("DEPRECATION")
                                 stopForeground(true)
                             }
+                            notificationManager.cancel(NOTIFICATION_ID)
                             stopSelf()
                         } else {
                             updateNotification()
@@ -98,6 +99,7 @@ class TerminalSessionService : Service() {
                 @Suppress("DEPRECATION")
                 stopForeground(true)
             }
+            notificationManager.cancel(NOTIFICATION_ID)
 
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 sessions.values.forEach { it.finishIfRunning() }
@@ -151,12 +153,38 @@ class TerminalSessionService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_EXIT -> {
-                binder.terminateAllSessions()
-            }
+            ACTION_EXIT -> binder.terminateAllSessions()
             ACTION_WAKE_LOCK_TOGGLE -> binder.setWakeLock(!binder.isWakeLockHeld())
+            ACTION_STOP_CONTAINER_SESSIONS -> {
+                intent.getStringExtra(EXTRA_CONTAINER_NAME)?.let { terminateSessionsForContainer(it) }
+            }
         }
         return START_STICKY
+    }
+
+    // Kill all sessions belonging to a specific container (used before stop/restart).
+    private fun terminateSessionsForContainer(containerName: String) {
+        val targets = sessions.filter { (id, _) -> sessionList[id]?.containerName == containerName }
+        targets.forEach { (_, s) -> s.write("\u0004") }
+        targets.keys.forEach { id ->
+            sessionList.remove(id)
+            globalSessionList.remove(id)
+        }
+        updateNotification()
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            targets.forEach { (id, s) ->
+                runCatching { if (s.emulator != null) s.finishIfRunning() }
+                sessions.remove(id)
+            }
+            if (sessions.isEmpty()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) stopForeground(STOP_FOREGROUND_REMOVE)
+                else @Suppress("DEPRECATION") stopForeground(true)
+                notificationManager.cancel(NOTIFICATION_ID)
+                stopSelf()
+            } else {
+                updateNotification()
+            }
+        }, 300)
     }
 
     override fun onDestroy() {
@@ -202,6 +230,17 @@ class TerminalSessionService : Service() {
     }
 
     private fun updateNotification() {
+        if (sessions.isEmpty()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(STOP_FOREGROUND_REMOVE)
+            } else {
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+            notificationManager.cancel(NOTIFICATION_ID)
+            stopSelf()
+            return
+        }
         notificationManager.notify(NOTIFICATION_ID, buildNotification())
     }
 
@@ -226,6 +265,8 @@ class TerminalSessionService : Service() {
         private const val NOTIFICATION_ID = 42
         private const val ACTION_EXIT = "com.droidspaces.app.TERMINAL_EXIT"
         private const val ACTION_WAKE_LOCK_TOGGLE = "com.droidspaces.app.TERMINAL_WAKE_LOCK_TOGGLE"
+        const val ACTION_STOP_CONTAINER_SESSIONS = "com.droidspaces.app.STOP_CONTAINER_SESSIONS"
+        const val EXTRA_CONTAINER_NAME = "container_name"
 
         // Compose-observable process-scoped session registry.
         // Read by any screen that needs live session awareness (e.g. ContainerDetailsScreen).

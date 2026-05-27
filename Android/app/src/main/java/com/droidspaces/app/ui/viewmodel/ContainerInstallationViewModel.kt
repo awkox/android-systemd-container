@@ -12,6 +12,7 @@ import com.droidspaces.app.util.Constants
 
 import com.droidspaces.app.util.BindMount
 import com.droidspaces.app.util.PortForward
+import com.droidspaces.app.util.ValidationUtils
 
 class ContainerInstallationViewModel : ViewModel() {
     var tarballUri: Uri? by mutableStateOf(null)
@@ -148,7 +149,7 @@ class ContainerInstallationViewModel : ViewModel() {
 
         return ContainerInfo(
             name = containerName,
-            hostname = hostname.ifEmpty { containerName },
+            hostname = hostname.ifEmpty { ValidationUtils.sanitizeHostname(containerName) },
             rootfsPath = if (useSparseImage) {
                 ContainerManager.getSparseImagePath(containerName)
             } else {

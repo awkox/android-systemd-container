@@ -195,10 +195,10 @@ object ContainerOSInfoManager {
                 ramUsageMb = ramUsageMb,
                 ramPercent = ramPercent
             )
-            // Cache the result (both in-memory and persistent)
+            // Only persist if we got valid OS info; don't overwrite with a failed fetch
             cache[containerName] = finalInfo
             val ctx = context
-            if (ctx != null) {
+            if (ctx != null && (finalInfo.prettyName != null || finalInfo.name != null)) {
                 PreferencesManager.getInstance(ctx).saveContainerOSInfo(containerName, finalInfo)
             }
             finalInfo

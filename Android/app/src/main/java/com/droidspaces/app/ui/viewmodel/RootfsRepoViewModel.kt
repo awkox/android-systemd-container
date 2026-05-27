@@ -9,12 +9,15 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.droidspaces.app.util.DownloadStatus
+import com.droidspaces.app.util.PreferencesManager
 import com.droidspaces.app.util.RepoResult
 import com.droidspaces.app.util.RootfsAsset
 import com.droidspaces.app.util.RootfsDownloadManager
 import com.droidspaces.app.util.RootfsRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 sealed class RepoUiState {
@@ -43,22 +46,31 @@ class RootfsRepoViewModel(application: Application) : AndroidViewModel(applicati
         private set
 
     private val downloadJobs = mutableMapOf<String, Job>()
+    private val downloadIds  = mutableMapOf<String, Long>()
 
     fun load() {
         if (uiState is RepoUiState.Loading) return
         val prev = (uiState as? RepoUiState.Success)?.assets ?: emptyList()
         uiState = RepoUiState.Loading(prev)
         viewModelScope.launch {
-            when (val result = RootfsRepository.fetchAssets(getApplication())) {
+            when (val result = RootfsRepository.fetchAllAssets(getApplication())) {
                 is RepoResult.Success -> {
+                    // Emit Success immediately so the UI renders and the
+                    // loading spinner stops — cards appear without delay.
+                    uiState = RepoUiState.Success(result.assets)
+
+                    // Heavy filesystem scan runs off the main thread so the
+                    // Compose frame loop stays unblocked during the lookup.
                     val ctx = getApplication<Application>()
-                    val prePopulated = result.assets.mapNotNull { asset ->                        val uri = findDownloadedUri(ctx, asset.name)
-                        if (uri != null) asset.name to AssetDownloadState.Done(uri) else null
-                    }.toMap()
+                    val prePopulated = withContext(Dispatchers.Default) {
+                        result.assets.mapNotNull { asset ->
+                            val uri = findDownloadedUri(ctx, asset.uniqueFilename)
+                            if (uri != null) asset.downloadUrl to AssetDownloadState.Done(uri) else null
+                        }.toMap()
+                    }
                     // Only preserve active downloads; Done/Failed states are re-derived
                     // from the filesystem via prePopulated so deleted files revert to Idle
                     downloadStates = prePopulated + downloadStates.filter { it.value is AssetDownloadState.Downloading }
-                    uiState = RepoUiState.Success(result.assets)
                 }
                 is RepoResult.Error -> uiState = RepoUiState.Error(result.message)
             }
@@ -116,13 +128,15 @@ class RootfsRepoViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun startDownload(asset: RootfsAsset) {
-        if (downloadStates[asset.name] is AssetDownloadState.Downloading) return
+        if (downloadStates[asset.downloadUrl] is AssetDownloadState.Downloading) return
         val ctx = getApplication<Application>()
-        downloadJobs[asset.name]?.cancel()
-        downloadJobs[asset.name] = viewModelScope.launch {
-            RootfsDownloadManager.download(ctx, asset).collect { status ->
+        downloadJobs[asset.downloadUrl]?.cancel()
+        val downloadId = RootfsDownloadManager.enqueue(ctx, asset)
+        downloadIds[asset.downloadUrl] = downloadId
+        downloadJobs[asset.downloadUrl] = viewModelScope.launch {
+            RootfsDownloadManager.pollFlow(ctx, asset, downloadId).collect { status ->
                 downloadStates = downloadStates.toMutableMap().apply {
-                    put(asset.name, when (status) {
+                    put(asset.downloadUrl, when (status) {
                         is DownloadStatus.Progress  -> AssetDownloadState.Downloading(status.percent)
                         is DownloadStatus.Completed -> AssetDownloadState.Done(status.fileUri)
                         is DownloadStatus.Failed    -> AssetDownloadState.Failed(status.reason)
@@ -133,13 +147,29 @@ class RootfsRepoViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun cancelDownload(asset: RootfsAsset) {
-        downloadJobs[asset.name]?.cancel()
-        downloadJobs.remove(asset.name)
-        downloadStates = downloadStates.toMutableMap().apply { put(asset.name, AssetDownloadState.Idle) }
+        val ctx = getApplication<Application>()
+        downloadIds[asset.downloadUrl]?.let { RootfsDownloadManager.cancel(ctx, it) }
+        downloadIds.remove(asset.downloadUrl)
+        downloadJobs[asset.downloadUrl]?.cancel()
+        downloadJobs.remove(asset.downloadUrl)
+        downloadStates = downloadStates.toMutableMap().apply { put(asset.downloadUrl, AssetDownloadState.Idle) }
     }
 
     /** Reset a completed/failed asset so the user can retry. */
-    fun resetAsset(assetName: String) {
-        downloadStates = downloadStates.toMutableMap().apply { put(assetName, AssetDownloadState.Idle) }
+    fun resetAsset(assetFile: String) {
+        downloadStates = downloadStates.toMutableMap().apply { put(assetFile, AssetDownloadState.Idle) }
     }
+
+    fun addCustomRepo(name: String, url: String) {
+        PreferencesManager.getInstance(getApplication()).addCustomRepo(name, url)
+        load()
+    }
+
+    fun removeCustomRepo(url: String) {
+        PreferencesManager.getInstance(getApplication()).removeCustomRepo(url)
+        load()
+    }
+
+    fun getCustomRepos(): List<Pair<String, String>> =
+        PreferencesManager.getInstance(getApplication()).getCustomRepos()
 }

@@ -49,6 +49,16 @@ object ValidationUtils {
             else -> ValidationResult.Success
         }
     }
+
+    /**
+     * Sanitizes a string (e.g. container name) to be a valid hostname.
+     * Replaces spaces, underscores, and dots with dashes, removes other invalid characters, and trims dashes.
+     */
+    fun sanitizeHostname(name: String): String {
+        return name.replace(Regex("[\\s_.]+"), "-")
+            .replace(Regex("[^a-zA-Z0-9-]"), "")
+            .trim('-')
+    }
 }
 
 /**

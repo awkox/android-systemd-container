@@ -274,7 +274,7 @@ object ContainerManager {
 
             return ContainerInfo(
                 name = containerName,
-                hostname = configMap["hostname"] ?: containerName,
+                hostname = configMap["hostname"] ?: ValidationUtils.sanitizeHostname(containerName),
                 // Use the new rootfs path structure (LXC-style) or sparse image path
                 rootfsPath = configMap["rootfs_path"] ?: if (useSparseImage) {
                     getSparseImagePath(containerName)

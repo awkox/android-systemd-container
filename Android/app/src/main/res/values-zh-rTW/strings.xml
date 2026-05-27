@@ -61,7 +61,6 @@
     <string name="static_ip_description">為此容器設定一個 172.28.x.x 子網路內的靜態 IPv4 位址。留空以在首次啟動時自動分配。</string>
     <string name="gpu_access_description">將 GPU 節點鏡像到隔離的 /dev 目錄（不進行完整的硬體直通）</string>
     <string name="clear">清除</string>
-
     <string name="unknown">未知</string>
     <string name="error_start_must_be_less_than_end">起始值必須小於結束值</string>
     <string name="error_ports_must_be_numbers">連接埠必須是數字</string>
@@ -79,7 +78,6 @@
     <string name="verifying_installation">正在驗證安裝...</string>
     <string name="hardware_access_description">完整的硬體存取權限</string>
     <string name="github">GitHub</string>
-    <string name="no_systemd_services">沒有可用的systemd 服務</string>
     <string name="disabled_legend">已禁用</string>
     <string name="module_installed_success">Magisk 模組安裝成功</string>
     <string name="kernel_requirements">系統核心需求檢測</string>
@@ -90,7 +88,6 @@
     <string name="install_container_description">請使用下方按鈕安裝容器</string>
     <string name="enabled_legend">已启用</string>
     <string name="available_users">可用用戶</string>
-    <string name="welcome_subtitle">適用於 Android 的 LXC 風格 Linux 容器管理器！</string>
     <string name="root_granted">已授予root權限</string>
     <string name="port_forwarding">連接埠轉送</string>
     <string name="detected_architecture">偵測到架構：%1$s</string>
@@ -99,7 +96,6 @@
     <string name="octet_label">第%1$d位元組</string>
     <string name="backend_installed_success">Droidspaces後端已成功安裝</string>
     <string name="network_mode">網路模式</string>
-    <string name="next_summary">下一篇：總結</string>
     <string name="source_code">原始碼</string>
     <string name="uninstall_container_title">是否卸載容器？</string>
     <string name="status_restarting">正在重啟</string>
@@ -122,7 +118,6 @@
     <string name="version">版本</string>
     <string name="volatile_mode_description">僅記憶體模式（停止後更改將丟失）</string>
     <string name="ok">確定</string>
-    <string name="root_provider_label">Root 方案: %1$s</string>
     <string name="operation_completed_success">操作成功！</string>
     <string name="status_stopped">已停止</string>
     <string name="reinstall_backend_description">重新安裝二進位檔案和啟動模組</string>
@@ -187,7 +182,6 @@
     <string name="removing_old_module">正在移除舊模組...</string>
     <string name="force_cgroupv1_description">強制使用舊版Cgroup V1 層級結構</string>
     <string name="android_version">Android 版本</string>
-    <string name="welcome_title">歡迎來到Droidspaces</string>
     <string name="available_system_interfaces">可用的系統介面：</string>
     <string name="failed_to_uninstall_container">卸載容器失敗 %1$s</string>
     <string name="error_invalid_range_format">範圍格式無效（起始-結束）</string>
@@ -255,7 +249,6 @@
     <string name="nat_settings">NAT設定</string>
     <string name="use_sparse_image_description">在稀疏映像檔案中建立容器</string>
     <string name="hostname_hint">若留空，將使用容器名稱作為主機名</string>
-    <string name="more_options">更多選項</string>
     <string name="not_configured">未配置</string>
     <string name="failed_to_update_config">更新配置失敗</string>
     <string name="about_droidspaces">關於 Droidspaces</string>
@@ -282,7 +275,6 @@
     <string name="hostname_label">主機名稱：%1$s</string>
     <string name="root_unavailable">沒有root權限。</string>
     <string name="symlink_integration_description">在 /system/bin 目錄下建立鏈接，以便在 Android root shell 中存取 droidspaces 命令。警告：如果您的掛載系統是 OverlayFS 元模組，啟用此選項會導致無限重新啟動。僅在使用基於 Magic Mount 的掛載系統時才使用此選項（需要重新啟動）。</string>
-    <string name="version_label">版本: %1$s</string>
     <string name="installation_setup_summary">安裝概要</string>
     <string name="checking_root">正在檢查root存取權限...</string>
     <string name="refresh_users">重新整理用戶</string>
@@ -362,7 +354,7 @@
     <string name="starting_resizing">開始執行容量調整...</string>
     <string name="help_card_title">首次使用Droidspaces？</string>
     <string name="help_card_message">點擊此處，了解如何設定Linux 容器吧！</string>
-    <string name="help_card_url">https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Installation-Android.md</string>
+    <string name="help_card_url" translatable="false">https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Installation-Android.md</string>
     <string name="privileged_mode">特權模式</string>
     <string name="privileged_mode_description">配置細粒度的安全限制放寬，以支援巢狀虛擬化或進階硬體存取。</string>
     <string name="privileged_nomask_desc">停用隔離遮罩以允許對/proc 和/sys 的寫入存取。注意：除非同時啟用了“硬體存取”，否則/sys 將保持唯讀狀態。</string>
@@ -394,7 +386,6 @@
     <string name="feat_autoboot_title">開機時自動啟動</string>
     <string name="feat_autoboot_desc">即使螢幕鎖定且資料加密，也能在啟動時自動啟動容器。</string>
     <string name="install">安裝</string>
-
     <string name="please_wait_hint">請稍候，我們正在處理您的請求…</string>
     <string name="kernel_requirements_nongki">非 GKI 核心需求（≤4.19）</string>
     <string name="kernel_requirements_gki">GKI 核心需求（≥5.4）</string>
@@ -422,4 +413,29 @@
     <string name="notification_wakelock_off">喚醒鎖定：關閉</string>
     <string name="notification_channel_name">終端會話</string>
     <string name="notification_channel_desc">啟動的容器終端會話</string>
+    <string name="repo_title">Rootfs 倉庫</string>
+    <string name="repo_fab_label">儲存庫</string>
+    <string name="repo_refresh">重新整理</string>
+    <string name="repo_failed_to_load">載入儲存庫失敗</string>
+    <string name="repo_download">下載</string>
+    <string name="repo_cancel">取消</string>
+    <string name="repo_install">安裝</string>
+    <string name="repo_retry">重試</string>
+    <string name="repo_notification_description">下載Droidspaces rootfs</string>
+    <string name="repo_error_no_assets">最新版本中未找到 rootfs tarball 文件</string>
+    <string name="repo_error_network">網路錯誤</string>
+    <string name="repo_dl_error_unknown">未知錯誤</string>
+    <string name="repo_dl_error_cannot_resume">無法繼續下載</string>
+    <string name="repo_dl_error_device_not_found">未找到存儲空間</string>
+    <string name="repo_dl_error_file_exists">檔案已經存在</string>
+    <string name="repo_dl_error_file_error">檔案系統錯誤</string>
+    <string name="repo_dl_error_http_data">HTTP資料錯誤</string>
+    <string name="repo_dl_error_no_space">儲存空間不足</string>
+    <string name="repo_dl_error_too_many_redirects">過多重新導向</string>
+    <string name="repo_dl_error_unhandled_http">意外的 HTTP 回應</string>
+    <string name="repo_dl_error_not_found">檔案未找到（404）</string>
+    <string name="repo_dl_error_code">錯誤代碼 %1$d</string>
+    <string name="repo_status_ready">已準備好</string>
+    <string name="repo_status_downloading">下載中</string>
+    <string name="repo_status_failed">失敗</string>
 </resources>

@@ -1,7 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="welcome_title">Droidspaces වෙත සාදරයෙන් පිළිගනිමු</string>
-    <string name="welcome_subtitle">ඇන්ඩ්‍රොයිඩ් වලින් Linux containers කළමනාකරණය කරමු !</string>
     <string name="get_started">ආරම්භ කරන්න</string>
     <string name="root_check_title">Root ප්‍රවේශය පරීක්ෂා කිරීම</string>
     <string name="checking_root">Root ප්‍රවේශය පරීක්ෂා කරමින්...</string>
@@ -31,8 +29,6 @@
     <string name="backend_corrupted">Backend: දෝෂ සහිතයි</string>
     <string name="root_unavailable">Root ප්‍රවේශය ලබාගත නොහැක.</string>
     <string name="grant_root_message">Droidspaces ගවේෂණය කිරීමට Root ප්‍රවේශය ලබා දෙන්න !</string>
-    <string name="version_label">අනුවාදය: %1$s</string>
-    <string name="root_provider_label">Root සම්පාදකයා: %1$s</string>
     <string name="unknown">හඳුනාගත නොහැක</string>
     <string name="update_available_message">Backend යාවත්කාලීනයක් පවතී, යාවත්කාලීන කිරීමට මෙතැන ක්ලික් කරන්න</string>
     <string name="backend_section">Backend</string>
@@ -237,7 +233,6 @@
     <string name="unmask">Unmask</string>
     <string name="enable_service">සක්‍රීය කරන්න</string>
     <string name="disable_service">අක්‍රීය කරන්න</string>
-    <string name="more_options">තවත් විකල්ප</string>
     <string name="restart_service">සේවාව නැවත ආරම්භ කරන්න</string>
     <string name="mask_service">සේවාව mask කරන්න</string>
     <string name="action_successful">%1$s %2$s සාර්ථකයි</string>
@@ -245,7 +240,6 @@
     <string name="error_unknown">දෝෂය: %1$s</string>
     <string name="actioning_service" translatable="false">%1$sing %2$s...</string>
     <string name="no_services_found">සේවා කිසිවක් හමු නොවීය</string>
-    <string name="no_systemd_services">කිසිඳු Systemd සේවාවක් නොමැත</string>
     <string name="no_running_services">කිසිඳු ධාවනය වන සේවාවක් නොමැත</string>
     <string name="no_enabled_services">කිසිඳු සක්‍රීය සේවාවක් නොමැත</string>
     <string name="no_disabled_services">කිසිඳු අක්‍රීය සේවාවක් නොමැත</string>
@@ -287,7 +281,6 @@
     <string name="maximum_size_512gb">උපරිම විශාලත්වය 512 GB වේ</string>
     <string name="size_gb">විශාලත්වය (GB)</string>
     <string name="enter_size_between_4_512_gb">4 සහ 512 GB අතර විශාලත්වයක් ඇතුළත් කරන්න</string>
-    <string name="next_summary">මීලඟ පියවර: සාරාංශය</string>
     <string name="logs_title">ලොග්: %1$s</string>
     <string name="clear_logs">මකා දමන්න</string>
     <string name="copy_logs">පිටපත් කරන්න</string>
@@ -320,7 +313,7 @@
     <string name="starting_resizing">ප්‍රමාණය වෙනස් කිරීමේ ක්‍රියාවලිය ආරම්භ කරමින්...</string>
     <string name="help_card_title">Droidspaces වලට අලුත් ද?</string>
     <string name="help_card_message">ඔබේ පළමු Linux කන්ටේනරය සකසන්නේ කෙසේදැයි ඉගෙන ගැනීමට මෙතන ක්ලික් කරන්න!</string>
-    <string name="help_card_url">https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Installation-Android.md</string>
+    <string name="help_card_url" translatable="false">https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Installation-Android.md</string>
     <string name="reboot_recommended">SELinux නීති ක්රියාත්මක කිරීම සහ boot වීමේදී daemon ආරම්භ කිරීම සඳහා ඔබගේ උපාංගය restart කිරීම නිර්දේශ කෙරේ.</string>
     <string name="app_name" translatable="false">Droidspaces</string>
     <string name="tarball_label">Tarball</string>

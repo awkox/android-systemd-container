@@ -3,8 +3,6 @@
     <!-- App Info -->
     <string name="app_name" translatable="false">Droidspaces</string>
     <!-- Welcome Screen -->
-    <string name="welcome_title">Benvenuto in Droidspaces</string>
-    <string name="welcome_subtitle">Gestore di contenitori Linux LXC-Style per Android !</string>
     <string name="get_started">Inizia</string>
     <!-- Root Check Screen -->
     <string name="root_check_title">Verifica Accesso Root</string>
@@ -38,8 +36,6 @@
     <string name="backend_corrupted">Backend: Corrotto</string>
     <string name="root_unavailable">L\'accesso root non è disponibile.</string>
     <string name="grant_root_message">Concedi l\'accesso root per continuare a esplorare Droidspaces !</string>
-    <string name="version_label">Versione: %1$s</string>
-    <string name="root_provider_label">Provider Root: %1$s</string>
     <string name="unknown">Sconosciuto</string>
     <string name="update_available_message">Aggiornamento backend disponibile, clicca qui per aggiornare</string>
     <!-- Settings Screen -->
@@ -256,7 +252,6 @@
     <string name="init_system_not_available">Systemd/OpenRC non disponibile</string>
     <string name="init_system_not_available_desc">Questo contenitore non ha systemd né OpenRC installato</string>
     <string name="fetching_services">Recupero servizi...</string>
-
     <string name="search_services">Cerca servizi...</string>
     <string name="enabled_legend">Abilitato</string>
     <string name="disabled_legend">Disabilitato</string>
@@ -267,7 +262,6 @@
     <string name="unmask">Smaschera</string>
     <string name="enable_service">Abilita</string>
     <string name="disable_service">Disabilita</string>
-    <string name="more_options">Altre opzioni</string>
     <string name="restart_service">Riavvia servizio</string>
     <string name="mask_service">Maschera servizio</string>
     <string name="action_successful">%1$s %2$s completato con successo</string>
@@ -275,7 +269,6 @@
     <string name="error_unknown">Errore: %1$s</string>
     <string name="actioning_service" translatable="false">%1$s %2$s in corso...</string>
     <string name="no_services_found">Nessun servizio trovato</string>
-    <string name="no_systemd_services">Nessun servizio systemd disponibile</string>
     <string name="no_running_services">Nessun servizio in esecuzione</string>
     <string name="no_enabled_services">Nessun servizio abilitato</string>
     <string name="no_disabled_services">Nessun servizio disabilitato</string>
@@ -325,7 +318,6 @@
     <string name="maximum_size_512gb">La dimensione massima è 512 GB</string>
     <string name="size_gb">Dimensione (GB)</string>
     <string name="enter_size_between_4_512_gb">Inserisci una dimensione tra 4 e 512 GB</string>
-    <string name="next_summary">Avanti: Riepilogo</string>
     <!-- Container Log Viewer -->
     <string name="logs_title">Log: %1$s</string>
     <string name="clear_logs">Cancella log</string>
@@ -365,7 +357,7 @@
     <string name="starting_resizing">Avvio operazione di ridimensionamento...</string>
     <string name="help_card_title">Nuovo su Droidspaces?</string>
     <string name="help_card_message">Tocca qui per imparare come configurare il tuo primo contenitore Linux!</string>
-    <string name="help_card_url">https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Installation-Android.md</string>
+    <string name="help_card_url" translatable="false">https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Installation-Android.md</string>
     <string name="privileged_mode">Modalità Privilegiata</string>
     <string name="privileged_mode_description">Configura il rilassamento granulare della sicurezza per la virtualizzazione annidata o l\'accesso hardware avanzato.</string>
     <string name="privileged_nomask_desc">Disabilita le maschere jail per consentire l\'accesso in scrittura a /proc e /sys. Nota: /sys rimane in sola lettura a meno che sia abilitato anche l\'Accesso Hardware.</string>
@@ -409,7 +401,6 @@
     <string name="ram_percent_label">%1$d MB (%2$.1f%%)</string>
     <string name="sessions_running_plural">%1$d sessioni in esecuzione · toccare per ripristinare</string>
     <string name="session_running_singular">1 sessione in esecuzione · toccare per ripristinare</string>
-
     <string name="please_wait_hint">Attendi mentre elaboriamo la tua richiesta...</string>
     <string name="restore">Ripristina</string>
     <string name="export_container">Esporta il contenitore come tarball</string>
@@ -442,4 +433,45 @@
     <string name="deadlock_shield_option">Scudo di blocco</string>
     <string name="privileged_option">Privilegiato</string>
     <string name="error_container_name_too_long">Nome troppo lungo - massimo 17 caratteri (limite del percorso del dispositivo loop del kernel)</string>
+    <string name="custom_init_warning">Non modificare questo valore a meno che non si sappia esattamente cosa si sta facendo. L\'impostazione di un binario init errato impedirà l\'avvio del contenitore.</string>
+    <string name="repo_dl_error_cannot_resume">Impossibile riprendere il download</string>
+    <string name="repo_dl_error_no_space">Memoria insufficiente</string>
+    <string name="repo_error_network">Errore di rete</string>
+    <string name="hw_access_disclaimer">A partire da Droidspaces v6.1.0, udevd ha accesso effettivo ai sottosistemi USB, a blocchi, di input, TTY e di rete. Il tuo contenitore può avere il controllo dell\'hardware attualmente in uso da Android.\n\nSe la tastiera, la scheda SD o il dispositivo USB smettono di funzionare su Android dopo l\'avvio di un contenitore, NON si tratta di un bug. Il contenitore ne ha preso il controllo. Hai richiesto l\'accesso completo all\'hardware.\n\nNON segnalare problemi causati da conflitti hardware o kernel panic durante l\'utilizzo di questa modalità.</string>
+    <string name="repo_dl_error_file_exists">Il file esiste già</string>
+    <string name="custom_init_option">Init personalizzato</string>
+    <string name="repo_retry">Riprova</string>
+    <string name="repo_notification_description">Download Droidspaces rootfs</string>
+    <string name="repo_refresh">Aggiorna</string>
+    <string name="repo_dl_error_not_found">File non trovato (404)</string>
+    <string name="network_mode_host_short">Host</string>
+    <string name="repo_dl_error_http_data">Errore dati HTTP</string>
+    <string name="repo_failed_to_load">Impossibile caricare il repository</string>
+    <string name="repo_dl_error_device_not_found">Memoria non trovata</string>
+    <string name="repo_install">Installa</string>
+    <string name="repo_dl_error_file_error">Errore file system</string>
+    <string name="repo_fab_label">Repository</string>
+    <string name="repo_dl_error_unhandled_http">Risposta HTTP inattesa</string>
+    <string name="notification_wakelock_off">Wake lock: OFF</string>
+    <string name="custom_init_hint">Lascia vuoto per usare init predefinito (/sbin/init)</string>
+    <string name="notification_channel_desc">Sessioni terminale contenitore attive</string>
+    <string name="notification_wakelock_on">Wake lock: ON</string>
+    <string name="custom_init_placeholder">/sbin/init (predefinito)</string>
+    <string name="repo_title">Repository Rootfs</string>
+    <string name="repo_dl_error_too_many_redirects">Troppi reindirizzamenti</string>
+    <string name="notification_channel_name">Sessioni Terminale</string>
+    <string name="repo_dl_error_code">Codice errore %1$d</string>
+    <string name="network_mode_nat_short">NAT</string>
+    <string name="network_mode_none_short">Nessuno</string>
+    <string name="repo_download">Download</string>
+    <string name="repo_status_downloading">DOWNLOAD</string>
+    <string name="repo_cancel">Cancella</string>
+    <string name="repo_error_no_assets">Nessun archivio tar rootfs trovato nell\'ultima versione</string>
+    <string name="repo_status_ready">PRONTO</string>
+    <string name="notification_action_exit">ESCI</string>
+    <string name="repo_status_failed">FALLITO</string>
+    <string name="custom_init_error_absolute">Il percorso deve essere assoluto (inizia con /)</string>
+    <string name="custom_init_label">Binario Init personalizzato</string>
+    <string name="repo_dl_error_unknown">Errore sconosciuto</string>
+    <string name="notification_title">Terminale Droidspaces</string>
 </resources>

@@ -537,7 +537,10 @@ fun DroidspacesNavigation(
             container?.let {
                 ContainerDetailsScreen(
                     container = it,
-                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateBack = {
+                        navController.popBackStack()
+                        sharedContainerViewModel.refresh()
+                    },
                     onNavigateToServices = { initSystem ->
                         when (initSystem) {
                             com.droidspaces.app.ui.screen.InitSystem.SYSTEMD ->
@@ -604,7 +607,10 @@ fun DroidspacesNavigation(
             ContainerTerminalScreen(
                 containerName = containerName,
                 initialUsers = users,
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = {
+                    navController.popBackStack()
+                    sharedContainerViewModel.refresh()
+                }
             )
         }
     }

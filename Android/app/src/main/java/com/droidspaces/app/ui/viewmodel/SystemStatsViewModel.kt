@@ -81,6 +81,20 @@ class SystemStatsViewModel(application: Application) : AndroidViewModel(applicat
             while (true) {
                 running.forEach { container ->
                     try {
+                        val isAlive = com.droidspaces.app.util.ContainerManager
+                            .checkContainerStatus(container.name).first
+                        if (!isAlive) {
+                            // Kill all terminal sessions for this container
+                            val ctx = getApplication<Application>()
+                            ctx.startService(
+                                android.content.Intent(ctx, com.droidspaces.app.service.TerminalSessionService::class.java).apply {
+                                    action = com.droidspaces.app.service.TerminalSessionService.ACTION_STOP_CONTAINER_SESSIONS
+                                    putExtra(com.droidspaces.app.service.TerminalSessionService.EXTRA_CONTAINER_NAME, container.name)
+                                }
+                            )
+                            containerUsageMap.remove(container.name)
+                            return@forEach
+                        }
                         val osInfo = ContainerOSInfoManager.getOSInfo(
                             containerName = container.name,
                             useCache = false,

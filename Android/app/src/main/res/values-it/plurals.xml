@@ -10,4 +10,9 @@
         <item quantity="many">%d commit</item>
         <item quantity="other">%d commit</item>
     </plurals>
+    <plurals name="notification_sessions_running">
+        <item quantity="one">%d sessione in esecuzione</item>
+        <item quantity="many">%d sessioni in esecuzione</item>
+        <item quantity="other">%d sessioni in esecuzione</item>
+    </plurals>
 </resources>

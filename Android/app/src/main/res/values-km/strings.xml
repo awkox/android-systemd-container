@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name" translatable="false">Droidspaces</string>
-    <string name="welcome_title">សូមស្វាគមន៍មកកាន់ DroidSpaces</string>
-    <string name="welcome_subtitle">កម្មវិធីគ្រប់គ្រងកុងតឺន័រ Linux បែប LXC សម្រាប់ Android!</string>
     <string name="get_started">ចាប់ផ្តើម</string>
     <string name="root_check_title">ការពិនិត្យសិទ្ធិ Root</string>
     <string name="checking_root">កំពុងពិនិត្យសិទ្ធិ Root...</string>
@@ -32,8 +30,6 @@
     <string name="backend_corrupted">Backend: ខូច</string>
     <string name="root_unavailable">មិនមានសិទ្ធិ Root ទេ។</string>
     <string name="grant_root_message">ផ្តល់សិទ្ធិ Root ដើម្បីបន្តស្វែងយល់ពី Droidspaces!</string>
-    <string name="version_label">ជំនាន់: %1$s</string>
-    <string name="root_provider_label">អ្នកផ្ដល់សិទ្ធិ Root: %1$s</string>
     <string name="unknown">មិនស្គាល់</string>
     <string name="update_available_message">មានការធ្វើបច្ចុប្បន្នភាព Backend, ចុចទីនេះដើម្បីធ្វើបច្ចុប្បន្នភាព</string>
     <string name="backend_section">Backend</string>
@@ -313,14 +309,12 @@
     <string name="unmask">ដោះ​ការបំបាំង​</string>
     <string name="enable_service">បើកដំណើរការ</string>
     <string name="disable_service">បិទ</string>
-    <string name="more_options">ជម្រើសច្រើនទៀត</string>
     <string name="restart_service">ចាប់ផ្ដើមសេវាកម្មឡើងវិញ</string>
     <string name="mask_service">បំបាំងសេវាកម្ម</string>
     <string name="action_successful">%1$s %2$s ទទួលបានជោគជ័យ</string>
     <string name="failed_to_action">បរាជ័យក្នុងការ %1$s %2$s</string>
     <string name="error_unknown">កំហុស៖ %1$s</string>
     <string name="no_services_found">រកមិនឃើញសេវាកម្មទេ</string>
-    <string name="no_systemd_services">មិនមានសេវាកម្ម systemd ដែលអាចប្រើប្រាស់បានទេ</string>
     <string name="no_running_services">គ្មានសេវាកម្មដែលកំពុងដំណើរការទេ</string>
     <string name="no_enabled_services">គ្មានសេវាកម្មដែលបានបើកទេ</string>
     <string name="no_disabled_services">គ្មានសេវាកម្មសម្រាប់ជនពិការទេ</string>
@@ -363,7 +357,6 @@
     <string name="maximum_size_512gb">ទំហំអតិបរមាគឺ 512 ជីកាបៃ</string>
     <string name="size_gb">ទំហំ (ជីកាបៃ)</string>
     <string name="enter_size_between_4_512_gb">សូមបញ្ចូលទំហំចន្លោះពី 4 ដល់ 512 ជីកាបៃ</string>
-    <string name="next_summary">បន្ទាប់៖ សេចក្ដីសង្ខេប</string>
     <string name="logs_title">កំណត់ហេតុ៖ %1$s</string>
     <string name="clear_logs">សម្អាតកំណត់ហេតុ</string>
     <string name="copy_logs">ចម្លងអត្ថបទកំណត់ហេតុ</string>
@@ -407,7 +400,7 @@
     <string name="starting_resizing">កំពុងចាប់ផ្តើមដំណើរការប្តូរទំហំ...</string>
     <string name="help_card_title">ទើបតែប្រើប្រាស់ Droidspaces មែនទេ?</string>
     <string name="help_card_message">ចុចទីនេះ ដើម្បីស្វែងយល់ពីរបៀបដំឡើងកុងតឺន័រ Linux ដំបូងរបស់អ្នក!</string>
-    <string name="help_card_url">https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Installation-Android.md</string>
+    <string name="help_card_url" translatable="false">https://github.com/ravindu644/Droidspaces-OSS/blob/main/Documentation/Installation-Android.md</string>
     <string name="privileged_mode">របៀប Privileged</string>
     <string name="privileged_mode_description">កំណត់រចនាសម្ព័ន្ធបន្ធូរបន្ថយសន្តិសុខតាមកម្រិតលម្អិត សម្រាប់ការធ្វើនិម្មិតកម្មត្រួតគ្នា (Nested Virtualization) ឬការចូលប្រើប្រាស់ Hardware កម្រិតខ្ពស់។</string>
     <string name="privileged_nomask_desc">"បិទ Jail Masks ដើម្បីអនុញ្ញាតឱ្យមានសិទ្ធិកែប្រែ (Write Access) ទៅលើ /proc និង /sys។ សម្គាល់៖ /sys នៅតែរក្សាស្ថានភាពសម្រាប់តែអានប៉ុណ្ណោះ (Read-only) លុះត្រាតែមុខងារចូលប្រើប្រាស់ Hardware  ត្រូវបានបើកដំណើរការផងដែរ។"</string>

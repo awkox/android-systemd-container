@@ -27,25 +27,32 @@ object RootfsDownloadManager {
      * Completes with [DownloadStatus.Completed] (content:// URI ready to install)
      * or [DownloadStatus.Failed] on any error.
      */
-    fun download(context: Context, asset: RootfsAsset): Flow<DownloadStatus> = flow {
+    fun enqueue(context: Context, asset: RootfsAsset): Long {
         val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-
+        val filename = asset.uniqueFilename
         val destFile = File(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            asset.name
+            filename
         )
         destFile.delete()
-
         val request = DownloadManager.Request(Uri.parse(asset.downloadUrl)).apply {
-            setTitle(asset.name)
+            setTitle(filename)
             setDescription(context.getString(R.string.repo_notification_description))
             setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
-            setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, asset.name)
+            setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, filename)
             setAllowedOverMetered(true)
             setAllowedOverRoaming(true)
         }
+        return dm.enqueue(request)
+    }
 
-        val downloadId = dm.enqueue(request)
+    fun pollFlow(context: Context, asset: RootfsAsset, downloadId: Long): Flow<DownloadStatus> = flow {
+        val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        val filename = asset.uniqueFilename
+        val destFile = File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            filename
+        )
         val query = DownloadManager.Query().setFilterById(downloadId)
         var done = false
 
@@ -72,7 +79,6 @@ object RootfsDownloadManager {
 
                 DownloadManager.STATUS_SUCCESSFUL -> {
                     done = true
-                    // content:// URI - file:// is blocked by scoped storage on API 26+
                     val contentUri = dm.getUriForDownloadedFile(downloadId)
                         ?: Uri.fromFile(destFile)
                     emit(DownloadStatus.Completed(contentUri))

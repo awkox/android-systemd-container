@@ -1,17 +1,20 @@
 package com.droidspaces.app.ui.component
 
 import android.net.Uri
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,7 +28,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.flow.first
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.droidspaces.app.R
 import com.droidspaces.app.ui.util.ClearFocusOnClickOutside
@@ -46,6 +52,8 @@ fun RootfsRepoSheet(
     val context = LocalContext.current
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    var showRepoManager by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         snapshotFlow { sheetState.currentValue }
@@ -79,8 +87,10 @@ fun RootfsRepoSheet(
             val filteredAssets = remember(displayAssets, searchQuery) {
                 if (searchQuery.isBlank()) displayAssets
                 else displayAssets.filter {
-                    val friendly = getFriendlyName(it.name)
-                    friendly.contains(searchQuery, ignoreCase = true) || it.name.contains(searchQuery, ignoreCase = true)
+                    it.name.contains(searchQuery, ignoreCase = true) ||
+                    it.description.contains(searchQuery, ignoreCase = true) ||
+                    it.author.contains(searchQuery, ignoreCase = true) ||
+                    it.sourceRepoName.contains(searchQuery, ignoreCase = true)
                 }
             }
 
@@ -104,18 +114,16 @@ fun RootfsRepoSheet(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
+                // Manage / add repos
+                IconButton(onClick = { showRepoManager = true }) {
+                    Icon(Icons.Default.Tune, contentDescription = context.getString(R.string.repo_manage_custom))
+                }
+                // Refresh
                 IconButton(onClick = { vm.load() }, enabled = !isLoading) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = context.getString(R.string.repo_refresh)
-                        )
-                    }
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = context.getString(R.string.repo_refresh)
+                    )
                 }
             }
 
@@ -150,7 +158,7 @@ fun RootfsRepoSheet(
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
                                     )
                                     Text(
-                                        text = context.getString(R.string.no_services_found),
+                                        text = context.getString(R.string.repo_not_found_in_repo, searchQuery),
                                         style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                     )
@@ -159,11 +167,12 @@ fun RootfsRepoSheet(
                         } else {
                             RepoListContent(
                                 assets         = filteredAssets,
+                                isFiltered     = searchQuery.isNotBlank(),
                                 downloadStates = vm.downloadStates,
                                 onDownload     = { vm.startDownload(it) },
                                 onCancel       = { vm.cancelDownload(it) },
-                                onInstall      = { uri -> onDismiss(); onInstall(uri) },
-                                onRetry        = { vm.resetAsset(it.name) }
+                                onInstall      = { uri -> onInstall(uri) },
+                                onRetry        = { vm.resetAsset(it.downloadUrl) }
                             )
                         }
                         if (isLoading) {
@@ -185,6 +194,18 @@ fun RootfsRepoSheet(
             Spacer(Modifier.navigationBarsPadding())
         }
         } // ClearFocusOnClickOutside
+    }
+
+    if (showRepoManager) {
+        RepoManagerDialog(
+            initialRepos = vm.getCustomRepos(),
+            onDismiss    = { showRepoManager = false },
+            onSave       = { toAdd, toRemove ->
+                toRemove.forEach { vm.removeCustomRepo(it) }
+                toAdd.forEach { (name, url) -> vm.addCustomRepo(name, url) }
+                showRepoManager = false
+            }
+        )
     }
 }
 
@@ -241,6 +262,7 @@ private fun RepoErrorContent(message: String, onRetry: () -> Unit) {
 @Composable
 private fun RepoListContent(
     assets: List<RootfsAsset>,
+    isFiltered: Boolean,
     downloadStates: Map<String, AssetDownloadState>,
     onDownload: (RootfsAsset) -> Unit,
     onCancel: (RootfsAsset) -> Unit,
@@ -252,15 +274,25 @@ private fun RepoListContent(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        items(assets, key = { it.name }) { asset ->
+        items(assets, key = { it.downloadUrl }) { asset ->
             RootfsAssetCard(
                 asset      = asset,
-                state      = downloadStates[asset.name] ?: AssetDownloadState.Idle,
+                state      = downloadStates[asset.downloadUrl] ?: AssetDownloadState.Idle,
                 onDownload = { onDownload(asset) },
                 onCancel   = { onCancel(asset) },
                 onInstall  = onInstall,
                 onRetry    = { onRetry(asset) }
             )
+        }
+        // Footer: banner only when not filtering
+        if (!isFiltered) {
+            item {
+                Spacer(Modifier.height(8.dp))
+                RepoSourceBanner()
+                Spacer(Modifier.height(12.dp))
+            }
+        } else {
+            item { Spacer(Modifier.height(12.dp)) }
         }
     }
 }
@@ -316,7 +348,7 @@ private fun RootfsAssetCard(
                     )
                     var nameFontSize by remember(asset.name) { mutableStateOf(16.sp) }
                     Text(
-                        text = getFriendlyName(asset.name),
+                        text = asset.name,
                         style = MaterialTheme.typography.titleMedium.copy(fontSize = nameFontSize),
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -360,6 +392,34 @@ private fun RootfsAssetCard(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
 
+            // Author row
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    modifier = Modifier.size(13.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
+                )
+                Text(
+                    text = asset.author,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            if (asset.description.isNotEmpty()) {
+                Text(
+                    text = asset.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    modifier = Modifier.padding(horizontal = 2.dp)
+                )
+            }
+
             // Resource Bar (CPU/RAM Style details block)
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -390,8 +450,8 @@ private fun RootfsAssetCard(
                         )
                     }
 
-                    val arch = getArchitecture(asset.name)
-                    if (arch != "unknown") {
+                    val arch = asset.architecture
+                    if (arch.isNotEmpty()) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -411,19 +471,19 @@ private fun RootfsAssetCard(
                         }
                     }
 
-                    if (asset.downloadCount > 0) {
+                    if (asset.buildDate.isNotEmpty()) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.TrendingUp,
+                                imageVector = Icons.Default.CalendarToday,
                                 contentDescription = null,
                                 modifier = Modifier.size(13.dp),
                                 tint = MaterialTheme.colorScheme.secondary
                             )
                             Text(
-                                text = context.getString(R.string.repo_downloads_count, formatCount(asset.downloadCount)),
+                                text = formatBuildDate(asset.buildDate),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.secondary
@@ -536,6 +596,45 @@ private fun RootfsAssetCard(
     }
 }
 
+@Composable
+private fun RepoSourceBanner() {
+    val context = LocalContext.current
+    val url = context.getString(R.string.repo_banner_url)
+
+    Surface(
+        onClick = {
+            context.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(url))
+            )
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+            Text(
+                text = context.getString(R.string.repo_banner_text),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
 private fun formatSize(bytes: Long): String = when {
     bytes >= 1_073_741_824L -> "%.1f GB".format(bytes / 1_073_741_824.0)
     bytes >= 1_048_576L     -> "%.1f MB".format(bytes / 1_048_576.0)
@@ -543,32 +642,239 @@ private fun formatSize(bytes: Long): String = when {
     else                    -> "$bytes B"
 }
 
-private fun formatCount(count: Int): String =
-    if (count >= 1_000) "%.1fk".format(count / 1_000.0) else count.toString()
-
-private fun getFriendlyName(fileName: String): String {
-    val prefix = fileName.substringBefore("-Droidspaces-rootfs-")
-        .substringBefore("-droidspaces-rootfs-")
-    return prefix
-        .replace("-base", " Base")
-        .replace("-Minimal-Systemd", " Minimal Systemd")
-        .replace("-Minimal", " Minimal")
-        .replace("-Systemd", " Systemd")
-        .replace("-latest", " Latest")
-        .replace("-v", " v")
-        .replace("-and-up", " and up")
-        .replace("-", " ")
-        .trim()
+/** Formats \"20260525\" -> \"2026-05-25\" for display. Returns raw string if not 8 digits. */
+private fun formatBuildDate(raw: String): String {
+    if (raw.length == 8 && raw.all { it.isDigit() }) {
+        return "${raw.substring(0, 4)}-${raw.substring(4, 6)}-${raw.substring(6, 8)}"
+    }
+    return raw
 }
 
-private fun getArchitecture(fileName: String): String {
-    return when {
-        fileName.contains("aarch64", true) -> "aarch64"
-        fileName.contains("x86_64", true)  -> "x86_64"
-        fileName.contains("armhf", true)   -> "armhf"
-        fileName.contains("x86", true) || fileName.contains("i386", true) -> "x86"
-        fileName.contains("amd64", true)   -> "x86_64"
-        else -> "unknown"
+@Composable
+private fun RepoManagerDialog(
+    initialRepos: List<Pair<String, String>>,
+    onDismiss: () -> Unit,
+    onSave: (toAdd: List<Pair<String, String>>, toRemove: List<String>) -> Unit
+) {
+    val context = LocalContext.current
+
+    // Local mutable state so deletes reflect immediately without waiting for VM
+    var repos by remember { mutableStateOf(initialRepos) }
+    val originalUrls = remember { initialRepos.map { it.second }.toSet() }
+
+    var newName   by remember { mutableStateOf("") }
+    var newUrl    by remember { mutableStateOf("") }
+    var nameError by remember { mutableStateOf("") }
+    var urlError  by remember { mutableStateOf("") }
+
+    val fieldShape  = RoundedCornerShape(14.dp)
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        unfocusedBorderColor    = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+        focusedBorderColor      = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+        unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+        focusedContainerColor   = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
+    )
+
+    fun tryAdd() {
+        val n = newName.trim(); val u = newUrl.trim()
+        nameError = if (n.isEmpty()) context.getString(R.string.repo_custom_name_empty) else ""
+        urlError = when {
+            u.isEmpty()               -> context.getString(R.string.repo_custom_url_empty)
+            !u.startsWith("https://") -> context.getString(R.string.repo_custom_url_invalid)
+            repos.any { it.second == u } -> context.getString(R.string.repo_custom_url_invalid)
+            else -> ""
+        }
+        if (nameError.isEmpty() && urlError.isEmpty()) {
+            repos = repos + (n to u)
+            newName = ""; newUrl = ""
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .imePadding(),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+            tonalElevation = 0.dp
+        ) {
+            Column(modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp)
+            ) {
+                // Header
+                Text(
+                    text = context.getString(R.string.repo_manage_custom),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = context.getString(R.string.repo_manager_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(top = 2.dp)
+                )
+
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                Spacer(Modifier.height(8.dp))
+
+                // Existing repo list
+                if (repos.isNotEmpty()) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        itemsIndexed(repos, key = { _, item -> item.second }) { _, (repoName, repoUrl) ->
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 14.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = repoName,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = repoUrl,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { repos = repos.filter { it.second != repoUrl } },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = context.getString(R.string.repo_custom_remove),
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                // Inline add-repo form — always visible, no animation toggle
+                Text(
+                    text = context.getString(R.string.repo_add_custom),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it; nameError = "" },
+                    label = { Text(context.getString(R.string.repo_custom_name_hint)) },
+                    isError = nameError.isNotEmpty(),
+                    supportingText = if (nameError.isNotEmpty()) { { Text(nameError) } } else null,
+                    shape = fieldShape,
+                    colors = fieldColors,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = newUrl,
+                    onValueChange = { newUrl = it; urlError = "" },
+                    label = { Text(context.getString(R.string.repo_custom_url_hint)) },
+                    isError = urlError.isNotEmpty(),
+                    supportingText = if (urlError.isNotEmpty()) { { Text(urlError) } } else null,
+                    shape = fieldShape,
+                    colors = fieldColors,
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                Surface(
+                    onClick = { tryAdd() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Add,
+                            contentDescription = context.getString(R.string.repo_custom_add),
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = context.getString(R.string.repo_custom_add),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Single footer row: Close / Save
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Surface(
+                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).clickable(onClick = onDismiss),
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                    ) {
+                        Box(Modifier.padding(14.dp), contentAlignment = Alignment.Center) {
+                            Text(context.getString(R.string.cancel), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    Surface(
+                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).clickable {
+                            val currentUrls = repos.map { it.second }.toSet()
+                            val toRemove = originalUrls.filter { it !in currentUrls }
+                            val toAdd    = repos.filter { it.second !in originalUrls }
+                            onSave(toAdd, toRemove)
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.primary
+                    ) {
+                        Box(Modifier.padding(14.dp), contentAlignment = Alignment.Center) {
+                            Text(context.getString(R.string.ok), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimary)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

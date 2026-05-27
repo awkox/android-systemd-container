@@ -120,14 +120,14 @@ fun ContainerNameScreen(
                                 enabled = isNextValid,
                                 onClick = {
                                     clearFocus()
-                                    val nameResult = ValidationUtils.validateContainerName(containerName, context)
-                                    val hostnameResult = ValidationUtils.validateHostname(hostname.ifEmpty { containerName }, context)
-                                    if (!nameResult.isError && !hostnameResult.isError) {
-                                        onNext(containerName, hostname.ifEmpty { containerName })
-                                    } else {
-                                        nameError = nameResult.errorMessage
-                                        hostnameError = hostnameResult.errorMessage
-                                    }
+                                     val nameResult = ValidationUtils.validateContainerName(containerName, context)
+                                     val hostnameResult = ValidationUtils.validateHostname(hostname.ifEmpty { ValidationUtils.sanitizeHostname(containerName) }, context)
+                                     if (!nameResult.isError && !hostnameResult.isError) {
+                                         onNext(containerName, hostname.ifEmpty { ValidationUtils.sanitizeHostname(containerName) })
+                                     } else {
+                                         nameError = nameResult.errorMessage
+                                         hostnameError = hostnameResult.errorMessage
+                                     }
                                 },
                                 indication = androidx.compose.material.ripple.rememberRipple(bounded = true),
                                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }

@@ -12,8 +12,15 @@ keywords: droidspaces, supported, devices, android, device, compatibility, kerne
 >
 > If you want to add your own Droidspaces kernel to this table, check out the [Contribution guidelines](#contribution-guidelines) section.
 
-This document is a community-maintained compatibility list for Android devices known to run Droidspaces successfully. It is intended to help people choose phones for self-hosting, especially when buying second-hand hardware.
+> [!WARNING]
+>
+> Flashing a custom kernel requires an unlocked bootloader. The Droidspaces developers are not responsible for any bricked devices, data loss, or hardware failure resulting from kernel installation.
+>
+> This list is provided solely to help you locate device-specific source code.
+>
+> These repositories have not been deeply audited or reviewed by the Droidspaces team. Proceed at your own risk.
 
+This document is a community-maintained compatibility list for Android devices known to run Droidspaces successfully. It is intended to help people choose phones for self-hosting, especially when buying second-hand hardware.
 
 ## Non-GKI Devices (Kernel 4.19 and lower)
 
