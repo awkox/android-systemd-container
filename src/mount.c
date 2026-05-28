@@ -259,31 +259,35 @@ int ds_apply_jail_mask(int hw_access, int privileged_mask) {
    * playing whack-a-mole with individual paths.
    */
   {
-    /* Step 1: Pin the namespace-scoped subtrees as independent mounts BEFORE
-     * the parent is locked.  A self-bind creates a new mount entry whose RW
-     * status is not inherited from the parent remount below. */
+    /* Step 1: Lock all of /proc/sys RO via self-bind + remount.
+     * Must happen BEFORE pinning RW holes - once the parent is RO, new
+     * bind mounts stacked on top of it can be independently RW. */
+    if (access("/proc/sys", F_OK) == 0) {
+      mount("/proc/sys", "/proc/sys", NULL, MS_BIND, NULL);
+      mount("/proc/sys", "/proc/sys", NULL, MS_BIND | MS_REMOUNT | MS_RDONLY,
+            NULL);
+      ds_log("[SEC] /proc/sys locked RO.");
+    }
+
+    /* Step 2: Stack RW bind mounts on top of the now-RO /proc/sys.
+     * Bind inherits RO from parent, so explicitly remount RW after. */
     const char *rw_holes[] = {"/proc/sys/net", "/proc/sys/kernel/hostname",
                               "/proc/sys/kernel/domainname", NULL};
     for (int i = 0; rw_holes[i]; i++) {
       if (access(rw_holes[i], F_OK) != 0)
         continue;
-      if (mount(rw_holes[i], rw_holes[i], NULL, MS_BIND | MS_REC, NULL) < 0) {
-        ds_warn("[SEC] Failed to pin RW hole %s: %s", rw_holes[i],
+      if (mount(rw_holes[i], rw_holes[i], NULL, MS_BIND, NULL) < 0) {
+        ds_warn("[SEC] Failed to bind RW hole %s: %s", rw_holes[i],
                 strerror(errno));
+        continue;
       }
+      if (mount(rw_holes[i], rw_holes[i], NULL,
+                MS_BIND | MS_REMOUNT | MS_NOSUID | MS_NODEV | MS_NOEXEC,
+                NULL) < 0)
+        ds_warn("[SEC] Failed to remount RW hole %s: %s", rw_holes[i],
+                strerror(errno));
     }
-
-    /* Step 2: Lock all of /proc/sys in one remount.
-     * Self-bind first to create an independent mount entry, then flip to RO.
-     * A bare MS_BIND|MS_REMOUNT|MS_RDONLY silently fails if there is no
-     * existing mount at the path. */
-    if (access("/proc/sys", F_OK) == 0) {
-      mount("/proc/sys", "/proc/sys", NULL, MS_BIND, NULL);
-      mount("/proc/sys", "/proc/sys", NULL, MS_BIND | MS_REMOUNT | MS_RDONLY,
-            NULL);
-      ds_log("[SEC] /proc/sys locked RO (net/hostname/domainname holes "
-             "preserved).");
-    }
+    ds_log("[SEC] /proc/sys RW holes preserved (net/hostname/domainname).");
   }
 
   if (hw_access) {
