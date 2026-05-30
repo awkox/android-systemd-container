@@ -67,18 +67,17 @@ fun InstallationScreen(
 
             isInstallingModule = false
 
-            // Check if SELinux policy exists anywhere BEFORE we start nuking things
-            // We check both the module path and the backend backup path
-            val sepolicyExists = withContext(Dispatchers.IO) {
-                Shell.cmd("test -f ${Constants.DROIDSPACES_TE_PATH}").exec().isSuccess
-            }
-            if (!sepolicyExists) {
-                rebootRecommended = true
-            }
-
             // Capture symlink state before any module directory removal
             val wasSymlinkEnabled = withContext(Dispatchers.IO) {
                 com.droidspaces.app.util.SymlinkInstaller.isSymlinkEnabled()
+            }
+
+            // Check if SELinux policy exists BEFORE we start nuking things
+            val sepolicyExists = withContext(Dispatchers.IO) {
+                Shell.cmd("test -f ${Constants.MAGISK_MODULE_PATH}/sepolicy.rule").exec().isSuccess
+            }
+            if (!sepolicyExists) {
+                rebootRecommended = true
             }
 
             if (!isAtomicUpdate) {

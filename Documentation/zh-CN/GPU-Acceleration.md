@@ -159,7 +159,7 @@ keywords: gpu, acceleration, droidspaces, termux, virgl, turnip, adreno, contain
    ```
 
 > [!TIP]
-> **如果你遇到任何与 DRI3 相关的问题，** 请尝试编辑 `/data/adb/modules/droidspaces/etc/droidspaces.te` 并取消注释以下行：
+> **如果你遇到任何与 DRI3 相关的问题，** 请尝试编辑 `/data/adb/modules/droidspaces/sepolicy.rule` 并取消注释以下行：
 >
 > `allow untrusted_app_27 droidspacesd fd use`
 

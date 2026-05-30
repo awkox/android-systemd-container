@@ -61,7 +61,7 @@ object ModuleInstaller {
                             }
                         }
                     } else {
-                        // Directory (e.g., etc)
+                        // Directory
                         val subDir = File(tempDir, fileName)
                         subDir.mkdirs()
                         for (subFileName in subAssets) {
@@ -102,7 +102,7 @@ object ModuleInstaller {
 
             // Step 4: Set permissions
             onProgress(ModuleInstallationStep.SettingPermissions(MAGISK_MODULE_PATH))
-            val chmodScriptsResult = Shell.cmd("chmod 755 '$MAGISK_MODULE_PATH'/*.sh 2>&1 && chmod 644 '$MAGISK_MODULE_PATH'/*.prop 2>&1 && mkdir -p '$MAGISK_MODULE_PATH/etc' && chmod 644 '$MAGISK_MODULE_PATH'/etc/*.te 2>&1").exec()
+            val chmodScriptsResult = Shell.cmd("chmod 755 '$MAGISK_MODULE_PATH'/*.sh 2>&1 && chmod 644 '$MAGISK_MODULE_PATH'/*.prop 2>&1 && chmod 644 '$MAGISK_MODULE_PATH'/sepolicy.rule 2>&1").exec()
             if (!chmodScriptsResult.isSuccess) {
                 return@withContext Result.failure(
                     Exception("Failed to set permissions: ${chmodScriptsResult.err.joinToString()}")
@@ -126,10 +126,10 @@ object ModuleInstaller {
                 )
             }
 
-            val verifyTeResult = Shell.cmd("test -f '$MAGISK_MODULE_PATH/etc/droidspaces.te' 2>&1").exec()
-            if (!verifyTeResult.isSuccess) {
+            val verifySepolicyResult = Shell.cmd("test -f '$MAGISK_MODULE_PATH/sepolicy.rule' 2>&1").exec()
+            if (!verifySepolicyResult.isSuccess) {
                 return@withContext Result.failure(
-                    Exception("droidspaces.te verification failed")
+                    Exception("sepolicy.rule verification failed")
                 )
             }
 

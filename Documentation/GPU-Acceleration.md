@@ -160,7 +160,7 @@ For Qualcomm Adreno GPUs, Droidspaces supports **native hardware acceleration** 
 
 > [!TIP]
 >
-> **If you encounter any problems related to DRI3,** try editing `/data/adb/modules/droidspaces/etc/droidspaces.te` and uncommenting the line:
+> **If you encounter any problems related to DRI3,** try editing `/data/adb/modules/droidspaces/sepolicy.rule` and uncommenting the line:
 >
 > `allow untrusted_app_27 droidspacesd fd use`
 

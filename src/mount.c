@@ -8,6 +8,8 @@
 #include "droidspace.h"
 #include <linux/loop.h>
 
+#define DS_VTTY_COUNT 6 /* /dev/tty1..6 null symlinks for non-systemd inits */
+
 /* Forward declarations for loop helpers used in find_available_mountpoint */
 static void loop_detach(const char *loop_dev);
 static int get_backing_dev(const char *mnt, char *dev_out, size_t dev_size);
@@ -514,7 +516,7 @@ int create_devices(const char *rootfs, int hw_access, int privileged_mask) {
    * ttyN char device nodes and we must not clobber them with symlinks.
    */
   if (!(privileged_mask & DS_PRIV_UNFILTERED)) {
-    for (int i = 1; i <= DS_MAX_TTYS; i++) {
+    for (int i = 1; i <= DS_VTTY_COUNT; i++) {
       snprintf(path, sizeof(path), "%s/dev/tty%d", rootfs, i);
       force_unlink(path);
       if (symlink("/dev/null", path) < 0) {
@@ -1136,10 +1138,6 @@ int unmount_rootfs_img(const char *mount_point, int silent) {
   return 0;
 }
 
-/* ---------------------------------------------------------------------------
- * Container introspection helpers (used by info/show)
- * ---------------------------------------------------------------------------*/
-
 /* Ensure host devpts is mounted - specifically for Android Recovery
  * environments where /dev/pts is often missing or unmounted, causing openpty()
  * to fail. */
@@ -1167,3 +1165,7 @@ int ds_fix_host_ptys(void) {
   ds_log("Host devpts mounted successfully (Recovery fix).");
   return 0;
 }
+
+/* ---------------------------------------------------------------------------
+ * Container introspection helpers (used by info/show)
+ * ---------------------------------------------------------------------------*/

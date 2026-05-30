@@ -59,10 +59,6 @@ int ds_terminal_create(struct ds_tty_info *tty) {
     return -1;
   }
 
-  /* tty group ownership + permissions */
-  if (fchown(tty->slave, 0, 5) < 0) {
-    /* best-effort, ignore */
-  }
   fchmod(tty->slave, 0620);
 
   return 0;
@@ -140,41 +136,6 @@ int ds_setup_tios(int fd, struct termios *old) {
  * Runtime Utilities
  * ---------------------------------------------------------------------------*/
 
-void build_container_ttys_string(struct ds_tty_info *ttys, int count, char *buf,
-                                 size_t size) {
-  size_t offset = 0;
-
-  if (size == 0)
-    return;
-
-  buf[0] = '\0';
-
-  for (int i = 0; i < count; i++) {
-    const char *name = ttys[i].name;
-    size_t len = strlen(name);
-
-    /* Add space between entries */
-    if (i > 0) {
-      if (offset + 1 >= size)
-        break;
-      buf[offset++] = ' ';
-    }
-
-    /* Copy name safely */
-    if (offset + len >= size) {
-      len = size - offset - 1;
-    }
-
-    memcpy(buf + offset, name, len);
-    offset += len;
-
-    if (offset >= size - 1)
-      break;
-  }
-
-  buf[offset] = '\0';
-}
-
 static volatile sig_atomic_t g_sigwinch_received = 0;
 static void handle_sigwinch(int sig) {
   (void)sig;
@@ -186,6 +147,26 @@ static void update_terminal_size(int master_fd) {
   if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0) {
     ioctl(master_fd, TIOCSWINSZ, &ws);
   }
+}
+
+/* Chown the host-side pts slave entry for a PTY we own the master of.
+ * Must be called from the HOST namespace (parent process).
+ * Uses TIOCGPTN on master_fd to get the pts index, then chowns
+ * /dev/pts/N directly - the path the host and root detectors see.
+ *
+ * On Android: hardcoded to AID_SHELL (2000) since su is root->root.
+ * On Linux: left as root - detectors there don't flag pts ownership. */
+void ds_pty_chown_host(int master_fd) {
+  if (!is_android())
+    return;
+
+  unsigned int ptyno;
+  if (ioctl(master_fd, TIOCGPTN, &ptyno) < 0)
+    return;
+
+  char path[64];
+  snprintf(path, sizeof(path), "/dev/pts/%u", ptyno);
+  chown(path, DS_AID_SHELL, DS_AID_SHELL); /* best-effort */
 }
 
 int ds_terminal_proxy(int master_fd) {

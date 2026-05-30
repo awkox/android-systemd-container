@@ -42,7 +42,7 @@ val dsVersionCodeVal = dsVersionName.split(".").let { parts ->
         val major = parts.getOrNull(0)?.toInt() ?: 1
         val minor = parts.getOrNull(1)?.toInt() ?: 0
         val patch = parts.getOrNull(2)?.toInt() ?: 0
-        major * 10000 + minor * 100 + patch
+        major * 1000 + minor * 100 + patch * 10
     } catch (e: Exception) {
         1
     }
@@ -264,10 +264,33 @@ tasks.register("generateSupportedLocalesList") {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Sync boot-module/module.prop version with DS_VERSION from droidspace.h.
+// ---------------------------------------------------------------------------
+tasks.register("generateModuleProp") {
+    val moduleProp = file("src/main/assets/boot-module/module.prop")
+    inputs.property("dsVersionName", dsVersionName)
+    inputs.property("dsVersionCodeVal", dsVersionCodeVal)
+    outputs.file(moduleProp)
+
+    doLast {
+        val lines = moduleProp.readLines().map { line ->
+            when {
+                line.startsWith("version=")     -> "version=v$dsVersionName"
+                line.startsWith("versionCode=") -> "versionCode=$dsVersionCodeVal"
+                else                             -> line
+            }
+        }
+        moduleProp.writeText(lines.joinToString("\n") + "\n")
+        println("generateModuleProp: version=v$dsVersionName versionCode=$dsVersionCodeVal")
+    }
+}
+
 // Run before every build variant
 tasks.configureEach {
     if (name.startsWith("pre") && name.endsWith("Build")) {
         dependsOn("generateSupportedLocalesList")
+        dependsOn("generateModuleProp")
     }
 }
 

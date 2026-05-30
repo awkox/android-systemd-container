@@ -71,47 +71,22 @@ fun ControlPanelScreen(
                 ErrorState()
             }
             else -> {
-                // Main content - Active containers
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp)
-                        .padding(top = 8.dp, bottom = 120.dp), // Clear floating tab bar
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    if (runningContainers.isEmpty()) {
-                        // Empty state for no running containers
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 32.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Dashboard,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(48.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                                Text(
-                                    text = context.getString(R.string.no_containers_running),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    text = context.getString(R.string.start_container_first),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                )
-                            }
-                        }
-                    } else {
-                        // Running container cards
+                if (runningContainers.isEmpty()) {
+                    EmptyState(
+                        icon = Icons.Default.Dashboard,
+                        title = context.getString(R.string.no_containers_running),
+                        description = context.getString(R.string.start_container_first),
+                        modifier = Modifier.padding(bottom = 120.dp) // Clear floating tab bar
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp)
+                            .padding(top = 8.dp, bottom = 120.dp), // Clear floating tab bar
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
                         runningContainers.forEach { container ->
                             RunningContainerCard(
                                 container = container,
