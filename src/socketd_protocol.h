@@ -55,6 +55,8 @@ enum ds_socketd_status {
   DS_SOCKETD_STATUS_NOT_FOUND = 3,
   DS_SOCKETD_STATUS_INTERNAL_ERROR = 4,
   DS_SOCKETD_STATUS_FORBIDDEN = 5,
+  DS_SOCKETD_STATUS_ALREADY_RUNNING = 6,
+  DS_SOCKETD_STATUS_ALREADY_STOPPED = 7,
 };
 
 enum ds_socketd_capability {
@@ -125,6 +127,13 @@ struct DS_SOCKETD_PACKED ds_socketd_container_record {
 struct DS_SOCKETD_PACKED ds_socketd_inspect_container_req {
   /* Container name, UUID, or UUID prefix. Empty is invalid. */
   char target[DS_SOCKETD_RECORD_NAME_MAX];
+};
+
+struct DS_SOCKETD_PACKED ds_socketd_lifecycle_req {
+  /* Container name, UUID, or UUID prefix. Empty is invalid. */
+  char target[DS_SOCKETD_RECORD_NAME_MAX];
+  /* -1 = Droidspaces runtime default; 0 = no graceful wait. */
+  int32_t timeout_seconds_be;
 };
 
 struct DS_SOCKETD_PACKED ds_socketd_env_record {

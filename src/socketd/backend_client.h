@@ -101,6 +101,12 @@ struct CoreEventResult {
   std::string actor_name;
 };
 
+struct LifecycleResult {
+  bool not_found = false;
+  bool already_running = false;
+  bool already_stopped = false;
+};
+
 class BackendClient {
 public:
   BackendClient() = default;
@@ -125,7 +131,18 @@ public:
   bool poll_events(std::int64_t since, std::vector<CoreEventResult> &out,
                    std::string &error) const;
 
+  bool start_container(const std::string &ref, LifecycleResult &out,
+                       std::string &error) const;
+  bool stop_container(const std::string &ref, int timeout_seconds,
+                      LifecycleResult &out, std::string &error) const;
+  bool restart_container(const std::string &ref, int timeout_seconds,
+                         LifecycleResult &out, std::string &error) const;
+
 private:
+  bool lifecycle_request(std::uint16_t opcode, const std::string &ref,
+                         int timeout_seconds, LifecycleResult &out,
+                         std::string &error) const;
+
   bool request(std::uint16_t opcode, const void *payload,
                std::uint32_t payload_len, std::uint16_t &status_out,
                std::string &payload_out, std::string &error) const;

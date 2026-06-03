@@ -1415,7 +1415,11 @@ cleanup:
   return -1;
 }
 
-int stop_rootfs(struct ds_config *cfg, int skip_unmount) {
+int stop_rootfs_with_timeout(struct ds_config *cfg, int skip_unmount,
+                             int timeout_seconds) {
+  if (timeout_seconds < 0)
+    timeout_seconds = DS_STOP_TIMEOUT;
+
   /* Acquire external command lock FIRST */
   if (acquire_external_lock(cfg->container_name) != 0) {
     ds_error("Cannot stop '%s': another command is managing this container",
@@ -1521,12 +1525,12 @@ int stop_rootfs(struct ds_config *cfg, int skip_unmount) {
     }
 
     ds_log("Waiting for graceful shutdown (this may take up to %d seconds)...",
-           DS_STOP_TIMEOUT);
+           timeout_seconds);
   }
 
   /* 2. Wait for exit */
   int stopped = 0;
-  for (int i = 0; i < DS_STOP_TIMEOUT * 5; i++) {
+  for (int i = 0; i < timeout_seconds * 5; i++) {
     if (kill(pid, 0) < 0) {
       if (errno == ESRCH) {
         stopped = 1;
@@ -1587,6 +1591,10 @@ int stop_rootfs(struct ds_config *cfg, int skip_unmount) {
   }
 
   return 0;
+}
+
+int stop_rootfs(struct ds_config *cfg, int skip_unmount) {
+  return stop_rootfs_with_timeout(cfg, skip_unmount, DS_STOP_TIMEOUT);
 }
 
 /* ---------------------------------------------------------------------------
@@ -2512,17 +2520,21 @@ int show_info(struct ds_config *cfg, int trust_cfg_pid) {
   return 0;
 }
 
-int restart_rootfs(struct ds_config *cfg) {
+int restart_rootfs_with_timeout(struct ds_config *cfg, int timeout_seconds) {
   pid_t pid = 0;
   if (!is_container_running(cfg, &pid) || pid <= 0) {
     ds_error("Container '%s' is not running or invalid.", cfg->container_name);
     return -1;
   }
   ds_log("Restarting container %s...", cfg->container_name);
-  if (stop_rootfs(cfg, 1) < 0) {
+  if (stop_rootfs_with_timeout(cfg, 1, timeout_seconds) < 0) {
     return -1;
   }
   putchar('\n');
   print_ds_banner();
   return start_rootfs(cfg);
+}
+
+int restart_rootfs(struct ds_config *cfg) {
+  return restart_rootfs_with_timeout(cfg, DS_STOP_TIMEOUT);
 }

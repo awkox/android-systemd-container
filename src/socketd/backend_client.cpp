@@ -610,6 +610,92 @@ bool BackendClient::list_images(
   return true;
 }
 
+
+
+bool BackendClient::lifecycle_request(std::uint16_t opcode,
+                                      const std::string& ref,
+                                      int timeout_seconds,
+                                      LifecycleResult& out,
+                                      std::string& error) const {
+  out = LifecycleResult {};
+
+  if (ref.empty() || ref.size() >= DS_SOCKETD_RECORD_NAME_MAX) {
+    error = "container reference is empty or too long";
+    return false;
+  }
+
+  if (timeout_seconds < -1) {
+    error = "container lifecycle timeout is invalid";
+    return false;
+  }
+
+  ds_socketd_lifecycle_req req {};
+  std::memcpy(req.target, ref.c_str(), ref.size());
+  req.timeout_seconds_be = static_cast<std::int32_t>(
+      htonl(static_cast<std::uint32_t>(timeout_seconds)));
+
+  std::uint16_t status = DS_SOCKETD_STATUS_INTERNAL_ERROR;
+  std::string payload;
+
+  if (!request(opcode,
+               &req,
+               static_cast<std::uint32_t>(sizeof(req)),
+               status,
+               payload,
+               error)) {
+    return false;
+  }
+
+  if (status == DS_SOCKETD_STATUS_OK) {
+    return true;
+  }
+
+  switch (status) {
+    case DS_SOCKETD_STATUS_NOT_FOUND:
+      out.not_found = true;
+      error = "container not found";
+      return false;
+    case DS_SOCKETD_STATUS_ALREADY_RUNNING:
+      out.already_running = true;
+      error = "container already running";
+      return false;
+    case DS_SOCKETD_STATUS_ALREADY_STOPPED:
+      out.already_stopped = true;
+      error = "container already stopped";
+      return false;
+    default:
+      return expect_ok_status(status, "LIFECYCLE", error);
+  }
+}
+
+bool BackendClient::start_container(const std::string& ref,
+                                    LifecycleResult& out,
+                                    std::string& error) const {
+  return lifecycle_request(DS_SOCKETD_OP_START_CONTAINER, ref, -1, out, error);
+}
+
+bool BackendClient::stop_container(const std::string& ref,
+                                   int timeout_seconds,
+                                   LifecycleResult& out,
+                                   std::string& error) const {
+  return lifecycle_request(DS_SOCKETD_OP_STOP_CONTAINER,
+                           ref,
+                           timeout_seconds,
+                           out,
+                           error);
+}
+
+bool BackendClient::restart_container(const std::string& ref,
+                                      int timeout_seconds,
+                                      LifecycleResult& out,
+                                      std::string& error) const {
+  return lifecycle_request(DS_SOCKETD_OP_RESTART_CONTAINER,
+                           ref,
+                           timeout_seconds,
+                           out,
+                           error);
+}
+
 bool BackendClient::poll_events(
     std::int64_t since,
     std::vector<CoreEventResult>& out,

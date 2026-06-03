@@ -702,6 +702,227 @@ static int socketd_count_installed_containers(uint32_t *count_out) {
   return 0;
 }
 
+static int socketd_validate_kernel_version(void) {
+  int major = 0;
+  int minor = 0;
+
+  if (get_kernel_version(&major, &minor) < 0)
+    return -1;
+
+  if (major < DS_MIN_KERNEL_MAJOR ||
+      (major == DS_MIN_KERNEL_MAJOR && minor < DS_MIN_KERNEL_MINOR)) {
+    ds_error("Droidspaces requires at least Linux %d.%d.0; detected %d.%d",
+             DS_MIN_KERNEL_MAJOR, DS_MIN_KERNEL_MINOR, major, minor);
+    return -1;
+  }
+
+  return 0;
+}
+
+static int socketd_validate_start_config(struct ds_config *cfg) {
+  if (!cfg)
+    return -1;
+
+  if (!cfg->container_name[0] || reject_container_name(cfg->container_name) < 0)
+    return -1;
+
+  if (cfg->rootfs_path[0] && cfg->rootfs_img_path[0]) {
+    ds_error("Container '%s' has both rootfs directory and image configured",
+             cfg->container_name);
+    return -1;
+  }
+
+  if (!cfg->rootfs_path[0] && !cfg->rootfs_img_path[0]) {
+    ds_error("Container '%s' has no rootfs target configured",
+             cfg->container_name);
+    return -1;
+  }
+
+  if (cfg->rootfs_path[0] && access(cfg->rootfs_path, F_OK) != 0) {
+    ds_error("Rootfs directory not found for '%s': %s", cfg->container_name,
+             cfg->rootfs_path);
+    return -1;
+  }
+
+  if (cfg->rootfs_img_path[0] && access(cfg->rootfs_img_path, F_OK) != 0) {
+    ds_error("Rootfs image not found for '%s': %s", cfg->container_name,
+             cfg->rootfs_img_path);
+    return -1;
+  }
+
+  if (cfg->custom_init[0]) {
+    if (cfg->custom_init[0] != '/' || strchr(cfg->custom_init, ' ')) {
+      ds_error("Invalid custom init for '%s': %s", cfg->container_name,
+               cfg->custom_init);
+      return -1;
+    }
+  }
+
+  if (socketd_validate_kernel_version() < 0)
+    return -1;
+
+  if (check_requirements_hw(cfg->hw_access) < 0)
+    return -1;
+
+  if ((cfg->net_mode == DS_NET_NAT || cfg->net_mode == DS_NET_NONE) &&
+      !check_ns(CLONE_NEWNET, "net")) {
+    ds_error("Container '%s' requires network namespaces for its net mode",
+             cfg->container_name);
+    return -1;
+  }
+
+  return 0;
+}
+
+static enum ds_socketd_status
+socketd_read_lifecycle_request(int conn,
+                               uint32_t payload_len,
+                               struct ds_socketd_lifecycle_req *req_out,
+                               char *target_out,
+                               size_t target_size,
+                               int *timeout_seconds_out) {
+  if (!req_out || !target_out || target_size == 0 || !timeout_seconds_out)
+    return DS_SOCKETD_STATUS_BAD_REQUEST;
+
+  memset(req_out, 0, sizeof(*req_out));
+  if (socketd_read_payload(conn, req_out, (uint32_t)sizeof(*req_out),
+                           payload_len) < 0) {
+    return DS_SOCKETD_STATUS_BAD_REQUEST;
+  }
+
+  safe_strncpy(target_out, req_out->target, target_size);
+  if (!target_out[0])
+    return DS_SOCKETD_STATUS_BAD_REQUEST;
+
+  int32_t timeout =
+      (int32_t)ntohl((uint32_t)req_out->timeout_seconds_be);
+  if (timeout < -1)
+    return DS_SOCKETD_STATUS_BAD_REQUEST;
+
+  *timeout_seconds_out = (int)timeout;
+  return DS_SOCKETD_STATUS_OK;
+}
+
+static void socketd_prepare_runtime_for_container(struct ds_config *cfg) {
+  if (!cfg)
+    return;
+
+  safe_strncpy(ds_log_container_name, cfg->container_name,
+               sizeof(ds_log_container_name));
+  ds_cgroup_host_bootstrap(cfg->force_cgroupv1);
+}
+
+static enum ds_socketd_status socketd_lifecycle_start(struct ds_config *cfg) {
+  pid_t pid = 0;
+  if (is_container_running(cfg, &pid) && pid > 0)
+    return DS_SOCKETD_STATUS_ALREADY_RUNNING;
+
+  if (socketd_validate_start_config(cfg) < 0)
+    return DS_SOCKETD_STATUS_INTERNAL_ERROR;
+
+  socketd_prepare_runtime_for_container(cfg);
+
+  if (start_rootfs(cfg) < 0)
+    return DS_SOCKETD_STATUS_INTERNAL_ERROR;
+
+  pid = 0;
+  if (!is_container_running(cfg, &pid) || pid <= 0)
+    return DS_SOCKETD_STATUS_INTERNAL_ERROR;
+
+  return DS_SOCKETD_STATUS_OK;
+}
+
+static enum ds_socketd_status socketd_lifecycle_stop(struct ds_config *cfg,
+                                                     int timeout_seconds) {
+  pid_t pid = 0;
+  if (!is_container_running(cfg, &pid) || pid <= 0)
+    return DS_SOCKETD_STATUS_ALREADY_STOPPED;
+
+  socketd_prepare_runtime_for_container(cfg);
+
+  if (stop_rootfs_with_timeout(cfg, 0, timeout_seconds) < 0)
+    return DS_SOCKETD_STATUS_INTERNAL_ERROR;
+
+  pid = 0;
+  if (is_container_running(cfg, &pid) && pid > 0)
+    return DS_SOCKETD_STATUS_INTERNAL_ERROR;
+
+  return DS_SOCKETD_STATUS_OK;
+}
+
+static enum ds_socketd_status socketd_lifecycle_restart(struct ds_config *cfg,
+                                                        int timeout_seconds) {
+  pid_t pid = 0;
+  int was_running = is_container_running(cfg, &pid) && pid > 0;
+
+  if (socketd_validate_start_config(cfg) < 0)
+    return DS_SOCKETD_STATUS_INTERNAL_ERROR;
+
+  socketd_prepare_runtime_for_container(cfg);
+
+  if (was_running) {
+    if (restart_rootfs_with_timeout(cfg, timeout_seconds) < 0)
+      return DS_SOCKETD_STATUS_INTERNAL_ERROR;
+  } else {
+    if (start_rootfs(cfg) < 0)
+      return DS_SOCKETD_STATUS_INTERNAL_ERROR;
+  }
+
+  pid = 0;
+  if (!is_container_running(cfg, &pid) || pid <= 0)
+    return DS_SOCKETD_STATUS_INTERNAL_ERROR;
+
+  if (was_running)
+    ds_socketd_record_core_event("restart", cfg->container_name, cfg->uuid);
+
+  return DS_SOCKETD_STATUS_OK;
+}
+
+static int socketd_handle_lifecycle_request(int conn,
+                                            uint32_t payload_len,
+                                            enum ds_socketd_opcode opcode) {
+  struct ds_socketd_lifecycle_req req;
+  char target[DS_SOCKETD_RECORD_NAME_MAX];
+  int timeout_seconds = -1;
+
+  enum ds_socketd_status status =
+      socketd_read_lifecycle_request(conn, payload_len, &req, target,
+                                     sizeof(target), &timeout_seconds);
+  if (status != DS_SOCKETD_STATUS_OK) {
+    socketd_send_response(conn, status, NULL, 0);
+    return 0;
+  }
+
+  struct ds_config cfg;
+  memset(&cfg, 0, sizeof(cfg));
+
+  int load_status = socketd_load_config_by_ref(target, &cfg);
+  if (load_status != DS_SOCKETD_STATUS_OK) {
+    socketd_free_loaded_config(&cfg);
+    socketd_send_response(conn, (enum ds_socketd_status)load_status, NULL, 0);
+    return 0;
+  }
+
+  switch (opcode) {
+  case DS_SOCKETD_OP_START_CONTAINER:
+    status = socketd_lifecycle_start(&cfg);
+    break;
+  case DS_SOCKETD_OP_STOP_CONTAINER:
+    status = socketd_lifecycle_stop(&cfg, timeout_seconds);
+    break;
+  case DS_SOCKETD_OP_RESTART_CONTAINER:
+    status = socketd_lifecycle_restart(&cfg, timeout_seconds);
+    break;
+  default:
+    status = DS_SOCKETD_STATUS_UNSUPPORTED;
+    break;
+  }
+
+  socketd_free_loaded_config(&cfg);
+  socketd_send_response(conn, status, NULL, 0);
+  return 0;
+}
+
 static int socketd_build_core_event_path(char *path, size_t path_size) {
   if (!path || path_size == 0)
     return -1;
@@ -774,7 +995,8 @@ static void socketd_handle_conn(int conn) {
         htonl(DS_SOCKETD_CAP_PROTOCOL_V1 | DS_SOCKETD_CAP_PING |
               DS_SOCKETD_CAP_CAPABILITIES | DS_SOCKETD_CAP_INFO |
               DS_SOCKETD_CAP_LIST_CONTAINERS | DS_SOCKETD_CAP_INSPECT_CONTAINER |
-              DS_SOCKETD_CAP_LIST_IMAGES | DS_SOCKETD_CAP_POLL_EVENTS);
+              DS_SOCKETD_CAP_LIFECYCLE | DS_SOCKETD_CAP_LIST_IMAGES |
+              DS_SOCKETD_CAP_POLL_EVENTS);
 
     socketd_send_response(conn, DS_SOCKETD_STATUS_OK, &caps_be,
                           (uint32_t)sizeof(caps_be));
@@ -1176,7 +1398,8 @@ static void socketd_handle_conn(int conn) {
   case DS_SOCKETD_OP_START_CONTAINER:
   case DS_SOCKETD_OP_STOP_CONTAINER:
   case DS_SOCKETD_OP_RESTART_CONTAINER:
-    socketd_send_response(conn, DS_SOCKETD_STATUS_UNSUPPORTED, NULL, 0);
+    socketd_handle_lifecycle_request(conn, payload_len,
+                                     (enum ds_socketd_opcode)opcode);
     return;
 
   default:

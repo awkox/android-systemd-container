@@ -764,6 +764,8 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg);
 int is_valid_container_pid(pid_t pid);
 int start_rootfs(struct ds_config *cfg);
 int stop_rootfs(struct ds_config *cfg, int skip_unmount);
+int stop_rootfs_with_timeout(struct ds_config *cfg, int skip_unmount,
+                             int timeout_seconds);
 int enter_namespace(pid_t pid, struct ds_config *cfg);
 int enter_rootfs(struct ds_config *cfg, const char *user);
 int run_in_rootfs(struct ds_config *cfg, int argc, char **argv,
@@ -771,6 +773,7 @@ int run_in_rootfs(struct ds_config *cfg, int argc, char **argv,
 int show_info(struct ds_config *cfg, int trust_cfg_pid);
 int show_container_usage(struct ds_config *cfg);
 int restart_rootfs(struct ds_config *cfg);
+int restart_rootfs_with_timeout(struct ds_config *cfg, int timeout_seconds);
 
 /* ---------------------------------------------------------------------------
  * documentation.c

@@ -28,7 +28,7 @@ namespace droidspaces::socketd {
 namespace {
 
 constexpr std::size_t kMaxRequestHeaderBytes = 16 * 1024;
-constexpr const char* kSocketApiVersion = "1.40";
+constexpr const char* kSocketApiVersion = "1.41";
 constexpr const char* kSocketMinApiVersion = "1.40";
 constexpr const char* kSocketOsType = "linux";
 
@@ -280,6 +280,33 @@ bool send_http_response(int fd,
   return true;
 }
 
+
+bool send_empty_http_response(int fd,
+                              int status_code,
+                              const char* reason_phrase,
+                              std::string& error) {
+  std::string header;
+  header.reserve(192);
+
+  header += "HTTP/1.1 ";
+  header += std::to_string(status_code);
+  header += ' ';
+  header += reason_phrase;
+  header += "\r\n";
+  header += "Content-Length: 0\r\n";
+  header += "Server: Droidspaces/6 (Container, like Docker)\r\n";
+  header += "Api-Version: ";
+  header += kSocketApiVersion;
+  header += "\r\n";
+  header += "Ostype: ";
+  header += kSocketOsType;
+  header += "\r\n";
+  header += "Connection: close\r\n";
+  header += "\r\n";
+
+  return send_all(fd, header.data(), header.size(), error);
+}
+
 bool send_bad_request(int fd, bool suppress_body, std::string& error) {
   const std::string body = "{\"message\":\"bad request\"}\n";
   return send_http_response(fd,
@@ -311,6 +338,32 @@ bool send_not_found(int fd, bool suppress_body, std::string& error) {
                             body,
                             suppress_body,
                             error);
+}
+
+
+bool send_internal_server_error(int fd,
+                                const std::string& message,
+                                bool suppress_body,
+                                std::string& error) {
+  std::string body = "{\"message\":\"";
+  body += json_escape(message.empty() ? "internal server error" : message);
+  body += "\"}\n";
+
+  return send_http_response(fd,
+                            500,
+                            "Internal Server Error",
+                            "application/json",
+                            body,
+                            suppress_body,
+                            error);
+}
+
+bool send_no_content(int fd, std::string& error) {
+  return send_empty_http_response(fd, 204, "No Content", error);
+}
+
+bool send_not_modified(int fd, std::string& error) {
+  return send_empty_http_response(fd, 304, "Not Modified", error);
 }
 
 bool send_ping_ok(int fd, bool suppress_body, std::string& error) {
@@ -439,8 +492,9 @@ bool strip_api_version_prefix(const std::string& path,
   return true;
 }
 
-bool parse_container_inspect_ref(const std::string& target,
-                                 std::string& ref_out) {
+bool parse_container_ref_with_suffix(const std::string& target,
+                                     const char* suffix,
+                                     std::string& ref_out) {
   const std::size_t query_pos = target.find('?');
   const std::string path =
       query_pos == std::string::npos ? target : target.substr(0, query_pos);
@@ -451,15 +505,14 @@ bool parse_container_inspect_ref(const std::string& target,
   }
 
   constexpr const char* kPrefix = "/containers/";
-  constexpr const char* kSuffix = "/json";
   const std::size_t prefix_len = std::strlen(kPrefix);
-  const std::size_t suffix_len = std::strlen(kSuffix);
+  const std::size_t suffix_len = std::strlen(suffix);
 
   if (unversioned_path.size() <= prefix_len + suffix_len ||
       unversioned_path.compare(0, prefix_len, kPrefix) != 0 ||
       unversioned_path.compare(unversioned_path.size() - suffix_len,
                                suffix_len,
-                               kSuffix) != 0) {
+                               suffix) != 0) {
     return false;
   }
 
@@ -468,6 +521,17 @@ bool parse_container_inspect_ref(const std::string& target,
       unversioned_path.size() - prefix_len - suffix_len);
 
   return !ref_out.empty() && ref_out.find('/') == std::string::npos;
+}
+
+bool parse_container_inspect_ref(const std::string& target,
+                                 std::string& ref_out) {
+  return parse_container_ref_with_suffix(target, "/json", ref_out);
+}
+
+bool parse_container_action_ref(const std::string& target,
+                                const char* action_suffix,
+                                std::string& ref_out) {
+  return parse_container_ref_with_suffix(target, action_suffix, ref_out);
 }
 
 bool is_truthy_query_value(const std::string& value) {
@@ -564,6 +628,72 @@ EventsRequest parse_events_request(const std::string& target) {
   }
 
   return request;
+}
+
+
+struct ContainerLifecycleRequest {
+  int timeout_seconds = -1;
+};
+
+bool parse_nonnegative_int(const std::string& value,
+                           int& out,
+                           std::string& error) {
+  if (value.empty()) {
+    error = "empty integer value";
+    return false;
+  }
+
+  errno = 0;
+  char* end = nullptr;
+  const long parsed = std::strtol(value.c_str(), &end, 10);
+  if (errno != 0 || end == value.c_str() || *end != '\0' || parsed < 0 ||
+      parsed > std::numeric_limits<int>::max()) {
+    error = "invalid non-negative integer: ";
+    error += value;
+    return false;
+  }
+
+  out = static_cast<int>(parsed);
+  return true;
+}
+
+bool parse_container_lifecycle_request(const std::string& target,
+                                       ContainerLifecycleRequest& request,
+                                       std::string& error) {
+  request = ContainerLifecycleRequest {};
+
+  const std::size_t query_pos = target.find('?');
+  if (query_pos == std::string::npos || query_pos + 1 >= target.size()) {
+    return true;
+  }
+
+  std::size_t pos = query_pos + 1;
+  while (pos <= target.size()) {
+    const std::size_t amp = target.find('&', pos);
+    const std::size_t end =
+        amp == std::string::npos ? target.size() : amp;
+
+    const std::string item = target.substr(pos, end - pos);
+    const std::size_t eq = item.find('=');
+    const std::string key =
+        eq == std::string::npos ? item : item.substr(0, eq);
+    const std::string value =
+        eq == std::string::npos ? "" : item.substr(eq + 1);
+
+    if (key == "t") {
+      if (!parse_nonnegative_int(value, request.timeout_seconds, error)) {
+        error = "invalid lifecycle timeout query parameter: " + value;
+        return false;
+      }
+    }
+
+    if (amp == std::string::npos) {
+      break;
+    }
+    pos = amp + 1;
+  }
+
+  return true;
 }
 
 bool parse_port(const std::string& value,
@@ -855,6 +985,84 @@ bool send_container_inspect_ok(int fd,
                             error);
 }
 
+bool send_container_start_ok(int fd,
+                             const std::string& ref,
+                             std::string& error) {
+  BackendClient backend;
+  LifecycleResult result;
+  std::string backend_error;
+
+  if (backend.start_container(ref, result, backend_error)) {
+    return send_no_content(fd, error);
+  }
+
+  if (result.not_found) {
+    return send_not_found(fd, false, error);
+  }
+
+  if (result.already_running) {
+    return send_not_modified(fd, error);
+  }
+
+  return send_internal_server_error(fd, backend_error, false, error);
+}
+
+bool send_container_stop_ok(int fd,
+                            const std::string& target,
+                            const std::string& ref,
+                            std::string& error) {
+  ContainerLifecycleRequest request;
+  std::string parse_error;
+  if (!parse_container_lifecycle_request(target, request, parse_error)) {
+    return send_bad_request(fd, false, error);
+  }
+
+  BackendClient backend;
+  LifecycleResult result;
+  std::string backend_error;
+
+  if (backend.stop_container(ref, request.timeout_seconds, result,
+                             backend_error)) {
+    return send_no_content(fd, error);
+  }
+
+  if (result.not_found) {
+    return send_not_found(fd, false, error);
+  }
+
+  if (result.already_stopped) {
+    return send_not_modified(fd, error);
+  }
+
+  return send_internal_server_error(fd, backend_error, false, error);
+}
+
+bool send_container_restart_ok(int fd,
+                               const std::string& target,
+                               const std::string& ref,
+                               std::string& error) {
+  ContainerLifecycleRequest request;
+  std::string parse_error;
+  if (!parse_container_lifecycle_request(target, request, parse_error)) {
+    return send_bad_request(fd, false, error);
+  }
+
+  BackendClient backend;
+  LifecycleResult result;
+  std::string backend_error;
+
+  if (backend.restart_container(ref, request.timeout_seconds, result,
+                                backend_error)) {
+    return send_no_content(fd, error);
+  }
+
+  if (result.not_found) {
+    return send_not_found(fd, false, error);
+  }
+
+  return send_internal_server_error(fd, backend_error, false, error);
+}
+
 bool send_image_list_ok(int fd,
                         bool suppress_body,
                         std::string& error) {
@@ -1079,6 +1287,7 @@ bool ApiServer::handle_client(int client_fd, std::string& error) const {
 
   const bool is_head = method == "HEAD";
   const bool is_get = method == "GET";
+  const bool is_post = method == "POST";
 
   if ((is_get || is_head) && is_api_target(target, "/_ping")) {
     return send_ping_ok(client_fd, is_head, error);
@@ -1100,6 +1309,19 @@ bool ApiServer::handle_client(int client_fd, std::string& error) const {
   std::string inspect_ref;
   if (is_get && parse_container_inspect_ref(target, inspect_ref)) {
     return send_container_inspect_ok(client_fd, inspect_ref, false, error);
+  }
+
+  std::string lifecycle_ref;
+  if (is_post && parse_container_action_ref(target, "/start", lifecycle_ref)) {
+    return send_container_start_ok(client_fd, lifecycle_ref, error);
+  }
+
+  if (is_post && parse_container_action_ref(target, "/stop", lifecycle_ref)) {
+    return send_container_stop_ok(client_fd, target, lifecycle_ref, error);
+  }
+
+  if (is_post && parse_container_action_ref(target, "/restart", lifecycle_ref)) {
+    return send_container_restart_ok(client_fd, target, lifecycle_ref, error);
   }
 
   if (is_get && is_api_target(target, "/images/json")) {
