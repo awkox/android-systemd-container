@@ -2208,6 +2208,8 @@ int show_info(struct ds_config *cfg, int trust_cfg_pid) {
 
     if (is_android())
       printf("TERMUX_X11=%d\n", cfg->termux_x11);
+    if (is_android())
+      printf("VIRGL=%d\n", cfg->virgl);
 
     if (access("/sys/fs/selinux/enforce", R_OK) == 0) {
       printf("SELINUX=%s\n",
@@ -2389,7 +2391,13 @@ int show_info(struct ds_config *cfg, int trust_cfg_pid) {
       feat_count++;
     }
 
-    /* 8. SELinux Status */
+    /* 8. VirGL */
+    if (is_android() && cfg->virgl) {
+      printf("  VirGL: enabled\n");
+      feat_count++;
+    }
+
+    /* 9. SELinux Status */
     if (access("/sys/fs/selinux/enforce", R_OK) == 0) {
       int status = ds_get_selinux_status();
       if (status == 0) {
@@ -2400,25 +2408,25 @@ int show_info(struct ds_config *cfg, int trust_cfg_pid) {
       feat_count++;
     }
 
-    /* 9. Volatile Mode */
+    /* 10. Volatile Mode */
     if (cfg->volatile_mode) {
       printf("  Volatile mode: enabled\n");
       feat_count++;
     }
 
-    /* 10. Cgroup v1 */
+    /* 11. Cgroup v1 */
     if (cfg->force_cgroupv1) {
       printf("  " C_RED "Force Cgroup V1:" C_RESET " yes\n");
       feat_count++;
     }
 
-    /* 11. Deadlock Shield (block_nested_ns) */
+    /* 12. Deadlock Shield (block_nested_ns) */
     if (cfg->block_nested_ns) {
       printf("  " C_RED "Deadlock Shield:" C_RESET " enabled\n");
       feat_count++;
     }
 
-    /* 12. Privileged Mode */
+    /* 13. Privileged Mode */
     if (cfg->privileged_mask > 0) {
       printf("  " C_RED "Privileged mode:" C_RESET " ");
       if (cfg->privileged_mask == DS_PRIV_FULL) {
@@ -2450,19 +2458,19 @@ int show_info(struct ds_config *cfg, int trust_cfg_pid) {
       feat_count++;
     }
 
-    /* 13. Bind Mounts */
+    /* 14. Bind Mounts */
     if (cfg->bind_count > 0) {
       printf("  Bind mounts: %d active\n", cfg->bind_count);
       feat_count++;
     }
 
-    /* 14. Custom Init */
+    /* 15. Custom Init */
     if (cfg->custom_init[0]) {
       printf("  " C_RED "Custom Init:" C_RESET " %s\n", cfg->custom_init);
       feat_count++;
     }
 
-    /* 15. Environment Variables */
+    /* 16. Environment Variables */
     if (cfg->env_var_count > 0) {
       printf("  Env variables: %d loaded\n", cfg->env_var_count);
       feat_count++;
