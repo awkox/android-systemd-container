@@ -27,7 +27,7 @@
     <string name="clear">Löschen</string>
     <!-- Main Tab Screen -->
     <string name="container_singular">Container</string>
-    <string name="running">Läuft</string>
+    <string name="running">Laufend</string>
     <!-- Backend Status Card -->
     <string name="backend_checking">Backend: Überprüft...</string>
     <string name="backend_installed">Backend: Installiert</string>
@@ -88,7 +88,7 @@
     <string name="edit_container_configuration">Container-Konfiguration bearbeiten</string>
     <string name="uninstall_container_menu">Container deinstallieren</string>
     <!-- Container Card -->
-    <string name="status_running">LAUFEND</string>
+    <string name="status_running">LÄUFT</string>
     <string name="status_restarting">WIRD NEU GESTARTET</string>
     <string name="status_stopped">GESTOPPT</string>
     <string name="pid_label">PID: %1$d</string>

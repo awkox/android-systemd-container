@@ -456,4 +456,5 @@
     <string name="repo_custom_url_hint">rootfs.json URL</string>
     <string name="repo_custom_url_empty">URL 不能为空</string>
     <string name="repo_add_custom">添加自定义仓库</string>
+    <string name="read_only">只读</string>
 </resources>

@@ -3,4 +3,7 @@
     <plurals name="container_count">
         <item quantity="other">%d 個のコンテナ</item>
     </plurals>
+    <plurals name="notification_sessions_running">
+        <item quantity="other">%d 個のセッションを実行中</item>
+    </plurals>
 </resources>
