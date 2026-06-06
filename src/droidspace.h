@@ -49,6 +49,7 @@
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
+#include <linux/loop.h>
 
 #ifndef RAMFS_MAGIC
 #define RAMFS_MAGIC 0x858458f6
@@ -845,5 +846,10 @@ int check_requirements_detailed(void);
 int ds_daemon_run(int foreground, char **argv);
 int ds_client_run(int argc, char **argv);
 int ds_daemon_probe(void);
+
+/* ---------------------------------------------------------------------------
+ * create_img.c
+ * ---------------------------------------------------------------------------*/
+int ds_create_image(const char *archive, const char *image, const char *size);
 
 #endif /* DROIDSPACE_H */

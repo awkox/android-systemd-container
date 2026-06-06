@@ -60,7 +60,8 @@ SRCS = $(SRC_DIR)/main.c \
        $(SRC_DIR)/x11.c \
        $(SRC_DIR)/virgl-android.c \
        $(SRC_DIR)/pulseaudio-android.c \
-       $(SRC_DIR)/virtualize.c
+       $(SRC_DIR)/virtualize.c \
+       $(SRC_DIR)/create_img.c
 
 # Compiler flags - hardened warning set, all warnings are errors
 CFLAGS  = -Wall -Wextra -Wpedantic -Werror -O2 -flto=auto -std=gnu99 -I$(SRC_DIR) -no-pie -pthread
