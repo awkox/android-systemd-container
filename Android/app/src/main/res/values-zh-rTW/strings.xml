@@ -462,4 +462,5 @@
     <string name="enable_virgl_description">透過 VirGL 啟用 3D 硬體加速</string>
     <string name="virgl_extra_flags_label">VirGL 額外參數標記</string>
     <string name="virgl_extra_flags_placeholder">例如： --multi-clients --angle-vulkan</string>
+    <string name="termux_requirements">Termux 需求</string>
 </resources>
