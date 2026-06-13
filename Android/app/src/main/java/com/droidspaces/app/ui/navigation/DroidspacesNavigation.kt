@@ -24,6 +24,7 @@ import com.droidspaces.app.ui.screen.MainTabScreen
 import com.droidspaces.app.ui.screen.RootCheckScreen
 import com.droidspaces.app.ui.screen.SettingsScreen
 import com.droidspaces.app.ui.screen.RequirementsScreen
+import com.droidspaces.app.ui.screen.AutoBootPriorityScreen
 import com.droidspaces.app.ui.screen.WelcomeScreen
 import com.droidspaces.app.ui.screen.ContainerNameScreen
 import com.droidspaces.app.ui.screen.SparseImageConfigScreen
@@ -68,6 +69,7 @@ sealed class Screen(val route: String) {
     }
     data object Settings : Screen("settings")
     data object Requirements : Screen("requirements")
+    data object AutoBootPriority : Screen("auto_boot_priority")
 
     // Container installation wizard screens
     data object ContainerName : Screen("container_name/{tarballUri}") {
@@ -321,10 +323,15 @@ fun DroidspacesNavigation(
                 initialBlockNestedNs = viewModel.blockNestedNs,
                 initialPrivileged = viewModel.privileged,
                 initialEnvFileContent = viewModel.envFileContent ?: "",
-                initialUpstreamInterfaces = viewModel.upstreamInterfaces,
                 initialPortForwards = viewModel.portForwards,
-                onNext = { netMode, disableIPv6, enableAndroidStorage, enableHwAccess, enableGpuMode, enableTermuxX11, tx11ExtraFlags, enableVirgl, virglExtraFlags, enablePulseaudio, selinuxPermissive, volatileMode, bindMounts, dnsServers, runAtBoot, customInit, staticNatIp, forceCgroupv1, blockNestedNs, privileged, envFileContent, upstreamInterfaces, portForwards ->
-                    viewModel.setConfig(netMode, disableIPv6, enableAndroidStorage, enableHwAccess, enableGpuMode, enableTermuxX11, tx11ExtraFlags, enableVirgl, virglExtraFlags, enablePulseaudio, selinuxPermissive, volatileMode, bindMounts, dnsServers, runAtBoot, customInit, staticNatIp, envFileContent, upstreamInterfaces, portForwards, forceCgroupv1, blockNestedNs, privileged)
+                initialGatewayContainer = viewModel.gatewayContainer,
+                initialGatewayNet = viewModel.gatewayNet,
+                initialGatewayIface = viewModel.gatewayIface,
+                initialGatewayBridge = viewModel.gatewayBridge,
+                containerName = viewModel.containerName,
+                installedContainers = sharedContainerViewModel.containerList,
+                onNext = { netMode, disableIPv6, enableAndroidStorage, enableHwAccess, enableGpuMode, enableTermuxX11, tx11ExtraFlags, enableVirgl, virglExtraFlags, enablePulseaudio, selinuxPermissive, volatileMode, bindMounts, dnsServers, runAtBoot, customInit, staticNatIp, forceCgroupv1, blockNestedNs, privileged, envFileContent, portForwards, gatewayContainer, gatewayNet, gatewayIface, gatewayBridge ->
+                    viewModel.setConfig(netMode, disableIPv6, enableAndroidStorage, enableHwAccess, enableGpuMode, enableTermuxX11, tx11ExtraFlags, enableVirgl, virglExtraFlags, enablePulseaudio, selinuxPermissive, volatileMode, bindMounts, dnsServers, runAtBoot, customInit, staticNatIp, envFileContent, portForwards, forceCgroupv1, blockNestedNs, privileged, gatewayContainer, gatewayNet, gatewayIface, gatewayBridge)
                     navController.navigate(Screen.SparseImageConfig.route)
                 },
                 onBack = {
@@ -507,6 +514,24 @@ fun DroidspacesNavigation(
                 },
                 onNavigateToRequirements = {
                     navController.navigate(Screen.Requirements.route)
+                },
+                onNavigateToAutoBootPriority = {
+                    navController.navigate(Screen.AutoBootPriority.route)
+                }
+            )
+        }
+
+        composable(
+            route = Screen.AutoBootPriority.route,
+            enterTransition = defaultEnterTransition,
+            exitTransition = defaultExitTransition,
+            popEnterTransition = defaultEnterTransition,
+            popExitTransition = defaultExitTransition
+        ) {
+            AutoBootPriorityScreen(
+                containerViewModel = sharedContainerViewModel,
+                onBack = {
+                    navController.popBackStack()
                 }
             )
         }
