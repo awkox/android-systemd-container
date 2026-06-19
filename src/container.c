@@ -15,6 +15,10 @@
  * The monitor is READ-ONLY for locks.
  * ---------------------------------------------------------------------------*/
 
+/* 保存当前进程持有的锁 FD 和路径，解决进程内多次申请锁的重入问题 */
+static int active_lock_fd = -1;
+static char active_lock_path[PATH_MAX] = {0};
+
 /* Build lock path with defensive truncation.
  * Precision: 2048 (pids_dir) + 256 (name) + 5 (.lock) = 2309 < PATH_MAX (4096)
  * This prevents format-truncation warnings while ensuring paths never overflow.
@@ -31,73 +35,71 @@ static int get_lock_path(const char *name, char *buf, size_t size) {
 }
 
 /* Create external command lock - ONLY called by CLI parent.
- * Uses O_CREAT|O_EXCL for atomic lock acquisition: if two processes race,
- * exactly one gets the lock (the kernel guarantees EEXIST for the loser).
+ * Uses POSIX record locks (fcntl) for automatic kernel cleanup.
  * Returns: 0 on success, -1 if lock already held by a live process. */
 static int acquire_external_lock(const char *name) {
+  /* Re-entrancy: 如果当前进程已经持有锁（例如 restart 流程），直接返回成功 */
+  if (active_lock_fd >= 0)
+    return 0;
+
   char lock_path[PATH_MAX];
   if (get_lock_path(name, lock_path, sizeof(lock_path)) < 0)
     return -1;
 
-  /* Try atomic create-and-own.  O_EXCL guarantees mutual exclusion. */
-  int fd = open(lock_path, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0644);
-  if (fd >= 0) {
-    char pid_str[32];
-    snprintf(pid_str, sizeof(pid_str), "%d\n", getpid());
-    ssize_t w = write_all(fd, pid_str, strlen(pid_str));
-    close(fd);
-    return (w >= 0) ? 0 : -1;
-  }
-
-  if (errno != EEXIST)
+  /* 获取写锁必须使用可写模式打开 */
+  int fd = open(lock_path, O_CREAT | O_RDWR | O_CLOEXEC, 0644);
+  if (fd < 0)
     return -1;
 
-  /* Lock file exists — check if holder is still alive. */
-  char buf[32];
-  if (read_file(lock_path, buf, sizeof(buf)) > 0) {
-    pid_t holder = (pid_t)atoi(buf);
-    if (holder > 0 && holder != getpid() && kill(holder, 0) == 0) {
-      log_warn("Cannot acquire lock: held by process %d", holder);
-      return -1;
-    }
-    /* Stale lock — remove it and retry. */
-    if (holder > 0 && holder != getpid())
-      log_info("Removing stale lock (holder PID %d is dead)", holder);
-  }
+  struct flock fl;
+  memset(&fl, 0, sizeof(fl));
+  fl.l_type = F_WRLCK;    /* 排他写锁 */
+  fl.l_whence = SEEK_SET;
 
-  unlink(lock_path);
-  /* Retry: another process might beat us, but that's fine — O_EXCL
-   * ensures only one of us succeeds. */
-  fd = open(lock_path, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0644);
-  if (fd >= 0) {
+  /* 尝试非阻塞 POSIX 记录锁 */
+  if (fcntl(fd, F_SETLK, &fl) == 0) {
+    /* 获取成功。依然写入 PID，仅用于后续可能的纯文本 Debug */
     char pid_str[32];
     snprintf(pid_str, sizeof(pid_str), "%d\n", getpid());
-    ssize_t w = write_all(fd, pid_str, strlen(pid_str));
-    close(fd);
-    return (w >= 0) ? 0 : -1;
+    if (ftruncate(fd, 0) == 0) {
+      write_all(fd, pid_str, strlen(pid_str));
+    }
+    
+    /* 记录 FD，进程退出或关闭该 FD 时，内核会自动释放锁 */
+    active_lock_fd = fd;
+    safe_strncpy(active_lock_path, lock_path, sizeof(active_lock_path));
+    return 0;
   }
 
+  /* 锁被其他进程占用，向内核查询持有者的 PID 并打印 */
+  if (errno == EACCES || errno == EAGAIN) {
+    fl.l_type = F_WRLCK;
+    if (fcntl(fd, F_GETLK, &fl) == 0 && fl.l_type != F_UNLCK) {
+      log_warn("Cannot acquire lock: held by process %d", fl.l_pid);
+    }
+  }
+
+  close(fd);
   return -1;
 }
 
-/* Release external command lock - ONLY called by CLI parent.
- * Verifies ownership before removing. */
+/* Release external command lock - ONLY called by CLI parent. */
 static void release_external_lock(const char *name) {
-  char lock_path[PATH_MAX];
-  if (get_lock_path(name, lock_path, sizeof(lock_path)) < 0)
-    return;
+  (void)name; /* 路径由全局状态管理，无需重新解析 */
 
-  /* Verify we own the lock before removing */
-  char buf[32];
-  if (read_file(lock_path, buf, sizeof(buf)) > 0) {
-    pid_t holder = (pid_t)atoi(buf);
-    if (holder == getpid()) {
-      unlink(lock_path);
-    } else if (holder > 0) {
-      /* This should never happen but log it for debugging */
-      log_warn("Attempted to release lock owned by PID %d (we are %d)", holder,
-               getpid());
+  if (active_lock_fd >= 0) {
+    /* 
+     * 在关闭 FD 前先 unlink，防止其他排队的进程获取到一个即将被删除的孤儿文件的锁。
+     * 这保持了 /tmp/ds-fork/lock 目录的干净。
+     */
+    if (active_lock_path[0]) {
+      unlink(active_lock_path);
     }
+    
+    /* 原子操作：关闭 FD 的瞬间，内核释放关联的 POSIX 锁 */
+    close(active_lock_fd);
+    active_lock_fd = -1;
+    active_lock_path[0] = '\0';
   }
 }
 
@@ -112,22 +114,30 @@ int is_external_lock_active(const char *name) {
   if (get_lock_path(name, lock_path, sizeof(lock_path)) < 0)
     return 0;
 
-  if (access(lock_path, F_OK) != 0)
-    return 0; /* No lock */
+  int fd = open(lock_path, O_RDONLY | O_CLOEXEC);
+  if (fd < 0)
+    return 0; /* 文件不存在 -> 没有锁 */
 
-  /* Lock exists - verify holder is alive */
-  char buf[32];
-  if (read_file(lock_path, buf, sizeof(buf)) > 0) {
-    pid_t holder = (pid_t)atoi(buf);
-    if (holder > 0 && kill(holder, 0) == 0)
-      return 1; /* Valid lock */
+  struct flock fl;
+  memset(&fl, 0, sizeof(fl));
+  fl.l_type = F_WRLCK;
+  fl.l_whence = SEEK_SET;
 
-    /* Stale lock detected */
-    write_monitor_debug_log(name, "Removing stale lock (holder PID %d is dead)",
-                            holder);
+  /* 使用 F_GETLK 向内核确认是否有进程正持有写锁 */
+  if (fcntl(fd, F_GETLK, &fl) == 0) {
+    if (fl.l_type != F_UNLCK) {
+      close(fd);
+      return 1; /* Valid lock held */
+    }
   }
 
-  /* Remove stale lock */
+  close(fd);
+
+  /* 
+   * 到这里说明没有任何进程持有锁。由于文件还存在，这说明这是一个宿主异常断电或 
+   * kill -9 遗留的死锁文件。顺手将其清理。
+   */
+  write_monitor_debug_log(name, "Removing stale lock file");
   unlink(lock_path);
   return 0;
 }
