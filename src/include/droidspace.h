@@ -496,8 +496,6 @@ void cleanup_container_resources(struct ds_config *cfg, pid_t pid,
                                  int skip_unmount, int force_cleanup);
 void ds_open_container_log(struct ds_config *cfg);
 void ds_close_container_log(void);
-void ds_socketd_record_core_event(const char *action,
-                                  const char *container_name, const char *uuid);
 int copy_file(const char *src, const char *dst);
 void sort_bind_mounts(struct ds_config *cfg);
 void sanitize_container_name(const char *name, char *out, size_t size);

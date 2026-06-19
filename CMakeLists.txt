@@ -68,16 +68,6 @@ target_link_options(asc PRIVATE
 	-static
 )
 
-option(ENABLE_SOCKETD_BACKEND "Enable socketd backend" ON)
-if (ENABLE_SOCKETD_BACKEND)
-	target_compile_definitions(asc PRIVATE
-		DS_ENABLE_SOCKETD_BACKEND=1
-	)
-	target_sources(asc PRIVATE
-		src/socketd_bridge.c
-	)
-endif()
-
 # LTO检查
 include(CheckIPOSupported)
 check_ipo_supported(RESULT lto_supported LANGUAGES C CXX)

@@ -751,7 +751,6 @@ int start_rootfs(struct ds_config *cfg) {
     }
 
     show_info(cfg, 1);
-    ds_socketd_record_core_event("start", cfg->container_name, cfg->uuid);
     ds_log("Container '%s' is running in background.", cfg->container_name);
     if (is_android()) {
       ds_log("Use 'su -c \"%s --name='%s' enter\"' to connect.", cfg->prog_name,
@@ -956,7 +955,6 @@ int stop_rootfs_with_timeout(struct ds_config *cfg, int skip_unmount,
 
   /* 5. Complete resource cleanup. */
   cleanup_container_resources(cfg, pid, skip_unmount, unkillable);
-  ds_socketd_record_core_event("die", cfg->container_name, cfg->uuid);
 
   if (!cfg->foreground)
     ds_log("Container '%s' stopped.", cfg->container_name);

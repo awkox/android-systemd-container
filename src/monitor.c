@@ -614,7 +614,6 @@ reboot_loop:;
      * the same memory.  The DHCP thread is intentionally joinable so stop()
      * can join before memset. */
     ds_dhcp_server_stop();
-    ds_socketd_record_core_event("restart", cfg->container_name, cfg->uuid);
 
     goto reboot_loop;
   }
