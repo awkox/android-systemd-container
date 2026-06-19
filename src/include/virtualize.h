@@ -13,7 +13,7 @@
 #ifndef VIRTUALIZE_H
 #define VIRTUALIZE_H
 
-#include "ds-fork.h"
+#include "asc.h"
 
 /* Initialize virtual proc in container rootfs (called inside container,
  * pre-exec). Creates tmpfs at /run/ds-fork/vproc, writes and bind-mounts

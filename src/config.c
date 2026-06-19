@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "ds-fork.h"
+#include "asc.h"
 
 /* Forward declarations */
 static void add_unknown_line(struct config *cfg, const char *line);

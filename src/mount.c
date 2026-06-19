@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "ds-fork.h"
+#include "asc.h"
 
 /* Forward declarations for loop helpers used in find_available_mountpoint */
 static void loop_detach(const char *loop_dev);

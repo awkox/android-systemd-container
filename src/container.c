@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "ds-fork.h"
+#include "asc.h"
 
 /* ---------------------------------------------------------------------------
  * External Command Lock - CLI-only ownership

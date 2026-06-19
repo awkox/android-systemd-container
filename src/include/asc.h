@@ -5,8 +5,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef FORK_H
-#define FORK_H
+#ifndef ASC_H
+#define ASC_H
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
@@ -457,4 +457,4 @@ int daemon_run(int foreground);
 int client_run(int argc, char **argv);
 int daemon_probe(void);
 
-#endif /* FORK_H */
+#endif /* ASC_H */

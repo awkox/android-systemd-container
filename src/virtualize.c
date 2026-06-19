@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "virtualize.h"
+#include "asc.h"
 
 #define VPROC_PATH FORK_MARKER "/vproc"
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
