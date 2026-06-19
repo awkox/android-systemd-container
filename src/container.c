@@ -197,6 +197,15 @@ void cleanup_container_resources(struct config *cfg,
     }
   }
 
+  /* 解除镜像文件上的防删除 VFS Bind 挂载 */
+  if (cfg->rootfs_img_path[0] && !skip_unmount) {
+    if (is_mountpoint(cfg->rootfs_img_path)) {
+      if (umount2(cfg->rootfs_img_path, MNT_DETACH) == 0) {
+        /* log_info("Released VFS lock on image file."); */
+      }
+    }
+  }
+
   /* 5. Remove tracking info.
    * For restart (skip_unmount), preserve locks so start can detect handoff. */
   if (!skip_unmount) {
