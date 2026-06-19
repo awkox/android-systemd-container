@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.28)
 
-project("Android Systemd Container"
+project(asc
 	VERSION 1.0.0
-	DESCRIPTION ""
+	DESCRIPTION "Android Systemd Container"
+	HOMEPAGE_URL "https://github.com/awkox/android-systemd-container"
 	LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 23)

@@ -391,9 +391,9 @@ reboot_loop:;
     }
 
     if (cfg->foreground) {
-      printf("\n" C_WHITE PROJECT_NAME " v%s : Container " C_GREEN
-             "%s" C_RESET C_WHITE " is now Rebooting...." C_RESET "\n",
-             RUNTIME_VERSION, cfg->container_name);
+      printf("\n" C_WHITE PROJECT_NAME " " PROJECT_VERSION " : "
+             "Container " C_GREEN "%s" C_RESET C_WHITE " is now Rebooting" C_RESET "\n",
+             cfg->container_name);
       fflush(stdout);
     }
 

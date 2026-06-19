@@ -237,7 +237,6 @@ int is_valid_container_pid(pid_t pid) {
  * ---------------------------------------------------------------------------*/
 
 int start_rootfs(struct config *cfg) {
-
   int has_side_effects = 0;
   int lock_acquired = 0;
 
@@ -262,10 +261,7 @@ int start_rootfs(struct config *cfg) {
     }
   }
 
-  /* 1. Logo & Uniqueness Check */
-  check_kernel_recommendation();
-
-  /* 1b. Name Uniqueness Check
+  /* 1. Name Uniqueness Check
    * We no longer auto-generate or increment names. The name must be provided
    * by the user and it must be unique. */
   if (!lock_acquired) {
@@ -1046,7 +1042,6 @@ int restart_rootfs_with_timeout(struct config *cfg, int timeout_seconds) {
     return -1;
   }
   putchar('\n');
-  print_banner();
   return start_rootfs(cfg);
 }
 

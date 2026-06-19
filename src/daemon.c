@@ -897,8 +897,6 @@ int daemon_run(int foreground) {
   signal(SIGCHLD, SIG_IGN); /* auto-reap children */
   signal(SIGPIPE, SIG_IGN); /* ignore broken pipes */
 
-  fprintf(stdout, "\nds-fork Daemon - v" RUNTIME_VERSION "\n\n");
-  fflush(stdout);
   log_info("Listening on @" SOCK_NAME " (PID %d)", getpid());
 
   for (;;) {

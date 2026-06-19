@@ -62,18 +62,14 @@
 #include <libgen.h>
 #include <ftw.h>
 
+#include "version.h"
+
 /* ---------------------------------------------------------------------------
  * Constants
  * ---------------------------------------------------------------------------*/
 
-#define PROJECT_NAME "ds-fork"
-#define RUNTIME_VERSION "6.2.5"
-#define MIN_KERNEL_MAJOR 3
-#define MIN_KERNEL_MINOR 10
-#define RECOMMENDED_KERNEL_MAJOR 4
-#define RECOMMENDED_KERNEL_MINOR 14
-#define AUTHOR "ravindu644"
-#define REPO_URL "https://github.com/ravindu644/" PROJECT_NAME "-OSS"
+#define MIN_KERNEL_MAJOR 4
+#define MIN_KERNEL_MINOR 9
 #define UUID_LEN 32
 #define MAX_CONTAINERS 1024
 #define STOP_TIMEOUT 15 /* seconds */
@@ -276,10 +272,8 @@ int path_has_symlink(const char *path);
 void firmware_path_add(const char *fw_path);
 void firmware_path_remove(const char *fw_path);
 int run_command_quiet(char *const argv[]);
-void print_banner(void);
 void print_privileged_warning(int privileged_mask);
 
-void check_kernel_recommendation(void);
 void write_monitor_debug_log(const char *name, const char *fmt, ...);
 void monitor_run(struct config *cfg, int sync_pipe_write);
 int is_external_lock_active(const char *name);

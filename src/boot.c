@@ -405,7 +405,7 @@ int internal_boot(struct config *cfg) {
     write_file(FORK_MARKER "/mount", cfg->img_mount_point);
 
   /* Legacy compatibility: write version to the marker directory root */
-  write_file(FORK_MARKER "/version", RUNTIME_VERSION);
+  write_file(FORK_MARKER "/version", PROJECT_VERSION);
   if (cfg->foreground) {
     printf(C_BOLD C_WHITE "\r\n(to exit from the foreground mode, press "
                           "CTRL+ALT+Q)\r\n" C_RESET);

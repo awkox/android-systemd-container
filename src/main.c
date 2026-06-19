@@ -16,13 +16,6 @@ int log_container_fd = -1;
  * ---------------------------------------------------------------------------*/
 
 void print_usage(void) {
-  printf(C_BOLD
-         "%s v%s — High-performance Container Runtime for Android/Linux" C_RESET
-         "\n",
-         PROJECT_NAME, RUNTIME_VERSION);
-  printf("by " C_CYAN "%s" C_RESET "\n", AUTHOR);
-  printf("\n" C_BLUE "%s" C_RESET "\n", REPO_URL);
-  printf(C_DIM "Built on: %s %s" C_RESET "\n\n", __DATE__, __TIME__);
   printf(
       "Usage: " PROJECT_NAME " [options] <command> [args]\n\n" C_BOLD
       "Commands:" C_RESET "\n"
@@ -36,7 +29,6 @@ void print_usage(void) {
       "  scan                      Scan for untracked containers\n"
       "  check                     Check system requirements\n"
       "  help                      Show this help message\n"
-      "  version                   Show version information\n"
       "  daemon                    Run daemon mode (use --foreground for "
       "foreground execution)\n\n"
 
@@ -47,11 +39,7 @@ void print_usage(void) {
       C_BOLD "Options (Runtime):" C_RESET "\n"
       "  -f, --foreground          Run in foreground (attach console)\n"
       "      --format              Machine-parseable output (KEY=VALUE)\n"
-      "      --help                Show this help message\n\n"
-
-      C_BOLD "Examples:" C_RESET "\n"
-      "  " PROJECT_NAME " --name=mycontainer --config=container.config start\n"
-      "  " PROJECT_NAME " --name=mycontainer stop\n\n");
+      "      --help                Show this help message\n\n");
 }
 
 /* ---------------------------------------------------------------------------
@@ -71,14 +59,6 @@ static int validate_kernel_version(void) {
     log_error(PROJECT_NAME " requires at least Linux %d.%d.0.",
               MIN_KERNEL_MAJOR, MIN_KERNEL_MINOR);
     log_info("Detected kernel: %d.%d", major, minor);
-    printf("\n" C_DIM "Why? " PROJECT_NAME
-           " v3 relies on features like OverlayFS and mature\n"
-           "namespace isolation that are only stable on kernels %d.%d+.\n"
-           "Running on this kernel would lead to system instability or "
-           "crashes." C_RESET "\n\n",
-           MIN_KERNEL_MAJOR, MIN_KERNEL_MINOR);
-    log_info("You can still use " C_BOLD "check, info, help, scan" C_RESET
-             " for diagnostics.");
     return -1;
   }
 
@@ -252,7 +232,6 @@ int main(int argc, char **argv) {
    */
   int is_no_root_cmd =
       (discovered_cmd && (strcmp(discovered_cmd, "help") == 0 ||
-                          strcmp(discovered_cmd, "version") == 0 ||
                           strcmp(discovered_cmd, "mode") == 0 ||
                           strcmp(discovered_cmd, "check") == 0));
 
@@ -443,7 +422,6 @@ int main(int argc, char **argv) {
       goto cleanup;
     }
     check_network_namespace(&cfg);
-    print_banner();
     print_privileged_warning(cfg.privileged_mask);
     if ((cfg.privileged_mask & PRIV_NOSEC) && cfg.block_nested_ns)
       log_warn("--privileged=noseccomp is active: --block-nested-namespaces "

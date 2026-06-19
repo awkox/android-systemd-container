@@ -203,9 +203,7 @@ int check_requirements_detailed(void) {
 
   check_root();
 
-  check_append("\n" C_BOLD PROJECT_NAME
-               " v%s — Checking system requirements..." C_RESET "\n\n",
-               RUNTIME_VERSION);
+  check_append("\n" C_BOLD "Checking system requirements..." C_RESET "\n\n");
 
   int missing_must = 0;
 

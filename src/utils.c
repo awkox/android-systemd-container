@@ -834,20 +834,6 @@ int get_kernel_version(int *major, int *minor) {
   return 0;
 }
 
-void check_kernel_recommendation(void) {
-  int major = 0, minor = 0;
-  if (get_kernel_version(&major, &minor) < 0)
-    return;
-
-  if (major < RECOMMENDED_KERNEL_MAJOR ||
-      (major == RECOMMENDED_KERNEL_MAJOR && minor < RECOMMENDED_KERNEL_MINOR)) {
-    log_warn("Your kernel (%d.%d) is below recommended %d.%d - "
-             "some functions might be unstable.",
-             major, minor, RECOMMENDED_KERNEL_MAJOR, RECOMMENDED_KERNEL_MINOR);
-    fflush(stdout);
-  }
-}
-
 void rotate_log(const char *path, size_t max_size) {
   struct stat st;
   if (stat(path, &st) == 0 && (size_t)st.st_size >= max_size) {
@@ -1013,12 +999,6 @@ void close_container_log(void) {
     close(log_container_fd);
     log_container_fd = -1;
   }
-}
-
-void print_banner(void) {
-  printf(C_CYAN C_BOLD "— Welcome to " C_WHITE PROJECT_NAME
-                       " v" RUNTIME_VERSION C_CYAN " ! —" C_RESET "\r\n\r\n");
-  fflush(stdout);
 }
 
 void print_privileged_warning(int privileged_mask) {
