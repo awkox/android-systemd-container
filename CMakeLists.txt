@@ -12,8 +12,6 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
-find_package(Threads REQUIRED)
-
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/include/version.h.in"
     "${CMAKE_CURRENT_BINARY_DIR}/generated/version.h"
@@ -23,11 +21,10 @@ configure_file(
 add_executable(asc
 	src/main.c
 	src/utils.c
-	src/android/android.c
+	src/android.c
 	src/seccomp.c
 	src/mount.c
 	src/cgroup.c
-	src/net/network.c
 	src/terminal.c
 	src/console.c
 	src/pid.c
@@ -35,17 +32,10 @@ add_executable(asc
 	src/config.c
 	src/container.c
 	src/monitor.c
-	src/environment.c
-	src/documentation.c
 	src/hardware.c
-	src/net/iptables.c
-	src/net/netlink.c
-	src/net/dhcp.c
+	src/netlink.c
 	src/daemon.c
 	src/check.c
-	src/android/x11.c
-	src/android/virgl.c
-	src/android/pulseaudio.c
 	src/virtualize.c
 )
 target_include_directories(asc PRIVATE 
@@ -54,7 +44,6 @@ target_include_directories(asc PRIVATE
 )
 target_link_libraries(asc PRIVATE
 	util
-	Threads::Threads
 )
 target_compile_options(asc PRIVATE
 	-ffunction-sections

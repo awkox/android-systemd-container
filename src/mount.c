@@ -1,14 +1,11 @@
 /*
- * Droidspaces v6 - High-performance Container Runtime
+ * ds-fork v6 - High-performance Container Runtime
  *
  * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "droidspace.h"
-#include <linux/loop.h>
-
-#define DS_VTTY_COUNT 6 /* /dev/tty1..6 null symlinks for non-systemd inits */
+#include "ds-fork.h"
 
 /* Forward declarations for loop helpers used in find_available_mountpoint */
 static void loop_detach(const char *loop_dev);
@@ -46,12 +43,12 @@ static int force_unlink(const char *path) {
   return 0;
 }
 
-/* Find available mount point in /mnt/Droidspaces/ using container name.
+/* Find available mount point in /tmp/ds-fork/mnt/ using container name.
  * If a mount point already exists for this name but is not associated
  * with an active container (stale), it will be cleaned up. */
 static int find_available_mountpoint(const char *name, char *mount_path,
                                      size_t size) {
-  const char *base_dir = DS_IMG_MOUNT_ROOT_UNIVERSAL;
+  const char *base_dir = IMG_MOUNT_ROOT;
 
   /* Create base directory if it doesn't exist */
   mkdir(base_dir, 0755);
@@ -66,7 +63,7 @@ static int find_available_mountpoint(const char *name, char *mount_path,
       /* This is a stale mount point from a previous crashed run.
        * (We know it's stale because start_rootfs ensures the container name
        * itself is unique among currently running containers). */
-      ds_warn("Found stale mount at %s, cleaning up...", mount_path);
+      log_warn("Found stale mount at %s, cleaning up...", mount_path);
       if (umount2(mount_path, MNT_DETACH) < 0) {
         /* umount2 failed: find and detach the backing loop device explicitly */
         char stale_dev[256] = {0};
@@ -80,8 +77,8 @@ static int find_available_mountpoint(const char *name, char *mount_path,
   }
 
   if (mkdir(mount_path, 0755) < 0) {
-    ds_error("Failed to create mount directory %s: %s", mount_path,
-             strerror(errno));
+    log_error("Failed to create mount directory %s: %s", mount_path,
+              strerror(errno));
     return -1;
   }
 
@@ -97,23 +94,8 @@ int domount(const char *src, const char *tgt, const char *fstype,
   if (mount(src, tgt, fstype, flags, data) < 0) {
     /* Don't log if it's already mounted (EBUSY) */
     if (errno != EBUSY) {
-      ds_error("Failed to mount %s on %s (%s): %s", src ? src : "none", tgt,
-               fstype ? fstype : "none", strerror(errno));
-      return -1;
-    }
-  }
-  return 0;
-}
-
-/* Like domount but logs failures at [DEBUG] level - used for best-effort
- * mounts where failure is expected on some environments (e.g. cgroup
- * bind-mounts on ROMs with non-standard controller paths). */
-int domount_silent(const char *src, const char *tgt, const char *fstype,
-                   unsigned long flags, const char *data) {
-  if (mount(src, tgt, fstype, flags, data) < 0) {
-    if (errno != EBUSY) {
-      ds_log("[DEBUG] mount %s -> %s failed: %s", src ? src : "none",
-             strerror(errno));
+      log_error("Failed to mount %s on %s (%s): %s", src ? src : "none", tgt,
+                fstype ? fstype : "none", strerror(errno));
       return -1;
     }
   }
@@ -124,11 +106,62 @@ int domount_silent(const char *src, const char *tgt, const char *fstype,
  * Silently skips if the path doesn't exist.  The resulting mount entry
  * preserves the parent filesystem type (e.g. "proc on /proc/kcore type
  * proc (ro)") - matching LXC's clean approach. */
-static void ds_mask_path(const char *path) {
+static void mask_path(const char *path) {
   if (access(path, F_OK) != 0)
     return;
   mount(path, path, NULL, MS_BIND, NULL);
   mount(path, path, NULL, MS_BIND | MS_REMOUNT | MS_RDONLY, NULL);
+}
+
+/* Nullify a sensitive path by bind-mounting /dev/null over it.
+ * Silently skips if either path doesn't exist.  Used for kernel log
+ * interfaces (/proc/kmsg) where read access itself must be blocked,
+ * not just writes.  Matches the approach used by LXC.
+ *
+ * NOTE: For paths that cause CPU-spin when read returns EOF (e.g. rsyslogd
+ * imklog), use kmsg_block_read() instead — it provides a FIFO that blocks
+ * readers indefinitely, preventing the tight read-EOF-retry loop. */
+static void nullify_path(const char *path) {
+  if (access(path, F_OK) != 0)
+    return;
+  if (access("/dev/null", F_OK) != 0)
+    return;
+  mount("/dev/null", path, NULL, MS_BIND, NULL);
+}
+
+/* Block a path with a FIFO that has a persistent writer.
+ * Readers block on read() instead of getting immediate EOF — this prevents
+ * CPU-spin in daemons like rsyslogd imklog that retry in a tight loop.
+ * The writer child holds the FIFO open until the container dies. */
+static void block_read_path(const char *path) {
+  if (access(path, F_OK) != 0)
+    return;
+
+  char fifo_path[64];
+  snprintf(fifo_path, sizeof(fifo_path), "/tmp/." PROJECT_NAME "-kmsg-fifo-%d",
+           getpid());
+
+  unlink(fifo_path);
+  if (mkfifo(fifo_path, 0600) < 0)
+    return;
+
+  /* Fork a child to hold the FIFO write end open; otherwise readers get
+   * immediate EOF (or ENXIO with O_NONBLOCK).  The child does nothing — it
+   * just exists to keep the write end alive. */
+  pid_t child = fork();
+  if (child == 0) {
+    int wfd = open(fifo_path, O_WRONLY);
+    if (wfd >= 0)
+      pause();
+    _exit(0);
+  }
+
+  /* Bind-mount the FIFO over the target path.  Readers will block awaiting
+   * data that never arrives — no CPU spin. */
+  if (child > 0)
+    mount(fifo_path, path, NULL, MS_BIND, NULL);
+
+  unlink(fifo_path);
 }
 
 int bind_mount(const char *src, const char *tgt) {
@@ -153,6 +186,14 @@ int bind_mount(const char *src, const char *tgt) {
 
   struct stat st_tgt;
   if (lstat(tgt, &st_tgt) < 0) {
+    /* Target does not exist — reject if any parent component is a symlink
+     * (lstat only protects the final component from being followed). */
+    if (path_has_symlink(tgt)) {
+      log_error("Security Violation: symlink in bind target path %s", tgt);
+      close(src_fd);
+      errno = ELOOP;
+      return -1;
+    }
     if (S_ISDIR(st_src.st_mode)) {
       mkdir(tgt, st_src.st_mode & 07777);
       if (chown(tgt, st_src.st_uid, st_src.st_gid) < 0) {
@@ -162,7 +203,7 @@ int bind_mount(const char *src, const char *tgt) {
       write_file(tgt, "");
     }
   } else if (S_ISLNK(st_tgt.st_mode)) {
-    ds_error("Security Violation: Bind target %s is a symlink!", tgt);
+    log_error("Security Violation: Bind target %s is a symlink!", tgt);
     close(src_fd);
     errno = ELOOP;
     return -1;
@@ -177,7 +218,7 @@ int bind_mount(const char *src, const char *tgt) {
 }
 
 /*
- * ds_apply_jail_mask()
+ * apply_jail_mask()
  *
  * Secure sensitive kernel interfaces by self-binding and remounting them
  * read-only.  This reduces the container's attack surface and prevents it
@@ -187,9 +228,9 @@ int bind_mount(const char *src, const char *tgt) {
  * In Hardware Mode (hw_access=1), we preserve most paths to fulfill the
  * "everything possible" requirement for low-level hardware tools.
  */
-int ds_apply_jail_mask(int hw_access, int privileged_mask) {
-  if (privileged_mask & DS_PRIV_NOMASK) {
-    ds_log(
+int apply_jail_mask(int hw_access, int privileged_mask) {
+  if (privileged_mask & PRIV_NOMASK) {
+    log_info(
         "[SEC] --privileged=nomask: skipping jail masks for /proc and /sys.");
     return 0;
   }
@@ -197,6 +238,16 @@ int ds_apply_jail_mask(int hw_access, int privileged_mask) {
   /* Universal masks - dangerous for ANY container regardless of HW mode */
   const char *universal_masks[] = {"/proc/sysrq-trigger", "/proc/kcore",
                                    "/proc/timer_list", NULL};
+
+  /* Universal nullify - paths where read access itself must be blocked
+   * (bind-mount /dev/null over them). */
+  const char *universal_nullify[] = {"/proc/partitions", NULL};
+
+  /* Kernel log paths blocked with FIFO instead of /dev/null:
+   * rsyslogd imklog spins at 100% CPU when /dev/null returns immediate
+   * EOF.  A FIFO with a persistent writer blocks read() indefinitely,
+   * preventing both CPU spin and host kernel log leakage. */
+  const char *kmsg_block_paths[] = {"/dev/kmsg", "/proc/kmsg", NULL};
 
   /* Standard mode read-only remounts - preserves paths, blocks writes.
    * Covers both sensitive proc subtrees and dangerous sys interfaces. */
@@ -210,7 +261,17 @@ int ds_apply_jail_mask(int hw_access, int privileged_mask) {
 
   /* Apply universal masks */
   for (int i = 0; universal_masks[i]; i++) {
-    ds_mask_path(universal_masks[i]);
+    mask_path(universal_masks[i]);
+  }
+
+  /* Apply universal nullify (bind-mount /dev/null over sensitive paths) */
+  for (int i = 0; universal_nullify[i]; i++) {
+    nullify_path(universal_nullify[i]);
+  }
+
+  /* Block kernel log reads with FIFO to prevent CPU-spin (rsyslogd imklog) */
+  for (int i = 0; kmsg_block_paths[i]; i++) {
+    block_read_path(kmsg_block_paths[i]);
   }
 
   /* Universal: mask all cgroup v1 release_agent files.
@@ -233,7 +294,7 @@ int ds_apply_jail_mask(int hw_access, int privileged_mask) {
         char agent_path[PATH_MAX];
         snprintf(agent_path, sizeof(agent_path),
                  "/sys/fs/cgroup/%s/release_agent", de->d_name);
-        ds_mask_path(agent_path);
+        mask_path(agent_path);
       }
       closedir(cgdir);
     }
@@ -247,13 +308,12 @@ int ds_apply_jail_mask(int hw_access, int privileged_mask) {
    * write to /proc/sys/kernel/unprivileged_bpf_disabled, /proc/sys/fs/, etc.
    * and corrupt Android host state (eBPF subsystem, dmesg, perf, hardlinks).
    *
-   * Strategy: punch RW bind-mounts for the two genuinely namespace-scoped
-   * subtrees FIRST, then lock all of /proc/sys read-only in one shot.
+   * Strategy: punch RW bind-mounts for the UTS-namespace-scoped
+   * subtrees FIRST, then lock all of /proc/sys read-only.
    * The pre-existing submounts shadow the parent remount.
    *
-   * RW holes (namespace-scoped - safe for containers to write):
-   *   /proc/sys/net              - entirely net-namespace scoped
-   *   /proc/sys/kernel/hostname  - UTS-namespace scoped
+   * RW holes (UTS-namespace scoped — safe for containers to write):
+   *   /proc/sys/kernel/hostname   - UTS-namespace scoped
    *   /proc/sys/kernel/domainname - UTS-namespace scoped
    *
    * Everything else is blocked: kernel/, vm/, fs/, dev/, abi/, debug/.
@@ -268,41 +328,45 @@ int ds_apply_jail_mask(int hw_access, int privileged_mask) {
       mount("/proc/sys", "/proc/sys", NULL, MS_BIND, NULL);
       mount("/proc/sys", "/proc/sys", NULL, MS_BIND | MS_REMOUNT | MS_RDONLY,
             NULL);
-      ds_log("[SEC] /proc/sys locked RO.");
+      log_info("[SEC] /proc/sys locked RO.");
     }
 
     /* Step 2: Stack RW bind mounts on top of the now-RO /proc/sys.
      * Bind inherits RO from parent, so explicitly remount RW after. */
-    const char *rw_holes[] = {"/proc/sys/net", "/proc/sys/kernel/hostname",
+    /* /proc/sys/net intentionally excluded: in host mode it's a
+     * destructive host network modification channel.  In isolated
+     * (none) mode there is no network, so writable net sysctls
+     * are unnecessary. */
+    const char *rw_holes[] = {"/proc/sys/kernel/hostname",
                               "/proc/sys/kernel/domainname", NULL};
     for (int i = 0; rw_holes[i]; i++) {
       if (access(rw_holes[i], F_OK) != 0)
         continue;
       if (mount(rw_holes[i], rw_holes[i], NULL, MS_BIND, NULL) < 0) {
-        ds_warn("[SEC] Failed to bind RW hole %s: %s", rw_holes[i],
-                strerror(errno));
+        log_warn("[SEC] Failed to bind RW hole %s: %s", rw_holes[i],
+                 strerror(errno));
         continue;
       }
       if (mount(rw_holes[i], rw_holes[i], NULL,
                 MS_BIND | MS_REMOUNT | MS_NOSUID | MS_NODEV | MS_NOEXEC,
                 NULL) < 0)
-        ds_warn("[SEC] Failed to remount RW hole %s: %s", rw_holes[i],
-                strerror(errno));
+        log_warn("[SEC] Failed to remount RW hole %s: %s", rw_holes[i],
+                 strerror(errno));
     }
-    ds_log("[SEC] /proc/sys RW holes preserved (net/hostname/domainname).");
+    log_info("[SEC] /proc/sys RW holes preserved (hostname/domainname).");
   }
 
   if (hw_access) {
-    ds_log("[SEC] Hardware Mode: preserved sensitive /proc and /sys paths.");
+    log_info("[SEC] Hardware Mode: preserved sensitive /proc and /sys paths.");
     return 0;
   }
 
   /* Apply standard mode read-only remounts */
   for (int i = 0; standard_ro[i]; i++) {
-    ds_mask_path(standard_ro[i]);
+    mask_path(standard_ro[i]);
   }
 
-  ds_log("[SEC] Jail mask applied (hardened /proc and /sys).");
+  log_info("[SEC] Jail mask applied (hardened /proc and /sys).");
   return 0;
 }
 
@@ -313,8 +377,8 @@ int ds_apply_jail_mask(int hw_access, int privileged_mask) {
  * the container from the host's display server, consoles, and GPU masters.
  */
 static void prune_host_devices(const char *dev_path, int privileged_mask) {
-  if (privileged_mask & DS_PRIV_UNFILTERED) {
-    ds_log("[SEC] --privileged=unfiltered-dev: skipping hardware blocklist.");
+  if (privileged_mask & PRIV_UNFILTERED) {
+    log_info("[SEC] --privileged=unfiltered-dev: skipping hardware blocklist.");
     return;
   }
   DIR *dir = opendir(dev_path);
@@ -419,7 +483,7 @@ int setup_dev(const char *rootfs, int hw_access, int gpu_mode,
        * separately here. */
       mirror_gpu_nodes(dev_path);
     } else {
-      ds_warn("Failed to mount devtmpfs, falling back to tmpfs");
+      log_warn("Failed to mount devtmpfs, falling back to tmpfs");
       if (domount("none", dev_path, "tmpfs", MS_NOSUID | MS_NOEXEC,
                   "size=8M,mode=755") < 0)
         return -1;
@@ -436,17 +500,17 @@ int setup_dev(const char *rootfs, int hw_access, int gpu_mode,
      * the is_dangerous_node() blocklist and only creates character devices
      * that exist on the host, so it is safe to call unconditionally here. */
     if (gpu_mode) {
-      ds_log("[GPU] --gpu mode: mirroring host GPU nodes into isolated tmpfs");
+      log_info(
+          "[GPU] --gpu mode: mirroring host GPU nodes into isolated tmpfs");
       mirror_gpu_nodes(dev_path);
     }
   }
 
   /* Create minimal set of device nodes (creates secure console/ptmx/etc.) */
-  return create_devices(rootfs, hw_access, privileged_mask);
+  return create_devices(rootfs);
 }
 
-int create_devices(const char *rootfs, int hw_access, int privileged_mask) {
-  (void)hw_access;
+int create_devices(const char *rootfs) {
   const struct {
     const char *name;
     mode_t mode;
@@ -508,39 +572,23 @@ int create_devices(const char *rootfs, int hw_access, int privileged_mask) {
   else
     chmod(path, 0666);
 
-  /* 4. Create /dev/tty1-N as symlinks to /dev/null.
-   * For non-systemd inits (openrc, busybox): silences "can't open /dev/ttyN"
-   * log spam -- the node exists, agetty opens /dev/null and exits cleanly.
-   *
-   * Skip in privileged+unfiltered-dev mode: devtmpfs already provides real
-   * ttyN char device nodes and we must not clobber them with symlinks.
-   */
-  if (!(privileged_mask & DS_PRIV_UNFILTERED)) {
-    for (int i = 1; i <= DS_VTTY_COUNT; i++) {
-      snprintf(path, sizeof(path), "%s/dev/tty%d", rootfs, i);
-      force_unlink(path);
-      if (symlink("/dev/null", path) < 0) {
-        /* best-effort, ignore */
-      }
-    }
-  }
   /* Standard symlinks */
   char tgt[PATH_MAX];
   snprintf(tgt, sizeof(tgt), "%s/dev/fd", rootfs);
   if (symlink("/proc/self/fd", tgt) < 0 && errno != EEXIST)
-    ds_warn("Failed to create /dev/fd symlink: %s", strerror(errno));
+    log_warn("Failed to create /dev/fd symlink: %s", strerror(errno));
 
   snprintf(tgt, sizeof(tgt), "%s/dev/stdin", rootfs);
   if (symlink("/proc/self/fd/0", tgt) < 0 && errno != EEXIST)
-    ds_warn("Failed to create /dev/stdin symlink: %s", strerror(errno));
+    log_warn("Failed to create /dev/stdin symlink: %s", strerror(errno));
 
   snprintf(tgt, sizeof(tgt), "%s/dev/stdout", rootfs);
   if (symlink("/proc/self/fd/1", tgt) < 0 && errno != EEXIST)
-    ds_warn("Failed to create /dev/stdout symlink: %s", strerror(errno));
+    log_warn("Failed to create /dev/stdout symlink: %s", strerror(errno));
 
   snprintf(tgt, sizeof(tgt), "%s/dev/stderr", rootfs);
   if (symlink("/proc/self/fd/2", tgt) < 0 && errno != EEXIST)
-    ds_warn("Failed to create /dev/stderr symlink: %s", strerror(errno));
+    log_warn("Failed to create /dev/stderr symlink: %s", strerror(errno));
 
   return 0;
 }
@@ -557,11 +605,11 @@ int setup_devpts(int hw_access) {
   /* Try mounting devpts with newinstance flag (CRITICAL for private PTYs) */
   char optbuf[256];
   snprintf(optbuf, sizeof(optbuf), "gid=%d,newinstance,ptmxmode=0666,mode=0620",
-           DS_DEFAULT_TTY_GID);
+           DEFAULT_TTY_GID);
 
   char optbuf2[128];
   snprintf(optbuf2, sizeof(optbuf2), "gid=%d,newinstance,mode=0620",
-           DS_DEFAULT_TTY_GID);
+           DEFAULT_TTY_GID);
 
   const char *opts[] = {optbuf,        "newinstance,ptmxmode=0666,mode=0620",
                         optbuf2,       "newinstance,ptmxmode=0666",
@@ -607,46 +655,46 @@ int setup_devpts(int hw_access) {
         }
       }
 
-      ds_warn("Failed to virtualize /dev/ptmx, PTYs might not work");
+      log_warn("Failed to virtualize /dev/ptmx, PTYs might not work");
       return 0;
     }
   }
 
-  ds_error("Failed to mount devpts with newinstance flag");
+  log_error("Failed to mount devpts with newinstance flag");
   return -1;
 }
 
-int check_volatile_mode(struct ds_config *cfg) {
+int check_volatile_mode(struct config *cfg) {
   if (!cfg->volatile_mode)
     return 0;
 
   if (grep_file("/proc/filesystems", "overlay") != 1) {
-    ds_error("OverlayFS is not supported by your kernel. Volatile mode cannot "
-             "be used.");
+    log_error("OverlayFS is not supported by your kernel. Volatile mode cannot "
+              "be used.");
     return -1;
   }
 
   /* Pre-flight: reject f2fs lowerdir - known Android kernel limitation */
   struct statfs sfs;
-  if (statfs(cfg->rootfs_path, &sfs) == 0 && sfs.f_type == 0xF2F52010) {
-    ds_error("Volatile mode cannot be used: Your rootfs is on f2fs, which is "
-             "not supported as an OverlayFS lower layer on most Android "
-             "kernels.");
-    ds_error("Tip: Use a rootfs image (-i) instead of a directory (-r) "
-             "for volatile mode on f2fs partitions.");
+  if (statfs(cfg->img_mount_point, &sfs) == 0 && sfs.f_type == 0xF2F52010) {
+    log_error("Volatile mode cannot be used: Your rootfs is on f2fs, which is "
+              "not supported as an OverlayFS lower layer on most Android "
+              "kernels.");
+    log_error("Tip: Use a rootfs image (-i) instead of a directory (-r) "
+              "for volatile mode on f2fs partitions.");
     return -1;
   }
 
   return 0;
 }
 
-int setup_volatile_overlay(struct ds_config *cfg) {
-  /* 1. Create temporary workspace in Droidspaces/Volatile/<name> */
+int setup_volatile_overlay(struct config *cfg) {
+  /* 1. Create temporary workspace in ds-fork/Volatile/<name> */
   char base[PATH_MAX];
-  snprintf(base, sizeof(base), "%s/" DS_VOLATILE_SUBDIR "/%s",
-           get_workspace_dir(), cfg->container_name);
+  snprintf(base, sizeof(base), "%s/" RUNTIME_VOLATILE_SUBDIR "/%s",
+           get_runtime_dir(), cfg->container_name);
   if (mkdir_p(base, 0755) < 0) {
-    ds_error("Failed to create volatile workspace: %s", base);
+    log_error("Failed to create volatile workspace: %s", base);
     return -1;
   }
   safe_strncpy(cfg->volatile_dir, base, sizeof(cfg->volatile_dir));
@@ -671,30 +719,30 @@ int setup_volatile_overlay(struct ds_config *cfg) {
   if (is_android()) {
     n = snprintf(opts, sizeof(opts),
                  "lowerdir=%s,upperdir=%s/upper,workdir=%s/work,context=\"%s\"",
-                 cfg->rootfs_path, base, base, DS_ANDROID_TMPFS_CONTEXT);
+                 cfg->img_mount_point, base, base, ANDROID_TMPFS_CONTEXT);
   } else {
     n = snprintf(opts, sizeof(opts),
                  "lowerdir=%s,upperdir=%s/upper,workdir=%s/work",
-                 cfg->rootfs_path, base, base);
+                 cfg->img_mount_point, base, base);
   }
 
   if (n < 0 || (size_t)n >= sizeof(opts)) {
-    ds_error("OverlayFS options too long");
+    log_error("OverlayFS options too long");
     cleanup_volatile_overlay(cfg);
     return -1;
   }
 
   if (domount("overlay", merged, "overlay", 0, opts) < 0) {
-    ds_error("OverlayFS mount failed. Your kernel might not support it.");
+    log_error("OverlayFS mount failed. Your kernel might not support it.");
     /* Cleanup: unmount tmpfs first, then remove workspace */
     umount2(base, MNT_DETACH);
-    ds_error("OverlayFS mount failed: %s", strerror(errno));
+    log_error("OverlayFS mount failed: %s", strerror(errno));
     cleanup_volatile_overlay(cfg);
     return -1;
   }
 
-  /* 9. Update cfg->rootfs_path to the merged view */
-  safe_strncpy(cfg->rootfs_path, merged, sizeof(cfg->rootfs_path));
+  /* 9. Update cfg->img_mount_point to the merged view */
+  safe_strncpy(cfg->img_mount_point, merged, sizeof(cfg->img_mount_point));
 
   return 0;
 }
@@ -753,7 +801,7 @@ static int is_mount_in_namespace(const char *path) {
  * We simply check if the mount is visible in our namespace (host); if so,
  * we try to unmount it normally before deleting the workspace directory.
  */
-int cleanup_volatile_overlay(struct ds_config *cfg) {
+int cleanup_volatile_overlay(struct config *cfg) {
   if (cfg->volatile_dir[0] == '\0')
     return 0;
 
@@ -776,13 +824,13 @@ int cleanup_volatile_overlay(struct ds_config *cfg) {
 
 done:
   /* settle time for kernel to release backing store info */
-  usleep(DS_RETRY_DELAY_US / 2);
+  usleep(RETRY_DELAY_US / 2);
   int r = remove_recursive(cfg->volatile_dir);
   cfg->volatile_dir[0] = '\0';
   return r;
 }
 
-int setup_custom_binds(struct ds_config *cfg, const char *rootfs) {
+int setup_custom_binds(struct config *cfg, const char *rootfs) {
   if (cfg->bind_count == 0 || !cfg->binds)
     return 0;
 
@@ -794,32 +842,38 @@ int setup_custom_binds(struct ds_config *cfg, const char *rootfs) {
     char tgt[PATH_MAX * 2];
     int n = snprintf(tgt, sizeof(tgt), "%s%s", rootfs, cfg->binds[i].dest);
     if (n < 0 || (size_t)n >= sizeof(tgt)) {
-      ds_warn("Bind mount target path too long, skipping: %s",
-              cfg->binds[i].dest);
+      log_warn("Bind mount target path too long, skipping: %s",
+               cfg->binds[i].dest);
       continue;
     }
 
-    /* Ensure parent directory exists */
+    /* Ensure parent directory exists.
+     * Reject paths containing symlinks: an untrusted rootfs could contain
+     * symlinks (e.g. mnt/hack -> /root) that redirect mkdir to host paths. */
     char parent[PATH_MAX];
     safe_strncpy(parent, tgt, sizeof(parent));
     char *slash = strrchr(parent, '/');
     if (slash) {
       *slash = '\0';
+      if (path_has_symlink(parent)) {
+        log_error("Security Violation: symlink in bind target path %s", parent);
+        continue;
+      }
       mkdir_p(parent, 0755);
     }
 
     /* Perform bind mount (handles source/target symlink checks securely) */
     if (bind_mount(cfg->binds[i].src, tgt) < 0) {
-      ds_warn("Failed to bind mount %s on %s (skipping)", cfg->binds[i].src,
-              tgt);
+      log_warn("Failed to bind mount %s on %s (skipping)", cfg->binds[i].src,
+               tgt);
       continue;
     }
 
     /* Verify isolation: Ensure we didn't accidentally mount over a host path
      * if the container rootfs had a complex malicious structure. */
     if (!is_subpath(rootfs, tgt)) {
-      ds_error("Security Violation: Bind destination %s escapes rootfs %s!",
-               tgt, rootfs);
+      log_error("Security Violation: Bind destination %s escapes rootfs %s!",
+                tgt, rootfs);
       umount2(tgt, MNT_DETACH);
       continue;
     }
@@ -827,7 +881,7 @@ int setup_custom_binds(struct ds_config *cfg, const char *rootfs) {
     /* Remount RO if requested (bind always lands RW first) */
     if (cfg->binds[i].ro) {
       if (mount(NULL, tgt, NULL, MS_REMOUNT | MS_BIND | MS_RDONLY, NULL) < 0)
-        ds_warn("Failed to remount %s read-only: %s", tgt, strerror(errno));
+        log_warn("Failed to remount %s read-only: %s", tgt, strerror(errno));
     }
   }
 
@@ -925,32 +979,32 @@ static int loop_attach(const char *img_path, char *loop_path_out,
                        size_t path_size) {
   int ctl_fd = open("/dev/loop-control", O_RDWR | O_CLOEXEC);
   if (ctl_fd < 0) {
-    ds_error("open /dev/loop-control: %s", strerror(errno));
+    log_error("open /dev/loop-control: %s", strerror(errno));
     return -1;
   }
 
   long devnr = ioctl(ctl_fd, LOOP_CTL_GET_FREE);
   close(ctl_fd);
   if (devnr < 0) {
-    ds_error("LOOP_CTL_GET_FREE: %s", strerror(errno));
+    log_error("LOOP_CTL_GET_FREE: %s", strerror(errno));
     return -1;
   }
 
   int loop_fd = open_loop_dev(devnr, loop_path_out, path_size);
   if (loop_fd < 0) {
-    ds_error("Failed to open loop%ld: %s", devnr, strerror(errno));
+    log_error("Failed to open loop%ld: %s", devnr, strerror(errno));
     return -1;
   }
 
   int img_fd = open(img_path, O_RDWR | O_CLOEXEC);
   if (img_fd < 0) {
-    ds_error("open image %s: %s", img_path, strerror(errno));
+    log_error("open image %s: %s", img_path, strerror(errno));
     close(loop_fd);
     return -1;
   }
 
   if (ioctl(loop_fd, LOOP_SET_FD, img_fd) < 0) {
-    ds_error("LOOP_SET_FD: %s", strerror(errno));
+    log_error("LOOP_SET_FD: %s", strerror(errno));
     close(img_fd);
     close(loop_fd);
     return -1;
@@ -965,7 +1019,7 @@ static int loop_attach(const char *img_path, char *loop_path_out,
   snprintf((char *)li.lo_file_name, LO_NAME_SIZE, "%.63s", img_path);
 
   if (ioctl(loop_fd, LOOP_SET_STATUS64, &li) < 0)
-    ds_warn("LOOP_SET_STATUS64: %s (continuing)", strerror(errno));
+    log_warn("LOOP_SET_STATUS64: %s (continuing)", strerror(errno));
 
   return loop_fd;
 }
@@ -1006,33 +1060,21 @@ static int get_backing_dev(const char *mnt, char *dev_out, size_t dev_size) {
 int mount_rootfs_img(const char *img_path, char *mount_point, size_t mp_size,
                      const char *name) {
   if (find_available_mountpoint(name, mount_point, mp_size) < 0) {
-    ds_error("Failed to find available mount point for %s", name);
+    log_error("Failed to find available mount point for %s", name);
     return -1;
   }
 
   /* Detect filesystem type from superblock magic */
   const char *fstype = detect_fs_type(img_path);
   if (!fstype) {
-    ds_warn("Unknown filesystem in %s. Only ext4 and btrfs are supported.",
-            img_path);
+    log_warn("Unknown filesystem in %s. Only ext4 and btrfs are supported.",
+             img_path);
     return -1;
-  }
-
-  /* e2fsck: only for ext images */
-  if (strcmp(fstype, "ext4") == 0) {
-    char *e2fsck_argv[] = {"e2fsck", "-f", "-y", (char *)(uintptr_t)img_path,
-                           NULL};
-    if (run_command_quiet(e2fsck_argv) == 0)
-      ds_log("Image checked and repaired successfully.");
   }
 
   /* Settle time: prevent "device busy" on rapid restarts */
   sync();
-  usleep(DS_RETRY_DELAY_US);
-
-  /* Set SELinux context via xattr directly instead of spawning chcon */
-  if (is_android())
-    set_selinux_context(img_path, DS_ANDROID_VOLD_CONTEXT);
+  usleep(RETRY_DELAY_US);
 
   /*
    * Build mount flags: base VFS flags + any fstype-specific extras.
@@ -1050,11 +1092,11 @@ int mount_rootfs_img(const char *img_path, char *mount_point, size_t mp_size,
 
   for (int attempt = 0; attempt < 3; attempt++) {
     if (attempt == 0)
-      ds_log("Mounting %s rootfs image %s on %s...", fstype, img_path,
-             mount_point);
+      log_info("Mounting %s rootfs image %s on %s...", fstype, img_path,
+               mount_point);
     else
-      ds_log("Mounting %s rootfs image %s on %s (Attempt %d/3)...", fstype,
-             img_path, mount_point, attempt + 1);
+      log_info("Mounting %s rootfs image %s on %s (Attempt %d/3)...", fstype,
+               img_path, mount_point, attempt + 1);
 
     struct stat st;
     int is_blk = (stat(img_path, &st) == 0 && S_ISBLK(st.st_mode));
@@ -1086,17 +1128,17 @@ int mount_rootfs_img(const char *img_path, char *mount_point, size_t mp_size,
      * auto-clear, but be explicit for kernels < 3.10 edge cases. */
     if (loop_fd >= 0)
       loop_detach(final_src);
-    ds_warn("mount(%s, %s) failed: %s", final_src, fstype, strerror(errno));
+    log_warn("mount(%s, %s) failed: %s", final_src, fstype, strerror(errno));
 
   retry:
     if (attempt < 2) {
-      ds_log("Retrying in 1s...");
+      log_info("Retrying in 1s...");
       sync();
-      usleep(DS_RETRY_DELAY_US * 5);
+      usleep(RETRY_DELAY_US * 5);
     }
   }
 
-  ds_error("Failed to mount image %s after 3 attempts", img_path);
+  log_error("Failed to mount image %s after 3 attempts", img_path);
   return -1;
 }
 
@@ -1119,20 +1161,20 @@ int unmount_rootfs_img(const char *mount_point, int silent) {
 
   /* 3. Settle and force if still mounted (stubborn old kernels) */
   sync();
-  usleep(DS_RETRY_DELAY_US);
+  usleep(RETRY_DELAY_US);
   if (is_mountpoint(mount_point)) {
     umount2(mount_point, MNT_DETACH | MNT_FORCE);
-    usleep(DS_RETRY_DELAY_US / 2);
+    usleep(RETRY_DELAY_US / 2);
   }
 
   /* 4. Cleanup and log */
   int still_mounted = is_mountpoint(mount_point);
   if (rmdir(mount_point) == 0 || !still_mounted) {
     if (!silent)
-      ds_log("Unmounted rootfs image from %s.", mount_point);
+      log_info("Unmounted rootfs image from %s.", mount_point);
   } else if (errno != ENOENT) {
     if (!silent)
-      ds_warn("Cleanup warning: %s is still busy/mounted.", mount_point);
+      log_warn("Cleanup warning: %s is still busy/mounted.", mount_point);
   }
 
   return 0;
@@ -1141,7 +1183,7 @@ int unmount_rootfs_img(const char *mount_point, int silent) {
 /* Ensure host devpts is mounted - specifically for Android Recovery
  * environments where /dev/pts is often missing or unmounted, causing openpty()
  * to fail. */
-int ds_fix_host_ptys(void) {
+int fix_host_ptys(void) {
   const char *pts_path = "/dev/pts";
 
   /* If already a mountpoint, we are good */
@@ -1157,11 +1199,11 @@ int ds_fix_host_ptys(void) {
             "gid=5,mode=620") < 0) {
     if (errno != EBUSY) {
       /* EBUSY means already mounted (redundant with is_mountpoint but safe) */
-      ds_warn("Failed to mount host devpts: %s", strerror(errno));
+      log_warn("Failed to mount host devpts: %s", strerror(errno));
       return -1;
     }
   }
 
-  ds_log("Host devpts mounted successfully (Recovery fix).");
+  log_info("Host devpts mounted successfully (Recovery fix).");
   return 0;
 }

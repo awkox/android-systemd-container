@@ -1,14 +1,11 @@
 /*
- * Droidspaces v6 - High-performance Container Runtime
+ * ds-fork v6 - High-performance Container Runtime
  *
  * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "droidspace.h"
-#include <ftw.h>
-#include <sys/xattr.h>
-#include <time.h>
+#include "ds-fork.h"
 
 /* ---------------------------------------------------------------------------
  * String helpers
@@ -23,8 +20,8 @@ void safe_strncpy(char *dst, const char *src, size_t size) {
   }
   size_t len = strlen(src);
   if (len >= size) {
-    ds_warn("String truncation: src='%s' (len=%zu) to size=%zu", src, len,
-            size);
+    log_warn("String truncation: src='%s' (len=%zu) to size=%zu", src, len,
+             size);
   }
   snprintf(dst, size, "%s", src);
 }
@@ -43,7 +40,7 @@ void sanitize_container_name(const char *name, char *out, size_t size) {
  *
  * The daemon calls chdir("/") inside daemonize(), so any relative path
  * captured from the user's CWD must be made absolute BEFORE we reach the
- * daemonize()/reexec() boundary.  ds_resolve_argv_paths() is called once
+ * daemonize()/reexec() boundary.  resolve_argv_paths() is called once
  * in main() while CWD is still the user's directory.
  *
  * Strategy:
@@ -54,7 +51,7 @@ void sanitize_container_name(const char *name, char *out, size_t size) {
  *      sequences so the result is always absolute.
  * ---------------------------------------------------------------------------*/
 
-char *ds_resolve_path_arg(const char *path) {
+char *resolve_path_arg(const char *path) {
   if (!path || !*path)
     return strdup("");
 
@@ -137,112 +134,31 @@ char *ds_resolve_path_arg(const char *path) {
 }
 
 /*
- * Resolve every SRC component of a --bind-mount / -B value string.
- * Format: SRC:DEST[,SRC:DEST,...]
- * Only the SRC part of each pair is a host-side path; DEST lives inside the
- * container namespace and is always absolute by convention.
- */
-static char *resolve_bind_src(const char *val) {
-  if (!val)
-    return strdup("");
-
-  size_t len = strlen(val);
-  size_t tokens = 1;
-  for (size_t i = 0; i < len; i++) {
-    if (val[i] == ',')
-      tokens++;
-  }
-
-  if (tokens > (SIZE_MAX - len - 1) / PATH_MAX)
-    return strdup(val);
-
-  /* Worst case: every token expands to PATH_MAX.
-   * Use the heap - not the stack - to avoid blowing the stack in the daemon
-   * handler process (which may have a smaller stack than main). */
-  size_t bufsz = len + PATH_MAX * tokens + 1;
-  char *copy = malloc(bufsz);
-  char *out = malloc(bufsz);
-  if (!copy || !out) {
-    free(copy);
-    free(out);
-    return strdup(val);
-  }
-  memcpy(copy, val, len + 1);
-  out[0] = '\0';
-
-  char *sv, *tok = strtok_r(copy, ",", &sv);
-  int first = 1;
-  size_t off = 0;
-
-  while (tok) {
-    char *col = strchr(tok, ':');
-    const char *dest = col ? col + 1 : "";
-    if (col)
-      *col = '\0';
-
-    char *abs_src = ds_resolve_path_arg(tok);
-    const char *src = abs_src ? abs_src : tok;
-
-    if (off >= bufsz) {
-      free(abs_src);
-      free(copy);
-      free(out);
-      return strdup(val);
-    }
-
-    size_t avail = bufsz - off;
-    int n = snprintf(out + off, avail, "%s%s%s%s", first ? "" : ",", src,
-                     col ? ":" : "", dest);
-    if (n < 0 || (size_t)n >= avail) {
-      free(abs_src);
-      free(copy);
-      free(out);
-      return strdup(val);
-    }
-    off += (size_t)n;
-    free(abs_src);
-    first = 0;
-    tok = strtok_r(NULL, ",", &sv);
-  }
-
-  free(copy);
-  char *result = strdup(out);
-  free(out);
-  return result;
-}
-
-/*
  * Table of options whose next argument (or = suffix) is a filesystem path.
- * Keeps ds_resolve_argv_paths() free of hard-coded option names.
+ * Keeps resolve_argv_paths() free of hard-coded option names.
  */
 static const struct {
   const char *opt;
-  int is_bind; /* 1 = --bind-mount: resolve the SRC component only */
-} ds_path_opts[] = {
-    {"--rootfs", 0}, {"-r", 0},           {"--rootfs-img", 0}, {"-i", 0},
-    {"--conf", 0},   {"--config", 0},     {"-C", 0},           {"--env", 0},
-    {"-E", 0},       {"--bind-mount", 1}, {"--bind", 1},       {"-B", 1},
-    {NULL, 0},
+} path_opts[] = {
+    {"--config"}, {"-C"}, {NULL},
 };
 
-void ds_resolve_argv_paths(int argc, char **argv) {
+void resolve_argv_paths(int argc, char **argv) {
   for (int i = 0; i < argc; i++) {
     const char *arg = argv[i];
     if (!arg || arg[0] != '-') /* fast skip: non-option args are not paths */
       continue;
 
-    for (int j = 0; ds_path_opts[j].opt; j++) {
-      const char *opt = ds_path_opts[j].opt;
-      int bind = ds_path_opts[j].is_bind;
+    for (int j = 0; path_opts[j].opt; j++) {
+      const char *opt = path_opts[j].opt;
       size_t olen = strlen(opt);
 
       /* "--opt=VALUE" form */
       if (strncmp(arg, opt, olen) == 0 && arg[olen] == '=') {
         const char *val = arg + olen + 1;
-        if (!*val || (val[0] == '/' && !bind))
-          break; /* absolute paths (non-bind) don't need resolution */
-        char *resolved =
-            bind ? resolve_bind_src(val) : ds_resolve_path_arg(val);
+        if (!*val || val[0] == '/')
+          break; /* absolute paths don't need resolution */
+        char *resolved = resolve_path_arg(val);
         if (resolved) {
           char *new_arg = malloc(olen + 1 + strlen(resolved) + 1);
           if (new_arg) {
@@ -260,10 +176,9 @@ void ds_resolve_argv_paths(int argc, char **argv) {
       /* "--opt VALUE" form (value is the next element) */
       if (strcmp(arg, opt) == 0 && i + 1 < argc) {
         const char *val = argv[i + 1];
-        if (!val || !*val || (val[0] == '/' && !bind))
+        if (!val || !*val ||val[0] == '/')
           continue;
-        char *resolved =
-            bind ? resolve_bind_src(val) : ds_resolve_path_arg(val);
+        char *resolved = resolve_path_arg(val);
         if (resolved)
           argv[i + 1] = resolved; /* kernel-provided string; safe to replace */
         break;
@@ -280,8 +195,8 @@ int is_ramfs(const char *path) {
 }
 
 int is_subpath(const char *parent, const char *child) {
-  char *real_parent = ds_resolve_path_arg(parent);
-  char *real_child = ds_resolve_path_arg(child);
+  char *real_parent = resolve_path_arg(parent);
+  char *real_child = resolve_path_arg(child);
 
   if (!real_parent || !real_child || !real_parent[0] || !real_child[0]) {
     free(real_parent);
@@ -307,13 +222,6 @@ int is_subpath(const char *parent, const char *child) {
   free(real_parent);
   free(real_child);
   return result;
-}
-
-int is_running_in_termux(void) {
-  if (getenv("TERMUX_VERSION") || getenv("TERMUX_APP__PACKAGE_NAME") ||
-      getenv("TERMUX__PREFIX") || getenv("TERMUX_APP__APP_VERSION_CODE"))
-    return 1;
-  return 0;
 }
 
 int mkdir_p(const char *path, mode_t mode) {
@@ -346,6 +254,35 @@ int mkdir_p(const char *path, mode_t mode) {
   return 0;
 }
 
+/* Check if any path component (prefix) is a symbolic link.
+ * lstat() does not follow the final component, so walking each prefix
+ * with lstat() detects symlinks at ANY level — not just the final one.
+ * Returns 1 if a symlink is found, 0 otherwise. */
+int path_has_symlink(const char *path) {
+  char tmp[PATH_MAX];
+  safe_strncpy(tmp, path, sizeof(tmp));
+  size_t len = strlen(tmp);
+  if (len == 0)
+    return 0;
+
+  /* Walk each '/' boundary and lstat the prefix */
+  for (char *p = tmp + 1; *p; p++) {
+    if (*p == '/') {
+      *p = '\0';
+      struct stat st;
+      if (lstat(tmp, &st) == 0 && S_ISLNK(st.st_mode)) {
+        return 1;
+      }
+      *p = '/';
+    }
+  }
+  /* Check the full path */
+  struct stat st;
+  if (lstat(tmp, &st) == 0 && S_ISLNK(st.st_mode))
+    return 1;
+  return 0;
+}
+
 static int remove_recursive_handler(const char *fpath, const struct stat *sb,
                                     int tflag, struct FTW *ftwbuf) {
   (void)sb;
@@ -375,27 +312,6 @@ int write_file(const char *path, const char *content) {
   int close_ret = close(fd);
 
   return (w == (ssize_t)len && close_ret == 0) ? 0 : -1;
-}
-
-int write_file_atomic(const char *path, const char *content) {
-  char tmp[PATH_MAX];
-  snprintf(tmp, sizeof(tmp), "%s.tmp", path);
-
-  if (write_file(tmp, content) < 0)
-    return -1;
-
-  /* fsync before rename - ensures data hits disk on Android before reboot */
-  int sync_fd = open(tmp, O_RDONLY | O_CLOEXEC);
-  if (sync_fd >= 0) {
-    fsync(sync_fd);
-    close(sync_fd);
-  }
-
-  if (rename(tmp, path) < 0) {
-    unlink(tmp);
-    return -1;
-  }
-  return 0;
 }
 
 ssize_t write_all(int fd, const void *buf, size_t count) {
@@ -450,10 +366,10 @@ int read_file(const char *path, char *buf, size_t size) {
  * ---------------------------------------------------------------------------*/
 
 int generate_uuid(char *buf, size_t size) {
-  if (!buf || size < DS_UUID_LEN + 1)
+  if (!buf || size < UUID_LEN + 1)
     return -1;
 
-  unsigned char raw[DS_UUID_LEN / 2];
+  unsigned char raw[UUID_LEN / 2];
 
   /* Primary path: /dev/urandom */
   int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
@@ -465,7 +381,7 @@ int generate_uuid(char *buf, size_t size) {
       for (int i = 0; i < (int)sizeof(raw); i++)
         snprintf(buf + i * 2, 3, "%02x", raw[i]);
 
-      buf[DS_UUID_LEN] = '\0';
+      buf[UUID_LEN] = '\0';
       return 0;
     }
   }
@@ -483,13 +399,13 @@ int generate_uuid(char *buf, size_t size) {
     seeded = 1;
   }
 
-  for (int i = 0; i < DS_UUID_LEN / 2; i++)
+  for (int i = 0; i < UUID_LEN / 2; i++)
     raw[i] = (unsigned char)(rand() & 0xFF);
 
   for (int i = 0; i < (int)sizeof(raw); i++)
     snprintf(buf + i * 2, 3, "%02x", raw[i]);
 
-  buf[DS_UUID_LEN] = '\0';
+  buf[UUID_LEN] = '\0';
   return 0;
 }
 
@@ -560,16 +476,16 @@ int build_proc_root_path(pid_t pid, const char *suffix, char *buf,
                          size_t size) {
   int r;
   if (suffix && suffix[0])
-    r = snprintf(buf, size, DS_PROC_ROOT_FMT "%s", pid, suffix);
+    r = snprintf(buf, size, PROC_ROOT_FMT "%s", pid, suffix);
   else
-    r = snprintf(buf, size, DS_PROC_ROOT_FMT, pid);
+    r = snprintf(buf, size, PROC_ROOT_FMT, pid);
   return (r > 0 && (size_t)r < size) ? 0 : -1;
 }
 
 int parse_os_release(const char *rootfs_path, char *id_out, char *ver_out,
                      size_t out_size) {
   char path[PATH_MAX];
-  snprintf(path, sizeof(path), "%.4000s" DS_OS_RELEASE, rootfs_path);
+  snprintf(path, sizeof(path), "%.4000s" OS_RELEASE, rootfs_path);
 
   char buf[4096];
   if (read_file(path, buf, sizeof(buf)) < 0)
@@ -630,177 +546,112 @@ int grep_file(const char *path, const char *pattern) {
 }
 
 /* ---------------------------------------------------------------------------
- * PID file helpers
+ * /proc/<pid>/environ reader
  * ---------------------------------------------------------------------------*/
 
-int read_and_validate_pid(const char *pidfile, pid_t *pid_out) {
-  if (pid_out)
-    *pid_out = 0;
-
-  char buf[64];
-  if (read_file(pidfile, buf, sizeof(buf)) < 0) {
-    /* If file is gone or empty, count as stopped without error logging */
+int read_proc_environ(pid_t pid, const char *key, char *value, size_t size) {
+  if (!key || !value || size == 0 || pid <= 0)
     return -1;
-  }
 
-  char *end;
-  long val = strtol(buf, &end, 10);
-  if (*end != '\0' || val <= 0) {
-    /* Stale/invalid data in pidfile */
-    ds_error("Invalid/stale PID in %s: '%s'", pidfile, buf);
+  char path[PATH_MAX];
+  snprintf(path, sizeof(path), "/proc/%d/environ", pid);
+
+  FILE *f = fopen(path, "re");
+  if (!f)
     return -1;
-  }
 
-  /* check if process exists. Atomic check: if kill fails with ESRCH, we KNOW
-   * it's dead without racing between exist checking and acting. */
-  if (kill((pid_t)val, 0) < 0) {
-    if (errno == ESRCH) {
-      return -1;
+  int keylen = strlen(key);
+  int found = -1;
+
+  while (1) {
+    int c = fgetc(f);
+    if (c == EOF)
+      break;
+
+    if (c == key[0]) {
+      long pos = ftell(f);
+      if (pos < 0)
+        break;
+      fseek(f, pos - 1, SEEK_SET);
+
+      int matched = 1;
+      for (int i = 0; i < keylen; i++) {
+        int kc = fgetc(f);
+        if (kc != (unsigned char)key[i]) {
+          matched = 0;
+          break;
+        }
+      }
+      if (matched && fgetc(f) == '=') {
+        int vi = 0;
+        while (vi < (int)size - 1) {
+          int vc = fgetc(f);
+          if (vc == EOF || vc == '\0')
+            break;
+          value[vi++] = (char)vc;
+        }
+        value[vi] = '\0';
+        found = 0;
+        break;
+      }
     }
-    /* Permissive check: if EPERM, it exists but we can't signal it.
-     * Likely still running if it was ours. */
+
+    while ((c = fgetc(f)) != EOF && c != '\0')
+      ;
   }
 
-  /*
-   * Crucial Fix: Distinguish between "process is gone" (-1) and
-   * "process exists but is not a Droidspaces container" (-2).
-   * Pruning logic must ONLY nuke files when the process is truly gone.
-   */
-  if (!is_valid_container_pid((pid_t)val)) {
-    if (pid_out)
-      *pid_out = (pid_t)val; /* Return the PID so caller knows it exists */
-    return -2;
-  }
-
-  if (pid_out)
-    *pid_out = (pid_t)val;
-  return 0;
+  fclose(f);
+  return found;
 }
 
 /* ---------------------------------------------------------------------------
- * Mount sidecar files (.mount)
+ * Safe /proc/<pid>/root open — prevents symlink traversal at ALL path levels.
+ *
+ * open("/proc/<pid>/root/sub/dir/file", O_NOFOLLOW) only protects the FINAL
+ * component.  A symlink at "sub", "dir", or any intermediate component is
+ * silently followed by the kernel.  This walks each component with
+ * openat(O_NOFOLLOW), failing if any intermediate path is a symlink.
  * ---------------------------------------------------------------------------*/
 
-/* Internal helper to convert pidfile path to mount sidecar path: foo.pid ->
- * foo.mount */
-static void pidfile_to_mountfile(const char *pidfile, char *buf, size_t size) {
-  safe_strncpy(buf, pidfile, size);
-  char *dot = strrchr(buf, '.');
-  if (dot && strcmp(dot, DS_EXT_PID) == 0) {
-    /* If it ends in .pid, replace it */
-    snprintf(dot, size - (size_t)(dot - buf), DS_EXT_MOUNT);
-  } else {
-    /* Otherwise just append */
-    strncat(buf, DS_EXT_MOUNT, size - strlen(buf) - 1);
-  }
-}
-
-/* Save mount path alongside a pidfile: foo.pid -> foo.mount */
-int save_mount_path(const char *pidfile, const char *mount_path) {
-  char mpath[PATH_MAX];
-  pidfile_to_mountfile(pidfile, mpath, sizeof(mpath));
-  return write_file(mpath, mount_path);
-}
-
-int read_mount_path(const char *pidfile, char *buf, size_t size) {
-  char mpath[PATH_MAX];
-  pidfile_to_mountfile(pidfile, mpath, sizeof(mpath));
-  return read_file(mpath, buf, size);
-}
-
-int remove_mount_path(const char *pidfile) {
-  char mpath[PATH_MAX];
-  pidfile_to_mountfile(pidfile, mpath, sizeof(mpath));
-  return unlink(mpath);
-}
-
-/* ---------------------------------------------------------------------------
- * Init-type sidecar files (.init)
- * ---------------------------------------------------------------------------*/
-
-static void pidfile_to_initfile(const char *pidfile, char *buf, size_t size) {
-  safe_strncpy(buf, pidfile, size);
-  char *dot = strrchr(buf, '.');
-  if (dot && strcmp(dot, DS_EXT_PID) == 0) {
-    /* If it ends in .pid, replace it */
-    snprintf(dot, size - (size_t)(dot - buf), DS_EXT_INIT);
-  } else {
-    /* Otherwise just append */
-    strncat(buf, DS_EXT_INIT, size - strlen(buf) - 1);
-  }
-}
-
-static const char *init_type_to_string(ds_init_type_t type) {
-  switch (type) {
-  case DS_INIT_SYSTEMD:
-    return "systemd";
-  case DS_INIT_PROCD:
-    return "procd";
-  case DS_INIT_OPENRC:
-    return "openrc";
-  case DS_INIT_RUNIT:
-    return "runit";
-  case DS_INIT_S6:
-    return "s6";
-  case DS_INIT_BUSYBOX:
-    return "busybox";
-  case DS_INIT_SYSVINIT:
-    return "sysvinit";
-  case DS_INIT_UNKNOWN:
-  default:
-    return "unknown";
-  }
-}
-
-static ds_init_type_t init_type_from_string(const char *s) {
-  if (!s || s[0] == '\0')
-    return DS_INIT_UNKNOWN;
-
-  if (strcmp(s, "systemd") == 0)
-    return DS_INIT_SYSTEMD;
-  if (strcmp(s, "procd") == 0)
-    return DS_INIT_PROCD;
-  if (strcmp(s, "openrc") == 0)
-    return DS_INIT_OPENRC;
-  if (strcmp(s, "runit") == 0)
-    return DS_INIT_RUNIT;
-  if (strcmp(s, "s6") == 0)
-    return DS_INIT_S6;
-  if (strcmp(s, "busybox") == 0)
-    return DS_INIT_BUSYBOX;
-  if (strcmp(s, "sysvinit") == 0)
-    return DS_INIT_SYSVINIT;
-
-  return DS_INIT_UNKNOWN;
-}
-
-int save_init_type(const char *pidfile, ds_init_type_t init_type) {
-  char ipath[PATH_MAX];
-  pidfile_to_initfile(pidfile, ipath, sizeof(ipath));
-  return write_file(ipath, init_type_to_string(init_type));
-}
-
-int read_init_type(const char *pidfile, ds_init_type_t *init_type_out) {
-  if (!init_type_out)
+int safe_openat_proc(pid_t pid, const char *subpath, int flags, mode_t mode) {
+  if (pid <= 0 || !subpath || subpath[0] == '\0')
     return -1;
 
-  char ipath[PATH_MAX];
-  char buf[64];
-
-  pidfile_to_initfile(pidfile, ipath, sizeof(ipath));
-
-  if (read_file(ipath, buf, sizeof(buf)) < 0)
+  /* Enter the container's root.  /proc/<pid>/root is a magic symlink that
+   * MUST be followed (O_NOFOLLOW would fail on it). */
+  char root[64];
+  snprintf(root, sizeof(root), "/proc/%d/root", pid);
+  int dirfd = open(root, O_PATH | O_DIRECTORY | O_CLOEXEC);
+  if (dirfd < 0)
     return -1;
 
-  buf[strcspn(buf, "\r\n")] = '\0';
-  *init_type_out = init_type_from_string(buf);
-  return 0;
-}
+  /* Walk each component with O_NOFOLLOW.  A copy is needed because strtok
+   * modifies the string. */
+  char tmp[PATH_MAX];
+  safe_strncpy(tmp, subpath, sizeof(tmp));
 
-int remove_init_type(const char *pidfile) {
-  char ipath[PATH_MAX];
-  pidfile_to_initfile(pidfile, ipath, sizeof(ipath));
-  return unlink(ipath);
+  char *save = NULL;
+  char *comp = strtok_r(tmp, "/", &save);
+  char *next = strtok_r(NULL, "/", &save);
+
+  while (comp && next) {
+    int nextfd =
+        openat(dirfd, comp, O_PATH | O_NOFOLLOW | O_DIRECTORY | O_CLOEXEC);
+    close(dirfd);
+    if (nextfd < 0)
+      return -1;
+    dirfd = nextfd;
+    comp = next;
+    next = strtok_r(NULL, "/", &save);
+  }
+
+  /* Open the final component with the caller's flags + O_NOFOLLOW */
+  int fd = -1;
+  if (comp)
+    fd = openat(dirfd, comp, flags | O_NOFOLLOW | O_CLOEXEC, mode);
+
+  close(dirfd);
+  return fd;
 }
 
 /* ---------------------------------------------------------------------------
@@ -824,8 +675,8 @@ int remove_init_type(const char *pidfile) {
 /*
  * Token-aware removal: walk the comma-separated list and rebuild it without
  * the matching entry.  Matches on exact token boundaries (not substrings) to
- * avoid accidentally removing "/mnt/Droidspaces/Void" when removing
- * "/mnt/Droidspaces/Void2".
+ * avoid accidentally removing "/tmp/" PROJECT_NAME "/mnt/Void" when removing
+ * "/tmp/" PROJECT_NAME "/mnt/Void2".
  * Returns the length of the rebuilt string (0 = only entry, do not write).
  */
 static int fw_remove_token(const char *buf, const char *token, char *out,
@@ -873,7 +724,7 @@ void firmware_path_add(const char *fw_path) {
   /* Read the current comma-separated path list.
    * read_file() already strips trailing newlines. */
   char current[FW_PATH_BUF_SIZE] = {0};
-  read_file(DS_FW_PATH_FILE, current, sizeof(current));
+  read_file(FW_PATH_FILE, current, sizeof(current));
 
   /* Idempotent - don't add if already present as an exact token. */
   size_t fw_len = strlen(fw_path);
@@ -896,8 +747,8 @@ void firmware_path_add(const char *fw_path) {
     size_t needed =
         strlen(fw_path) + 1 /* comma */ + strlen(current) + 1 /* NUL */;
     if (needed > sizeof(new_path)) {
-      ds_warn("[FW] firmware path too long to prepend '%s' - skipping",
-              fw_path);
+      log_warn("[FW] firmware path too long to prepend '%s' - skipping",
+               fw_path);
       return;
     }
     /* Lengths validated - safe to build without truncation. */
@@ -908,8 +759,8 @@ void firmware_path_add(const char *fw_path) {
     safe_strncpy(new_path, fw_path, sizeof(new_path));
   }
 
-  ds_log("[FW] Adding firmware path: %s", fw_path);
-  write_file(DS_FW_PATH_FILE, new_path);
+  log_info("[FW] Adding firmware path: %s", fw_path);
+  write_file(FW_PATH_FILE, new_path);
 }
 
 void firmware_path_remove(const char *fw_path) {
@@ -918,7 +769,7 @@ void firmware_path_remove(const char *fw_path) {
 
   /* Read current list - read_file() strips trailing newlines. */
   char current[FW_PATH_BUF_SIZE] = {0};
-  if (read_file(DS_FW_PATH_FILE, current, sizeof(current)) < 0)
+  if (read_file(FW_PATH_FILE, current, sizeof(current)) < 0)
     return;
 
   char new_path[FW_PATH_BUF_SIZE] = {0};
@@ -927,12 +778,12 @@ void firmware_path_remove(const char *fw_path) {
   if (new_len == 0) {
     /* Our path was the only entry.  The Android kernel never allows a full
      * clear - writing empty would be a no-op anyway - so just leave it. */
-    ds_log("[FW] Skipping firmware path removal (last entry): %s", fw_path);
+    log_info("[FW] Skipping firmware path removal (last entry): %s", fw_path);
     return;
   }
 
-  ds_log("[FW] Removing firmware path: %s", fw_path);
-  write_file(DS_FW_PATH_FILE, new_path);
+  log_info("[FW] Removing firmware path: %s", fw_path);
+  write_file(FW_PATH_FILE, new_path);
 }
 
 /* ---------------------------------------------------------------------------
@@ -966,104 +817,7 @@ static int internal_run(char *const argv[], int quiet) {
   return -1;
 }
 
-int run_command(char *const argv[]) { return internal_run(argv, 0); }
 int run_command_quiet(char *const argv[]) { return internal_run(argv, 1); }
-
-/* run_command_log: runs argv, captures stderr and emits it via ds_log so
- * iptables error messages are visible in the droidspaces log on failure. */
-int run_command_log(char *const argv[]) {
-  int pipefd[2];
-  if (pipe(pipefd) < 0)
-    return internal_run(argv, 0);
-
-  pid_t pid = fork();
-  if (pid < 0) {
-    close(pipefd[0]);
-    close(pipefd[1]);
-    return -1;
-  }
-
-  if (pid == 0) {
-    close(pipefd[0]);
-    dup2(pipefd[1], STDOUT_FILENO);
-    dup2(pipefd[1], STDERR_FILENO);
-    close(pipefd[1]);
-    execvp(argv[0], argv);
-    _exit(127);
-  }
-
-  close(pipefd[1]);
-
-  char buf[512];
-  FILE *f = fdopen(pipefd[0], "r");
-  if (f) {
-    while (fgets(buf, sizeof(buf), f)) {
-      size_t l = strlen(buf);
-      while (l > 0 && (buf[l - 1] == '\n' || buf[l - 1] == '\r'))
-        buf[--l] = '\0';
-      if (l > 0)
-        ds_log("[IPT] %s", buf);
-    }
-    fclose(f);
-  } else {
-    close(pipefd[0]);
-  }
-
-  int status;
-  if (waitpid(pid, &status, 0) < 0)
-    return -1;
-  return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-}
-
-/* ---------------------------------------------------------------------------
- * FD Passing (SCM_RIGHTS)
- * ---------------------------------------------------------------------------*/
-
-int ds_send_fd(int sock, int fd) {
-  struct msghdr msg = {0};
-  char buf[CMSG_SPACE(sizeof(int))];
-  memset(buf, 0, sizeof(buf));
-
-  struct iovec io = {.iov_base = "FD", .iov_len = 2};
-
-  msg.msg_iov = &io;
-  msg.msg_iovlen = 1;
-  msg.msg_control = buf;
-  msg.msg_controllen = sizeof(buf);
-
-  struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
-  cmsg->cmsg_level = SOL_SOCKET;
-  cmsg->cmsg_type = SCM_RIGHTS;
-  cmsg->cmsg_len = CMSG_LEN(sizeof(int));
-
-  *((int *)CMSG_DATA(cmsg)) = fd;
-
-  if (sendmsg(sock, &msg, 0) < 0)
-    return -1;
-
-  return 0;
-}
-
-int ds_recv_fd(int sock) {
-  struct msghdr msg = {0};
-  char ctrl_buf[CMSG_SPACE(sizeof(int))];
-  char data_buf[2];
-  struct iovec io = {.iov_base = data_buf, .iov_len = sizeof(data_buf)};
-
-  msg.msg_iov = &io;
-  msg.msg_iovlen = 1;
-  msg.msg_control = ctrl_buf;
-  msg.msg_controllen = sizeof(ctrl_buf);
-
-  if (recvmsg(sock, &msg, 0) < 0)
-    return -1;
-
-  struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
-  if (!cmsg || cmsg->cmsg_type != SCM_RIGHTS)
-    return -1;
-
-  return *((int *)CMSG_DATA(cmsg));
-}
 
 /* ---------------------------------------------------------------------------
  * System helpers
@@ -1085,13 +839,11 @@ void check_kernel_recommendation(void) {
   if (get_kernel_version(&major, &minor) < 0)
     return;
 
-  if (major < DS_RECOMMENDED_KERNEL_MAJOR ||
-      (major == DS_RECOMMENDED_KERNEL_MAJOR &&
-       minor < DS_RECOMMENDED_KERNEL_MINOR)) {
-    ds_warn("Your kernel (%d.%d) is below recommended %d.%d - "
-            "some functions might be unstable.",
-            major, minor, DS_RECOMMENDED_KERNEL_MAJOR,
-            DS_RECOMMENDED_KERNEL_MINOR);
+  if (major < RECOMMENDED_KERNEL_MAJOR ||
+      (major == RECOMMENDED_KERNEL_MAJOR && minor < RECOMMENDED_KERNEL_MINOR)) {
+    log_warn("Your kernel (%d.%d) is below recommended %d.%d - "
+             "some functions might be unstable.",
+             major, minor, RECOMMENDED_KERNEL_MAJOR, RECOMMENDED_KERNEL_MINOR);
     fflush(stdout);
   }
 }
@@ -1141,8 +893,8 @@ static void write_to_log_file(const char *name, const char *component,
   char log_dir[PATH_MAX];
   char safe_log_name[256];
   sanitize_container_name(name, safe_log_name, sizeof(safe_log_name));
-  snprintf(log_dir, sizeof(log_dir), "%.2048s/" DS_LOGS_SUBDIR "/%.256s",
-           get_workspace_dir(), safe_log_name);
+  snprintf(log_dir, sizeof(log_dir), "%.2048s/" RUNTIME_LOGS_SUBDIR "/%.256s",
+           get_runtime_dir(), safe_log_name);
   mkdir_p(log_dir, 0755);
 
   char log_path[PATH_MAX];
@@ -1160,8 +912,10 @@ static void write_to_log_file(const char *name, const char *component,
   fclose(f);
 }
 
-void ds_log_internal(const char *prefix, const char *color, int is_err,
-                     const char *fmt, ...) {
+__attribute__((format(printf, 4, 5))) void log_internal(const char *prefix,
+                                                        const char *color,
+                                                        int is_err,
+                                                        const char *fmt, ...) {
   char raw_msg[8192];
   va_list ap;
   va_start(ap, fmt);
@@ -1169,13 +923,12 @@ void ds_log_internal(const char *prefix, const char *color, int is_err,
   va_end(ap);
 
   /* Always log to file if container name is known */
-  if (ds_log_container_name[0]) {
-    write_to_log_file(ds_log_container_name, "main", raw_msg,
-                      ds_log_container_fd);
+  if (log_container_name[0]) {
+    write_to_log_file(log_container_name, "main", raw_msg, log_container_fd);
   }
 
   /* Decide if we should print to terminal */
-  if (ds_log_silent && !is_err)
+  if (log_silent && !is_err)
     return;
 
   /* Filter out [DEBUG] and [IPT] prefixes from terminal output */
@@ -1204,16 +957,15 @@ void ds_log_internal(const char *prefix, const char *color, int is_err,
   fflush(out);
 }
 
-void ds_die_internal(const char *fmt, ...) {
+__attribute__((format(printf, 1, 2))) void die_internal(const char *fmt, ...) {
   char raw_msg[8192];
   va_list ap;
   va_start(ap, fmt);
   vsnprintf(raw_msg, sizeof(raw_msg), fmt, ap);
   va_end(ap);
 
-  if (ds_log_container_name[0]) {
-    write_to_log_file(ds_log_container_name, "fatal", raw_msg,
-                      ds_log_container_fd);
+  if (log_container_name[0]) {
+    write_to_log_file(log_container_name, "fatal", raw_msg, log_container_fd);
   }
 
   fprintf(stderr, "[" C_RED "-" C_RESET "] %s\r\n", raw_msg);
@@ -1234,7 +986,7 @@ void write_monitor_debug_log(const char *name, const char *fmt, ...) {
   write_to_log_file(name, "monitor", raw_msg, -1);
 }
 
-void ds_open_container_log(struct ds_config *cfg) {
+void open_container_log(struct config *cfg) {
   if (!cfg || !cfg->container_name[0])
     return;
 
@@ -1242,8 +994,8 @@ void ds_open_container_log(struct ds_config *cfg) {
   char safe_log_name[256];
   sanitize_container_name(cfg->container_name, safe_log_name,
                           sizeof(safe_log_name));
-  snprintf(log_dir, sizeof(log_dir), "%.2048s/" DS_LOGS_SUBDIR "/%.256s",
-           get_workspace_dir(), safe_log_name);
+  snprintf(log_dir, sizeof(log_dir), "%.2048s/" RUNTIME_LOGS_SUBDIR "/%.256s",
+           get_runtime_dir(), safe_log_name);
   mkdir_p(log_dir, 0755);
 
   char log_path[PATH_MAX];
@@ -1253,19 +1005,19 @@ void ds_open_container_log(struct ds_config *cfg) {
 
   int fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
   if (fd >= 0)
-    ds_log_container_fd = fd;
+    log_container_fd = fd;
 }
 
-void ds_close_container_log(void) {
-  if (ds_log_container_fd >= 0) {
-    close(ds_log_container_fd);
-    ds_log_container_fd = -1;
+void close_container_log(void) {
+  if (log_container_fd >= 0) {
+    close(log_container_fd);
+    log_container_fd = -1;
   }
 }
 
-void print_ds_banner(void) {
-  printf(C_CYAN C_BOLD "— Welcome to " C_WHITE DS_PROJECT_NAME
-                       " v" DS_VERSION C_CYAN " ! —" C_RESET "\r\n\r\n");
+void print_banner(void) {
+  printf(C_CYAN C_BOLD "— Welcome to " C_WHITE PROJECT_NAME
+                       " v" RUNTIME_VERSION C_CYAN " ! —" C_RESET "\r\n\r\n");
   fflush(stdout);
 }
 
@@ -1276,294 +1028,6 @@ void print_privileged_warning(int privileged_mask) {
   printf(C_BOLD C_RED "WARNING: PRIVILEGED MODE ACTIVE - DEVICE SECURITY "
                       "COMPROMISED" C_RESET "\r\n\r\n");
   fflush(stdout);
-}
-
-int is_systemd_rootfs(const char *path) {
-  if (!path)
-    return 0;
-
-  char buf[PATH_MAX];
-  struct stat st;
-  size_t path_len = strlen(path);
-
-  /* Standard systemd binary locations (not present on NixOS -- nix store). */
-  const char *check_paths[] = {"/lib/systemd/systemd",
-                               "/usr/lib/systemd/systemd", "/bin/systemd",
-                               "/usr/bin/systemd"};
-
-  for (size_t i = 0; i < sizeof(check_paths) / sizeof(check_paths[0]); i++) {
-    size_t check_len = strlen(check_paths[i]);
-    if (path_len + check_len >= sizeof(buf))
-      continue;
-
-    memcpy(buf, path, path_len);
-    memcpy(buf + path_len, check_paths[i], check_len + 1);
-    if (stat(buf, &st) == 0 && S_ISREG(st.st_mode)) {
-      return 1;
-    }
-  }
-
-  /* Fallback: /sbin/init symlink target or script contents.
-   * Works for both:
-   *   (a) a symlink -> .../systemd (classic distros, NixOS-systemd)
-   *   (b) a plain shell-script wrapper that exec's systemd (e.g. some
-   *       NixOS tarballs where /sbin/init is a real file, not a symlink)
-   * NOTE: do NOT treat /nix/store alone as evidence of systemd -- Nix
-   * can package any init system (finit, openrc, runit, ...).  We only
-   * return 1 when we can see the literal string "systemd". */
-  if (path_len + 12 <= sizeof(buf)) { /* 10 chars + '/' prefix + '\0' = 12 */
-    memcpy(buf, path, path_len);
-    memcpy(buf + path_len, "/sbin/init", 11);
-    char link_target[PATH_MAX];
-    ssize_t len = readlink(buf, link_target, sizeof(link_target) - 1);
-    if (len != -1) {
-      /* Case (a): symlink - check the target path for "systemd" */
-      link_target[len] = '\0';
-      if (strstr(link_target, "systemd"))
-        return 1;
-    } else {
-      /* Case (b): regular file - grep script body for "systemd" */
-      char script_buf[4096];
-      if (read_file(buf, script_buf, sizeof(script_buf)) > 0) {
-        if (strstr(script_buf, "systemd"))
-          return 1;
-      }
-    }
-  }
-
-  return 0;
-}
-
-/* Probe the rootfs at `path` to identify its init system.
- * Uses the same stat+readlink pattern as is_systemd_rootfs. */
-ds_init_type_t detect_container_init(const char *path) {
-  if (!path || path[0] == '\0')
-    return DS_INIT_UNKNOWN;
-
-  char buf[PATH_MAX];
-  struct stat st;
-  size_t plen = strlen(path);
-
-  /* Helper: build "path + suffix" into buf, return 1 on success */
-#define PROBE_PATH(suffix)                                                     \
-  (plen + sizeof(suffix) - 1 < sizeof(buf) &&                                  \
-   (memcpy(buf, path, plen), memcpy(buf + plen, suffix, sizeof(suffix)), 1))
-
-  /* systemd -- reuse existing logic via is_systemd_rootfs */
-  if (is_systemd_rootfs(path))
-    return DS_INIT_SYSTEMD;
-
-  /* procd (OpenWrt) */
-  if ((PROBE_PATH("/sbin/procd") && stat(buf, &st) == 0 &&
-       S_ISREG(st.st_mode)) ||
-      (PROBE_PATH("/usr/sbin/procd") && stat(buf, &st) == 0 &&
-       S_ISREG(st.st_mode)))
-    return DS_INIT_PROCD;
-
-  /* openrc */
-  if ((PROBE_PATH("/sbin/openrc-init") && stat(buf, &st) == 0 &&
-       S_ISREG(st.st_mode)) ||
-      (PROBE_PATH("/usr/bin/openrc-init") && stat(buf, &st) == 0 &&
-       S_ISREG(st.st_mode)) ||
-      (PROBE_PATH("/sbin/openrc") && stat(buf, &st) == 0 &&
-       S_ISREG(st.st_mode)))
-    return DS_INIT_OPENRC;
-
-  /* runit */
-  if ((PROBE_PATH("/sbin/runit") && stat(buf, &st) == 0 &&
-       S_ISREG(st.st_mode)) ||
-      (PROBE_PATH("/usr/bin/runit") && stat(buf, &st) == 0 &&
-       S_ISREG(st.st_mode)))
-    return DS_INIT_RUNIT;
-
-  /* s6 */
-  if ((PROBE_PATH("/bin/s6-svscan") && stat(buf, &st) == 0 &&
-       S_ISREG(st.st_mode)) ||
-      (PROBE_PATH("/usr/bin/s6-svscan") && stat(buf, &st) == 0 &&
-       S_ISREG(st.st_mode)))
-    return DS_INIT_S6;
-
-  /* sysvinit: /sbin/init is a regular binary, or symlink points to sysvinit.
-   * If /sbin/init is a real file (not a symlink), grep its content before
-   * declaring sysvinit -- Nix wrapper scripts must not be misclassified.
-   * NOTE: /nix/store presence does NOT imply systemd; finit, openrc, etc.
-   * can live there too.  Only match on the literal init-system name. */
-  if (PROBE_PATH("/sbin/init")) {
-    char target[PATH_MAX];
-    ssize_t len = readlink(buf, target, sizeof(target) - 1);
-    if (len == -1) {
-      /* not a symlink -> stat and, if regular, inspect script body */
-      if (stat(buf, &st) == 0 && S_ISREG(st.st_mode)) {
-        char script_buf[4096];
-        if (read_file(buf, script_buf, sizeof(script_buf)) > 0) {
-          if (strstr(script_buf, "systemd"))
-            return DS_INIT_SYSTEMD;
-          if (strstr(script_buf, "busybox"))
-            return DS_INIT_BUSYBOX;
-          /* Any other Nix wrapper (finit, openrc, ...) falls through to
-           * DS_INIT_UNKNOWN so the caller can handle it gracefully. */
-          if (strstr(script_buf, "/nix/store"))
-            return DS_INIT_UNKNOWN;
-        }
-        return DS_INIT_SYSVINIT;
-      }
-    } else {
-      target[len] = '\0';
-      if (strstr(target, "busybox"))
-        return DS_INIT_BUSYBOX;
-      if (strstr(target, "sysvinit") || strstr(target, "init.sysv"))
-        return DS_INIT_SYSVINIT;
-    }
-  }
-
-#undef PROBE_PATH
-
-  return DS_INIT_UNKNOWN;
-}
-
-int get_user_shell(const char *user, char *shell_buf, size_t size) {
-  if (!user || user[0] == '\0' || !shell_buf || size == 0)
-    return -1;
-
-  FILE *f = fopen("/etc/passwd", "re");
-  if (!f)
-    return -1;
-
-  char line[1024];
-  int found = 0;
-  while (fgets(line, sizeof(line), f)) {
-    /* Format: user:pw:uid:gid:gecos:home:shell */
-    char line_copy[1024];
-    strncpy(line_copy, line, sizeof(line_copy) - 1);
-    line_copy[sizeof(line_copy) - 1] = '\0';
-
-    char *saveptr;
-    char *name = strtok_r(line_copy, ":", &saveptr);
-    if (!name || strcmp(name, user) != 0)
-      continue;
-
-    /* Skip 5 fields to reach the shell (field 7) */
-    for (int i = 0; i < 5; i++) {
-      if (!strtok_r(NULL, ":", &saveptr))
-        break;
-    }
-    char *shell = strtok_r(NULL, ":\n", &saveptr);
-
-    if (shell) {
-      safe_strncpy(shell_buf, shell, size);
-      found = 1;
-      break;
-    }
-  }
-
-  fclose(f);
-  return found ? 0 : -1;
-}
-
-int get_selinux_context(const char *path, char *buf, size_t size) {
-  if (!path || !buf || size == 0)
-    return -1;
-
-  ssize_t len = lgetxattr(path, "security.selinux", buf, size - 1);
-#ifdef SYS_lgetxattr
-  if (len < 0)
-    len = syscall(SYS_lgetxattr, path, "security.selinux", buf, size - 1);
-#endif
-  if (len < 0 || len >= (ssize_t)(size - 1))
-    return -1;
-
-  buf[len] = '\0';
-  return 0;
-}
-
-/* Transition self into u:r:droidspacesd:s0.
- * Best-effort: if the write fails (policy not loaded, permissive host),
- * the caller inherits whatever domain the root process already holds.
- * No MLS suffix -- droidspacesd is declared permissive in sepolicy.rule. */
-void ds_selinux_enter_domain(void) {
-  const char *ctx = "u:r:droidspacesd:s0";
-  int fd = open("/proc/self/attr/current", O_WRONLY | O_CLOEXEC);
-  if (fd < 0)
-    return;
-  if (write(fd, ctx, strlen(ctx) + 1) < 0) { /* ignore -- best effort */
-  }
-  close(fd);
-}
-
-int ds_get_selinux_status(void) {
-  char buf[16];
-  if (read_file("/sys/fs/selinux/enforce", buf, sizeof(buf)) < 0)
-    return -1;
-  return atoi(buf);
-}
-
-void ds_set_selinux_permissive(int enable) {
-  int status = ds_get_selinux_status();
-  if (status == -1) {
-    if (enable)
-      ds_warn("SELinux not supported or interface missing. Skipping permissive "
-              "mode.");
-    return;
-  }
-
-  if (enable) {
-    if (status == 1) {
-      ds_log("Setting SELinux to permissive...");
-      if (write_file("/sys/fs/selinux/enforce", "0") < 0) {
-        /* Try setenforce command as fallback */
-        char *args[] = {"setenforce", "0", NULL};
-        run_command_quiet(args);
-      }
-    }
-  } else {
-    /* Set back to Enforcing if it's currently Permissive */
-    if (status == 0) {
-      if (write_file("/sys/fs/selinux/enforce", "1") < 0) {
-        char *args[] = {"setenforce", "1", NULL};
-        run_command_quiet(args);
-      }
-    }
-  }
-}
-
-int set_selinux_context(const char *path, const char *context) {
-  if (!path || !context)
-    return -1;
-
-  size_t len = strlen(context);
-  if (lsetxattr(path, "security.selinux", context, len, 0) < 0) {
-#ifdef SYS_lsetxattr
-    if (syscall(SYS_lsetxattr, path, "security.selinux", context, len, 0) < 0) {
-      return -1;
-    }
-#else
-    return -1;
-#endif
-  }
-
-  return 0;
-}
-
-int copy_file(const char *src, const char *dst) {
-  FILE *in = fopen(src, "re");
-  if (!in)
-    return -1;
-  FILE *out = fopen(dst, "we");
-  if (!out) {
-    fclose(in);
-    return -1;
-  }
-  char buf[4096];
-  size_t n;
-  while ((n = fread(buf, 1, sizeof(buf), in)) > 0)
-    if (fwrite(buf, 1, n, out) != n) {
-      fclose(in);
-      fclose(out);
-      return -1;
-    }
-  fclose(in);
-  fclose(out);
-  return 0;
 }
 
 /* ---------------------------------------------------------------------------
@@ -1592,7 +1056,7 @@ int copy_file(const char *src, const char *dst) {
  *   RAM_TOTAL_KB=<kb>
  *   CPU_PERMILL=<0-1000>
  * ---------------------------------------------------------------------------*/
-long ds_get_container_uptime(pid_t pid) {
+long get_container_uptime(pid_t pid) {
   if (pid <= 0)
     return -1;
 
@@ -1634,7 +1098,7 @@ long ds_get_container_uptime(pid_t pid) {
   return (uptime_sec < 0) ? 0 : uptime_sec;
 }
 
-void ds_format_uptime(long uptime_sec, char *buf, size_t size) {
+void format_uptime(long uptime_sec, char *buf, size_t size) {
   if (uptime_sec < 0) {
     safe_strncpy(buf, "unknown", size);
     return;
@@ -1659,20 +1123,20 @@ void ds_format_uptime(long uptime_sec, char *buf, size_t size) {
   safe_strncpy(buf, tmp, size);
 }
 
-int show_container_usage(struct ds_config *cfg) {
+int show_container_usage(struct config *cfg) {
   pid_t pid = 0;
 
   if (!is_container_running(cfg, &pid) || pid <= 0) {
-    ds_error("Container '%s' is not running.", cfg->container_name);
+    log_error("Container '%s' is not running.", cfg->container_name);
     return -1;
   }
 
   /* -----------------------------------------------------------------------
    * UPTIME
    * -----------------------------------------------------------------------*/
-  long uptime_sec = ds_get_container_uptime(pid);
+  long uptime_sec = get_container_uptime(pid);
   char uptime_str[128];
-  ds_format_uptime(uptime_sec, uptime_str, sizeof(uptime_str));
+  format_uptime(uptime_sec, uptime_str, sizeof(uptime_str));
 
   /* -----------------------------------------------------------------------
    * PID namespace of container init
@@ -1683,8 +1147,8 @@ int show_container_usage(struct ds_config *cfg) {
   ssize_t ns_len =
       readlink(ns_init_path, container_ns, sizeof(container_ns) - 1);
   if (ns_len <= 0) {
-    ds_error("Failed to read PID namespace of container init: %s",
-             strerror(errno));
+    log_error("Failed to read PID namespace of container init: %s",
+              strerror(errno));
     return -1;
   }
   container_ns[ns_len] = '\0';
@@ -1699,7 +1163,7 @@ int show_container_usage(struct ds_config *cfg) {
 
   DIR *proc_dir = opendir("/proc");
   if (!proc_dir) {
-    ds_error("Failed to open /proc: %s", strerror(errno));
+    log_error("Failed to open /proc: %s", strerror(errno));
     return -1;
   }
   struct dirent *de;
@@ -1853,16 +1317,16 @@ int show_container_usage(struct ds_config *cfg) {
  * ---------------------------------------------------------------------------*/
 
 static int compare_bind_mounts(const void *a, const void *b) {
-  const struct ds_bind_mount *ma = (const struct ds_bind_mount *)a;
-  const struct ds_bind_mount *mb = (const struct ds_bind_mount *)b;
+  const struct bind_mount *ma = (const struct bind_mount *)a;
+  const struct bind_mount *mb = (const struct bind_mount *)b;
   return strcmp(ma->dest, mb->dest);
 }
 
-void sort_bind_mounts(struct ds_config *cfg) {
+void sort_bind_mounts(struct config *cfg) {
   if (!cfg || cfg->bind_count <= 1 || !cfg->binds)
     return;
 
-  qsort(cfg->binds, cfg->bind_count, sizeof(struct ds_bind_mount),
+  qsort(cfg->binds, cfg->bind_count, sizeof(struct bind_mount),
         compare_bind_mounts);
 }
 
@@ -1888,9 +1352,9 @@ int validate_container_name(const char *name) {
 
 int reject_container_name(const char *name) {
   if (!validate_container_name(name)) {
-    ds_error("Invalid container name '%s'. Use only letters, numbers, "
-             "'.', '_', '-' and spaces.",
-             name);
+    log_error("Invalid container name '%s'. Use only letters, numbers, "
+              "'.', '_', '-' and spaces.",
+              name);
     return -1;
   }
   return 0;
@@ -1933,7 +1397,7 @@ int validate_bind_destination(const char *dest) {
  *   - Fractional part (e.g. "1.5G"): limited double multiplication only for
  *     the sub-unit portion, keeping precision loss < 1 byte.
  */
-long long ds_parse_size(const char *str) {
+long long parse_size(const char *str) {
   if (!str || !*str)
     return -1;
 
@@ -1984,7 +1448,7 @@ long long ds_parse_size(const char *str) {
   return result;
 }
 
-void ds_format_size(long long bytes, char *buf, size_t sz) {
+void format_size(long long bytes, char *buf, size_t sz) {
   if (bytes <= 0) {
     snprintf(buf, sz, "N/A");
     return;
@@ -2002,7 +1466,7 @@ void ds_format_size(long long bytes, char *buf, size_t sz) {
 /*
  * count_folders : function to count the number of folders in the passed path
  * and return the number of folder it can be used the get the total number of
- * containers from the get_workspace_dir directory
+ * containers from the get_runtime_dir directory
  */
 int count_folders(const char *path) {
   DIR *dir = opendir(path);
@@ -2051,21 +1515,19 @@ int parse_and_validate_names(const char *optarg, char *out_buf,
 }
 
 /* Init an iter_cfg suitable for per-container dispatch. */
-static void init_iter_cfg(struct ds_config *c, const char *prog_name) {
+static void init_iter_cfg(struct config *c, const char *prog_name) {
   memset(c, 0, sizeof(*c));
-  c->net_ready_pipe[0] = c->net_ready_pipe[1] = -1;
-  c->net_done_pipe[0] = c->net_done_pipe[1] = -1;
   if (prog_name)
     safe_strncpy(c->prog_name, prog_name, sizeof(c->prog_name));
 }
 
-int ds_multi_stop(const char *raw_names) {
+int multi_stop(const char *raw_names) {
   char tmp[4096];
   snprintf(tmp, sizeof(tmp), "%s", raw_names);
   int ret = 0;
   char *sp, *tok = strtok_r(tmp, ",", &sp);
   while (tok) {
-    struct ds_config c;
+    struct config c;
     init_iter_cfg(&c, NULL);
     safe_strncpy(c.container_name, tok, sizeof(c.container_name));
     if (stop_rootfs(&c, 0) != 0)
@@ -2075,403 +1537,11 @@ int ds_multi_stop(const char *raw_names) {
   return ret;
 }
 
-/* Shell metacharacters that must never appear in a flag token */
-static const char ds_shell_metachars[] = "$`;&|><(){}\\";
-
-/*
- * Split a flags string into an argv array suitable for appending to execv.
- * Tokens are split on whitespace; single and double quotes are supported for
- * grouping tokens with embedded spaces.  Any token containing a shell
- * metacharacter is rejected and -1 is returned.
- *
- * On success, *out_argv is a heap-allocated NULL-terminated array of
- * heap-allocated strings and *out_argc is the count.
- * Caller must free with ds_free_split_flags().
- * Returns 0 on success, -1 on error (nothing allocated on error).
- */
-int ds_split_flags(const char *str, char ***out_argv, int *out_argc) {
-  if (!str || !out_argv || !out_argc)
-    return -1;
-
-  *out_argv = NULL;
-  *out_argc = 0;
-
-  int cap = 0, count = 0;
-  char **argv = NULL;
-  const char *p = str;
-
-  while (*p) {
-    /* Skip whitespace between tokens */
-    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
-      p++;
-    if (!*p)
-      break;
-
-    /* Accumulate one token (handles single/double quoting) */
-    char *tok = NULL;
-    size_t tok_len = 0, tok_cap = 0;
-
-    while (*p && !(*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')) {
-      char c;
-      if (*p == '\'') {
-        /* Single-quoted: copy literally until closing ' */
-        p++;
-        while (*p && *p != '\'') {
-          c = *p++;
-          if (tok_len + 1 >= tok_cap) {
-            tok_cap = tok_cap ? tok_cap * 2 : 64;
-            char *tmp = realloc(tok, tok_cap);
-            if (!tmp) {
-              free(tok);
-              goto oom;
-            }
-            tok = tmp;
-          }
-          tok[tok_len++] = c;
-        }
-        if (*p == '\'')
-          p++;
-      } else if (*p == '"') {
-        /* Double-quoted: copy literally until closing " */
-        p++;
-        while (*p && *p != '"') {
-          c = *p++;
-          if (tok_len + 1 >= tok_cap) {
-            tok_cap = tok_cap ? tok_cap * 2 : 64;
-            char *tmp = realloc(tok, tok_cap);
-            if (!tmp) {
-              free(tok);
-              goto oom;
-            }
-            tok = tmp;
-          }
-          tok[tok_len++] = c;
-        }
-        if (*p == '"')
-          p++;
-      } else {
-        c = *p++;
-        if (tok_len + 1 >= tok_cap) {
-          tok_cap = tok_cap ? tok_cap * 2 : 64;
-          char *tmp = realloc(tok, tok_cap);
-          if (!tmp) {
-            free(tok);
-            goto oom;
-          }
-          tok = tmp;
-        }
-        tok[tok_len++] = c;
-      }
-    }
-
-    if (!tok_len) {
-      free(tok);
-      continue;
-    }
-
-    /* NUL-terminate */
-    if (tok_len + 1 > tok_cap) {
-      char *tmp = realloc(tok, tok_len + 1);
-      if (!tmp) {
-        free(tok);
-        goto oom;
-      }
-      tok = tmp;
-    }
-    tok[tok_len] = '\0';
-
-    /* Reject shell metacharacters */
-    if (strpbrk(tok, ds_shell_metachars)) {
-      ds_error("flags: rejected token with shell metachar: %s", tok);
-      free(tok);
-      ds_free_split_flags(argv, count);
-      return -1;
-    }
-
-    /* Grow argv array */
-    if (count >= cap) {
-      int new_cap = cap ? cap * 2 : 8;
-      char **tmp = realloc(argv, (size_t)(new_cap + 1) * sizeof(char *));
-      if (!tmp) {
-        free(tok);
-        goto oom;
-      }
-      argv = tmp;
-      cap = new_cap;
-    }
-    argv[count++] = tok;
-  }
-
-  if (argv)
-    argv[count] = NULL;
-
-  *out_argv = argv;
-  *out_argc = count;
-  return 0;
-
-oom:
-  ds_free_split_flags(argv, count);
-  return -1;
-}
-
-void ds_free_split_flags(char **argv, int argc) {
-  if (!argv)
-    return;
-  for (int i = 0; i < argc; i++)
-    free(argv[i]);
-  free(argv);
-}
-
-/* ---------------------------------------------------------------------------
- * Daemon lifecycle helpers
- *
- * Shared building blocks for x11.c, virgl-android.c, pulseaudio-android.c,
- * monitor.c, and daemon.c.  Generic (not Android-specific).
- * ---------------------------------------------------------------------------*/
-
-/* Read a daemon PID from <pids_dir>/<filename>; returns pid or -1. */
-pid_t ds_daemon_read_pid(const char *filename) {
-  char path[PATH_MAX];
-  snprintf(path, sizeof(path), "%s/%s", get_pids_dir(), filename);
-
-  char buf[32] = {0};
-  int fd = open(path, O_RDONLY | O_CLOEXEC);
-  if (fd < 0)
-    return -1;
-  ssize_t n = read(fd, buf, sizeof(buf) - 1);
-  close(fd);
-
-  if (n <= 0)
-    return -1;
-  pid_t pid = (pid_t)atoi(buf);
-  return (pid > 1 && kill(pid, 0) == 0) ? pid : -1;
-}
-
-/* Write PID to <pids_dir>/<filename>. */
-void ds_daemon_write_pid(const char *filename, pid_t pid) {
-  char path[PATH_MAX], buf[32];
-  snprintf(path, sizeof(path), "%s/%s", get_pids_dir(), filename);
-  snprintf(buf, sizeof(buf), "%d", (int)pid);
-  write_file_atomic(path, buf);
-}
-
-/* Remove <pids_dir>/<filename>. */
-void ds_daemon_remove_pid(const char *filename) {
-  char path[PATH_MAX];
-  snprintf(path, sizeof(path), "%s/%s", get_pids_dir(), filename);
-  unlink(path);
-}
-
-/* Resolve a cached pid or fall back to the pidfile. */
-pid_t ds_resolve_daemon_pid(pid_t cached, const char *pidfile) {
-  return cached > 0 ? cached : ds_daemon_read_pid(pidfile);
-}
-
-/*
- * ds_global_daemon_stop - unified teardown for X11/VirGL/PulseAudio daemons.
- *
- * check_fn    : feature-needs checker (returns 1 if still needed)
- * cached_pid  : cfg->x11_pid / cfg->virgl_pid / cfg->pulse_pid
- * pid_out     : pointer to that field (zeroed on stop)
- * pidfile     : e.g. "x11.xpid"
- * sock_path   : socket to unlink after stop
- * tag         : log prefix e.g. "[X11]"
- */
-void ds_global_daemon_stop(int (*check_fn)(void), pid_t cached_pid,
-                           pid_t *pid_out, const char *pidfile,
-                           const char *sock_path, const char *tag) {
-  if (!is_android())
-    return;
-
-  if (check_fn() == 1) {
-    ds_log("%s keeping global server running for other active containers", tag);
-    return;
-  }
-
-  pid_t pid = ds_resolve_daemon_pid(cached_pid, pidfile);
-  if (pid > 0) {
-    ds_log("%s terminating (PID %d)...", tag, (int)pid);
-    kill(pid, SIGTERM);
-    for (int i = 0; i < 10 && kill(pid, 0) == 0; i++)
-      usleep(100000);
-    if (kill(pid, 0) == 0) {
-      kill(pid, SIGKILL);
-      waitpid(pid, NULL, 0);
-    }
-    if (pid_out)
-      *pid_out = 0;
-  }
-
-  ds_daemon_remove_pid(pidfile);
-  if (sock_path)
-    unlink(sock_path);
-}
-
 /* Set oom_score_adj to -1000 (unkillable).  Best-effort, no error return. */
-void ds_oom_protect(void) {
+void oom_protect(void) {
   FILE *f = fopen("/proc/self/oom_score_adj", "w");
   if (f) {
     fprintf(f, "-1000\n");
     fclose(f);
   }
-}
-
-/*
- * Fork a log-relay child that reads from pipe_read_fd and writes timestamped
- * lines to <logs_dir>/<log_file> with [tag] prefix.  The relay ignores all
- * signals, calls ds_oom_protect(), and exits when the pipe reaches EOF.
- * pipe_read_fd is closed in the parent after this returns.
- */
-void ds_spawn_log_relay(int pipe_read_fd, const char *log_file,
-                        const char *tag) {
-  pid_t relay = fork();
-  if (relay == 0) {
-    /* Ignore hangups, keyboard interrupts, broken pipes, and SIGTERM.
-     * The relay should only exit when the child process closes the pipe. */
-    signal(SIGHUP, SIG_IGN);
-    signal(SIGINT, SIG_IGN);
-    signal(SIGQUIT, SIG_IGN);
-    signal(SIGPIPE, SIG_IGN);
-    signal(SIGTERM, SIG_IGN);
-
-    /* Make log relay unkillable */
-    ds_oom_protect();
-
-    int devnull = open("/dev/null", O_RDWR);
-    if (devnull >= 0) {
-      dup2(devnull, STDIN_FILENO);
-      dup2(devnull, STDOUT_FILENO);
-      dup2(devnull, STDERR_FILENO);
-      close(devnull);
-    }
-
-    char path[PATH_MAX];
-    snprintf(path, sizeof(path), "%s/%s", get_logs_dir(), log_file);
-    rotate_log(path, 2 * 1024 * 1024);
-    int log_fd = open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
-    if (log_fd < 0) {
-      close(pipe_read_fd);
-      _exit(0);
-    }
-
-    FILE *ps = fdopen(pipe_read_fd, "r");
-    if (!ps) {
-      close(log_fd);
-      close(pipe_read_fd);
-      _exit(0);
-    }
-
-    char line[2048];
-    while (fgets(line, sizeof(line), ps)) {
-      size_t len = strlen(line);
-      while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
-        line[--len] = '\0';
-      if (len == 0)
-        continue;
-      struct timespec ts;
-      clock_gettime(CLOCK_REALTIME, &ts);
-      struct tm tm;
-      localtime_r(&ts.tv_sec, &tm);
-      dprintf(log_fd, "[%04d-%02d-%02d %02d:%02d:%02d.%03ld] [%s] %s\n",
-              tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour,
-              tm.tm_min, tm.tm_sec, ts.tv_nsec / 1000000, tag, line);
-    }
-    fclose(ps);
-    close(log_fd);
-    _exit(0);
-  }
-
-  close(pipe_read_fd);
-}
-
-/*
- * Fork a daemon child, redirect stdout/stderr through a pipe, verify exec
- * via a ready-fd, then spawn a log relay.
- *
- * child_fn  : called in the child process (must exec or _exit)
- * user_data : passed through to child_fn
- * log_file  : filename for log relay (e.g. "x11.log")
- * tag       : log tag (e.g. "X11")
- * label     : human-readable label for error messages (e.g. "Termux:X11")
- *
- * Returns child PID on success, -1 on error.
- */
-pid_t ds_spawn_daemon(ds_child_fn child_fn, void *user_data,
-                      const char *log_file, const char *tag,
-                      const char *label) {
-  int pipefd[2];
-  if (pipe(pipefd) < 0) {
-    ds_warn("[%s] pipe: %s", tag, strerror(errno));
-    return -1;
-  }
-
-  /* ready pipe: EOF = execv succeeded (O_CLOEXEC), byte = execv failed */
-  int readyfd[2];
-  if (pipe2(readyfd, O_CLOEXEC) < 0) {
-    ds_warn("[%s] pipe2: %s", tag, strerror(errno));
-    close(pipefd[0]);
-    close(pipefd[1]);
-    return -1;
-  }
-
-  pid_t child = fork();
-  if (child < 0) {
-    ds_warn("[%s] fork: %s", tag, strerror(errno));
-    close(pipefd[0]);
-    close(pipefd[1]);
-    close(readyfd[0]);
-    close(readyfd[1]);
-    return -1;
-  }
-  if (child == 0) {
-    close(pipefd[0]);
-    close(readyfd[0]);
-    dup2(pipefd[1], STDOUT_FILENO);
-    dup2(pipefd[1], STDERR_FILENO);
-    close(pipefd[1]);
-    child_fn(readyfd[1], user_data);
-    /* unreachable if child_fn calls execv/_exit */
-    _exit(1);
-  }
-
-  close(pipefd[1]);
-  close(readyfd[1]);
-
-  /* EOF = exec succeeded; byte = exec failed */
-  char rdy;
-  if (read(readyfd[0], &rdy, 1) > 0) {
-    ds_error("%s: execv failed -- daemon did not start", label);
-    waitpid(child, NULL, 0);
-    close(readyfd[0]);
-    close(pipefd[0]);
-    return -1;
-  }
-  close(readyfd[0]);
-
-  /* Spawn the log relay (takes ownership of pipefd[0]) */
-  ds_spawn_log_relay(pipefd[0], log_file, tag);
-
-  ds_log("%s: daemon pid=%d launched", label, (int)child);
-  return child;
-}
-
-/*
- * Create a file node at dst (if absent), chown+chmod 0666, then bind-mount
- * src onto dst.  label is used in the warning message on failure.
- * Returns 0 on success, -1 on failure.
- */
-int ds_bind_mount_socket(const char *src, const char *dst, uid_t uid,
-                         const char *label) {
-  int fd = open(dst, O_WRONLY | O_CREAT | O_CLOEXEC, 0666);
-  if (fd >= 0) {
-    close(fd);
-    if (chown(dst, uid, uid) < 0) { /* ignore */
-    }
-    chmod(dst, 0666);
-  }
-  if (mount(src, dst, NULL, MS_BIND, NULL) != 0) {
-    ds_warn("[%s] failed to bind-mount socket: %s", label, strerror(errno));
-    return -1;
-  }
-  return 0;
 }

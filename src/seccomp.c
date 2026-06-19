@@ -1,41 +1,28 @@
 /*
- * Droidspaces v6 - High-performance Container Runtime
+ * ds-fork v6 - High-performance Container Runtime
  *
  * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "droidspace.h"
-#include <linux/audit.h>
-#include <linux/filter.h>
-#include <linux/if_alg.h>
-#include <linux/seccomp.h>
-#include <stddef.h>
-#include <sys/prctl.h>
-
-/* AUDIT_ARCH_RISCV64 was added to linux/audit.h in 4.15.  Older kernel
- * headers don't have it; fall back to the canonical value
- * (EM_RISCV | __AUDIT_ARCH_64BIT | __AUDIT_ARCH_LE). */
-#ifndef AUDIT_ARCH_RISCV64
-#define AUDIT_ARCH_RISCV64 0xC00000F3u
-#endif
+#include "ds-fork.h"
 
 /* ---------------------------------------------------------------------------
  * Android System Call Filtering (Seccomp)
  * ---------------------------------------------------------------------------*/
 
 /**
- * ds_seccomp_apply_minimal()
+ * seccomp_apply_minimal()
  *
  * Blocks direct host kernel takeover vectors (module loading, kexec).
  * Applied unconditionally to all kernels and all modes.
  */
-int ds_seccomp_apply_minimal(int privileged_mask) {
+int seccomp_apply_minimal(int privileged_mask) {
   /* noseccomp: skip everything, 32-bit binaries must work */
-  if (privileged_mask & DS_PRIV_NOSEC)
+  if (privileged_mask & PRIV_NOSEC)
     return 0;
 
-  static struct sock_filter filter[74];
+  static struct sock_filter filter[78];
   int curr = 0;
 
   /* 1. Validate Architecture */
@@ -53,9 +40,6 @@ int ds_seccomp_apply_minimal(int privileged_mask) {
 #elif defined(__i386__)
   filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
                                                 AUDIT_ARCH_I386, 1, 0);
-#elif defined(__riscv) && __riscv_xlen == 64
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
-                                                AUDIT_ARCH_RISCV64, 1, 0);
 #endif
   filter[curr++] =
       (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
@@ -72,7 +56,7 @@ int ds_seccomp_apply_minimal(int privileged_mask) {
       (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
 #endif
 
-  if (!(privileged_mask & DS_PRIV_NOSEC)) {
+  if (!(privileged_mask & PRIV_NOSEC)) {
     /* 4. Kernel module loading */
     filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
                                                   __NR_init_module, 0, 1);
@@ -159,7 +143,7 @@ int ds_seccomp_apply_minimal(int privileged_mask) {
      *
      * CAP_SYS_TIME dropped from the bounding set is insufficient: the kernel
      * checks the capability against the *initial* user namespace, and
-     * Droidspaces containers run as real root without a user namespace, so
+     * ds-fork containers run as real root without a user namespace, so
      * the check passes even after the bounding-set drop.  Seccomp is the
      * only reliable barrier.
      *
@@ -197,6 +181,23 @@ int ds_seccomp_apply_minimal(int privileged_mask) {
     filter[curr++] = (struct sock_filter)BPF_STMT(
         BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
 #endif
+
+    /*
+     * 10b. Block host kernel log access via syslog(2).
+     *
+     * syslog(2) (__NR_syslog) reads/writes the kernel ring buffer directly,
+     * bypassing /dev/kmsg and /proc/kmsg path-based protections.  Used by
+     * dmesg(1) and klogctl(3).  The container's own kernel messages are
+     * accessible through /dev/kmsg within its namespace; there is no
+     * legitimate need for the raw syslog() interface inside a container.
+     * Return EPERM instead of killing — dmesg falls back gracefully.
+     */
+#ifdef __NR_syslog
+    filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
+                                                  __NR_syslog, 0, 1);
+    filter[curr++] = (struct sock_filter)BPF_STMT(
+        BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
+#endif
   }
 
   /* Allow everything else */
@@ -209,8 +210,8 @@ int ds_seccomp_apply_minimal(int privileged_mask) {
   };
 
   if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) < 0) {
-    ds_warn("[SEC] Failed to apply minimal seccomp filter: %s",
-            strerror(errno));
+    log_warn("[SEC] Failed to apply minimal seccomp filter: %s",
+             strerror(errno));
     return -1;
   }
   return 0;
@@ -226,10 +227,8 @@ int ds_seccomp_apply_minimal(int privileged_mask) {
  * 2. Deadlock Shield (EPERM): Blocks namespace creation (unshare/clone).
  *    Applied ONLY if block_nested_ns is true (manual override).
  */
-int android_seccomp_setup(int is_systemd, int block_nested_ns,
-                          int privileged_mask) {
-  (void)is_systemd;
-  if (privileged_mask & DS_PRIV_NOSEC)
+int android_seccomp_setup(int block_nested_ns, int privileged_mask) {
+  if (privileged_mask & PRIV_NOSEC)
     return 0;
   int major = 0, minor = 0;
   get_kernel_version(&major, &minor);
@@ -243,7 +242,7 @@ int android_seccomp_setup(int is_systemd, int block_nested_ns,
 
   /* Define base filter (arch check + load nr) */
   struct sock_filter filter_base[] = {
-      /* Same wrong-arch fix as ds_seccomp_apply_minimal: KILL on mismatch. */
+      /* Same wrong-arch fix as seccomp_apply_minimal: KILL on mismatch. */
       BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch)),
 #if defined(__aarch64__)
       BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_AARCH64, 1, 0),
@@ -253,8 +252,6 @@ int android_seccomp_setup(int is_systemd, int block_nested_ns,
       BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_ARM, 1, 0),
 #elif defined(__i386__)
       BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_I386, 1, 0),
-#elif defined(__riscv) && __riscv_xlen == 64
-      BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_RISCV64, 1, 0),
 #endif
       BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS), /* wrong arch */
       BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
@@ -300,7 +297,7 @@ int android_seccomp_setup(int is_systemd, int block_nested_ns,
   }
 
   if (block_nested_ns) {
-    ds_log(
+    log_info(
         "[SEC] --block-nested-namespaces: force blocking namespace syscalls.");
     memcpy(final_filter + curr, filter_ns, sizeof(filter_ns));
     curr += sizeof(filter_ns) / sizeof(struct sock_filter);
@@ -314,7 +311,7 @@ int android_seccomp_setup(int is_systemd, int block_nested_ns,
   };
 
   if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) < 0) {
-    ds_warn("Failed to apply Seccomp filter: %s", strerror(errno));
+    log_warn("Failed to apply Seccomp filter: %s", strerror(errno));
     free(final_filter);
     return -1;
   }

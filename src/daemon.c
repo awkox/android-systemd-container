@@ -1,5 +1,5 @@
 /*
- * Droidspaces v6 daemon & client mode
+ * ds-fork v6 daemon & client mode
  *
  * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -11,7 +11,7 @@
  * talks to it via libsu using a dumb client that only does basic socket
  * i/o, avoiding the seccomp traps entirely.
  *
- * we use an abstract socket (@droidspaces) so there's no filesystem mess
+ * we use an abstract socket (@" PROJECT_NAME) so there's no filesystem mess
  * to clean up when we crash or get killed.
  *
  * the wire protocol is just simple typed frames.
@@ -21,26 +21,16 @@
  * instead and do a final non-blocking drain when the direct child exits.
  */
 
-#include "droidspace.h"
-
-#include <arpa/inet.h>
-#include <grp.h>
-#include <pwd.h>
-#include <stddef.h>
-#include <sys/signalfd.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <sys/wait.h>
+#include "ds-fork.h"
 
 /* constants */
 
-#define DS_SOCK_NAME "droidspaces"
-#define DS_BACKLOG SOMAXCONN
-#define DS_MAX_ARGC 64
-#define DS_MAX_ARG 8192
-#define DS_IOBUF 8192
-#define PTY_WBUF_MAX                                                           \
-  (256 * 1024)                     /* absolute buffer cap for PTY master input \
+#define SOCK_NAME PROJECT_NAME
+#define BACKLOG SOMAXCONN
+#define MAX_ARGC 64
+#define MAX_ARG 8192
+#define IOBUF 8192
+#define PTY_WBUF_MAX (256 * 1024)  /* absolute buffer cap for PTY master input \
                                     */
 #define PTY_WBUF_HIGH (192 * 1024) /* suspend conn EPOLLIN above this */
 #define PTY_WBUF_LOW (64 * 1024)   /* resume  conn EPOLLIN below this */
@@ -56,7 +46,7 @@
 static FILE *g_daemon_log_fp = NULL;
 static char g_daemon_log_path[PATH_MAX] = "";
 
-/* Rotate droidspacesd.log mid-run when it exceeds the size limit.
+/* Rotate ds-forkd.log mid-run when it exceeds the size limit.
  * Renames current log to .old, reopens fresh file, and redirects
  * stdout/stderr (background mode) or g_daemon_log_fp (foreground). */
 static void rotate_daemon_log_if_needed(void) {
@@ -106,25 +96,25 @@ static void daemon_log_tee(const char *prefix, const char *fmt, ...) {
   fflush(g_daemon_log_fp);
 }
 
-#undef ds_log
-#define ds_log(fmt, ...)                                                       \
+#undef log_info
+#define log_info(fmt, ...)                                                     \
   do {                                                                         \
-    ds_log_internal("+", C_GREEN, 0, fmt, ##__VA_ARGS__);                      \
-    daemon_log_tee("+", fmt, ##__VA_ARGS__);                                   \
+    log_internal("+", C_GREEN, 0, fmt __VA_OPT__(,) __VA_ARGS__);              \
+    daemon_log_tee("+", fmt __VA_OPT__(,) __VA_ARGS__);                        \
   } while (0)
 
-#undef ds_warn
-#define ds_warn(fmt, ...)                                                      \
+#undef log_warn
+#define log_warn(fmt, ...)                                                     \
   do {                                                                         \
-    ds_log_internal("!", C_YELLOW, 1, fmt, ##__VA_ARGS__);                     \
-    daemon_log_tee("!", fmt, ##__VA_ARGS__);                                   \
+    log_internal("!", C_YELLOW, 1, fmt __VA_OPT__(,) __VA_ARGS__);             \
+    daemon_log_tee("!", fmt __VA_OPT__(,) __VA_ARGS__);                        \
   } while (0)
 
-#undef ds_error
-#define ds_error(fmt, ...)                                                     \
+#undef log_error
+#define log_error(fmt, ...)                                                    \
   do {                                                                         \
-    ds_log_internal("-", C_RED, 1, fmt, ##__VA_ARGS__);                        \
-    daemon_log_tee("-", fmt, ##__VA_ARGS__);                                   \
+    log_internal("-", C_RED, 1, fmt __VA_OPT__(,) __VA_ARGS__);                \
+    daemon_log_tee("-", fmt __VA_OPT__(,) __VA_ARGS__);                        \
   } while (0)
 
 /*
@@ -184,8 +174,8 @@ static void send_exit(int fd, int code) {
 static socklen_t make_addr(struct sockaddr_un *addr) {
   memset(addr, 0, sizeof(*addr));
   addr->sun_family = AF_UNIX;
-  size_t nlen = strlen(DS_SOCK_NAME);
-  memcpy(addr->sun_path + 1, DS_SOCK_NAME, nlen);
+  size_t nlen = strlen(SOCK_NAME);
+  memcpy(addr->sun_path + 1, SOCK_NAME, nlen);
   return (socklen_t)(offsetof(struct sockaddr_un, sun_path) + 1 + nlen);
 }
 
@@ -194,11 +184,11 @@ static socklen_t make_addr(struct sockaddr_un *addr) {
 typedef struct {
   uint32_t flags;
   int argc;
-  char *argv[DS_MAX_ARGC + 1];
+  char *argv[MAX_ARGC + 1];
   uint16_t rows, cols;
-} ds_req_t;
+} req_t;
 
-static void free_req(ds_req_t *r) {
+static void free_req(req_t *r) {
   for (int i = 0; i < r->argc; i++) {
     if (r->argv[i]) {
       free(r->argv[i]);
@@ -207,14 +197,14 @@ static void free_req(ds_req_t *r) {
   }
 }
 
-static int recv_req(int fd, ds_req_t *r) {
+static int recv_req(int fd, req_t *r) {
   memset(r, 0, sizeof(*r));
   uint32_t nf, na;
   if (read_exact(fd, &nf, 4) < 0 || read_exact(fd, &na, 4) < 0)
     return -1;
   r->flags = ntohl(nf);
   uint32_t argc = ntohl(na);
-  if (!argc || argc > DS_MAX_ARGC)
+  if (!argc || argc > MAX_ARGC)
     return -1;
 
   for (uint32_t i = 0; i < argc; i++) {
@@ -222,7 +212,7 @@ static int recv_req(int fd, ds_req_t *r) {
     if (read_exact(fd, &nl, 4) < 0)
       return -1;
     uint32_t al = ntohl(nl);
-    if (al > DS_MAX_ARG)
+    if (al > MAX_ARG)
       return -1;
     r->argv[i] = (char *)malloc((size_t)al + 1);
     if (!r->argv[i])
@@ -248,7 +238,7 @@ static int recv_req(int fd, ds_req_t *r) {
   return 0;
 }
 
-/* re-execute the droidspaces binary */
+/* re-execute the ds-fork binary */
 
 static void reexec(char **argv) {
   /*
@@ -262,11 +252,11 @@ static void reexec(char **argv) {
   _exit(127);
 }
 
-static char **make_exec_argv(ds_req_t *r) {
+static char **make_exec_argv(req_t *r) {
   char **av = (char **)malloc((size_t)(r->argc + 2) * sizeof(char *));
   if (!av)
     return NULL;
-  av[0] = (char *)"droidspaces";
+  av[0] = (char *)PROJECT_NAME;
   for (int i = 0; i < r->argc; i++)
     av[i + 1] = r->argv[i];
   av[r->argc + 1] = NULL;
@@ -274,7 +264,7 @@ static char **make_exec_argv(ds_req_t *r) {
 }
 
 static void drain_fd(int fd, int conn, uint8_t type) {
-  char buf[DS_IOBUF];
+  char buf[IOBUF];
   int fl = fcntl(fd, F_GETFL);
   fcntl(fd, F_SETFL, fl | O_NONBLOCK);
   for (;;) {
@@ -288,14 +278,14 @@ static void drain_fd(int fd, int conn, uint8_t type) {
 
 /* unified session handler for both pty and pipe modes */
 
-static void handle_session(int conn, ds_req_t *r) {
+static void handle_session(int conn, req_t *r) {
   int is_pty = (r->flags & REQ_FLAG_PTY);
   int master = -1, slave = -1;
   int out[2] = {-1, -1}, err[2] = {-1, -1};
-  char buf[DS_IOBUF];
+  char buf[IOBUF];
 
   if (is_pty) {
-    if (ds_openpty(&master, &slave, NULL) < 0) {
+    if (openpty(&master, &slave, NULL) < 0) {
       send_frame(conn, MSG_ERR, "daemon: openpty failed\n", 23);
       send_exit(conn, 1);
       return;
@@ -389,7 +379,13 @@ static void handle_session(int conn, ds_req_t *r) {
       close(err[1]);
     }
     /* Prevent the spawned child from proxying back to the daemon */
-    setenv("DS_NO_PROXY", "1", 1);
+    setenv("NO_PROXY", "1", 1);
+    /* Reset inherited signal dispositions: the daemon ignores SIGHUP/SIGPIPE
+     * for its own survival, but execv() preserves SIG_IGN across the new image.
+     * Restore defaults so the CLI child responds to signals normally. */
+    signal(SIGHUP, SIG_DFL);
+    signal(SIGPIPE, SIG_DFL);
+    signal(SIGCHLD, SIG_DFL);
     reexec(av);
   }
 
@@ -525,7 +521,7 @@ static void handle_session(int conn, ds_req_t *r) {
                   if (pty_wbuf_len + rem > pty_wbuf_cap) {
                     /* Double capacity without overflow: clamp before shifting.
                      */
-                    size_t ncap = pty_wbuf_cap ? pty_wbuf_cap : DS_IOBUF;
+                    size_t ncap = pty_wbuf_cap ? pty_wbuf_cap : IOBUF;
                     while (ncap < pty_wbuf_len + rem) {
                       if (ncap > PTY_WBUF_MAX / 2) {
                         ncap = PTY_WBUF_MAX;
@@ -711,7 +707,7 @@ session_end:
 /* handle incoming client connections */
 
 static void handle_conn(int conn) {
-  ds_req_t req;
+  req_t req;
   if (recv_req(conn, &req) < 0) {
     send_frame(conn, MSG_ERR, "daemon: bad request\n", 20);
     send_exit(conn, 1);
@@ -723,7 +719,7 @@ static void handle_conn(int conn) {
    * Block recursive daemon/client invocations.
    * We skip any argv[i] whose predecessor starts with '-', because that arg
    * is an option VALUE (e.g. --name daemon-container), not a sub-command.
-   * DS_NO_PROXY=1 is the primary guard (set before reexec); this is a
+   * NO_PROXY=1 is the primary guard (set before reexec); this is a
    * defence-in-depth check.
    */
   for (int i = 0; i < req.argc; i++) {
@@ -750,14 +746,14 @@ static void handle_conn(int conn) {
       if (n > 0)
         off += (size_t)n;
     }
-    ds_log("Client connected. Mode: %s",
-           (req.flags & REQ_FLAG_PTY) ? "PTY" : "PIPE");
-    ds_log("Executing command: %s", cmdline);
+    log_info("Client connected. Mode: %s",
+             (req.flags & REQ_FLAG_PTY) ? "PTY" : "PIPE");
+    log_info("Executing command: %s", cmdline);
   }
 
   handle_session(conn, &req);
 
-  ds_log("Session finished. Client disconnected.");
+  log_info("Session finished. Client disconnected.");
   free_req(&req);
   close(conn);
   _exit(0);
@@ -815,7 +811,7 @@ static void daemonize(int foreground) {
 
   {
     char log_path[PATH_MAX];
-    snprintf(log_path, sizeof(log_path), "%s/droidspacesd.log", get_logs_dir());
+    snprintf(log_path, sizeof(log_path), "%s/ds-forkd.log", get_logs_dir());
     safe_strncpy(g_daemon_log_path, log_path, sizeof(g_daemon_log_path));
     rotate_log(log_path, 2 * 1024 * 1024);
 
@@ -832,13 +828,13 @@ static void daemonize(int foreground) {
     } else {
       /* Foreground: keep terminal live; open log file for explicit tee.
        * The daemon_log_tee() helper writes every message here alongside
-       * the terminal output produced by ds_log_internal(). */
+       * the terminal output produced by log_internal(). */
       g_daemon_log_fp = fopen(log_path, "ae");
     }
   }
 
   /* Make daemon unkillable */
-  ds_oom_protect();
+  oom_protect();
 }
 
 static void sigusr2_handler(int sig) {
@@ -846,117 +842,13 @@ static void sigusr2_handler(int sig) {
   g_sigusr2_received = 1;
 }
 
-/*
- * ds_selinux_transition - re-exec into the droidspacesd SELinux domain.
- *
- * When launched from Magisk/KernelSU/APatch post-fs-data, the process runs
- * under the root manager's domain (e.g. u:r:magisk:s0) rather than our own.
- * This function writes our target context to /proc/self/attr/exec and re-execs
- * the same binary with the same argv, causing the kernel to transition into
- * u:r:droidspacesd:s0 at the exec boundary - exactly what runcon/setexeccon
- * does internally, with zero libselinux dependency.
- *
- * On the second entry (after re-exec) the current context already matches,
- * so the strcmp short-circuits and we continue normally. The function is also
- * a no-op on non-Android platforms and when SELinux is not mounted/enforcing.
- */
-#define DS_SELINUX_CTX "u:r:droidspacesd:s0"
+int daemon_run(int foreground) {
+  ensure_runtime();
 
-static void ds_selinux_transition(char **argv) {
-  if (!is_android())
-    return;
-
-  /* Read our current SELinux context */
-  char cur[256] = {0};
-  int fd = open("/proc/self/attr/current", O_RDONLY);
-  if (fd < 0)
-    return; /* SELinux not mounted */
-  ssize_t n = read(fd, cur, sizeof(cur) - 1);
-  close(fd);
-  if (n <= 0)
-    return;
-  cur[n] = '\0';
-  /* Trim trailing newline that the kernel appends */
-  char *nl = strchr(cur, '\n');
-  if (nl)
-    *nl = '\0';
-
-  /* Already in the right domain - clear any stale exec context and return */
-  if (strcmp(cur, DS_SELINUX_CTX) == 0) {
-    fd = open("/proc/self/attr/exec", O_WRONLY);
-    if (fd >= 0) {
-      if (write(fd, "\0", 1) < 0) {
-        /* ignore */
-      }
-      close(fd);
-    }
-    return;
-  }
-
-  /* Set the exec context - the transition fires on the next execv() */
-  fd = open("/proc/self/attr/exec", O_WRONLY);
-  if (fd < 0)
-    return; /* No permission or SELinux disabled - continue in current domain */
-
-  n = write(fd, DS_SELINUX_CTX, strlen(DS_SELINUX_CTX));
-  close(fd);
-  if (n < 0)
-    return;
-
-  /* Re-exec ourselves into the new domain */
-  char self[PATH_MAX];
-  n = readlink("/proc/self/exe", self, sizeof(self) - 1);
-  if (n <= 0)
-    return;
-  self[n] = '\0';
-
-  execv(self, argv);
-  /*
-   * execv() failed - most likely the binary lives on a noexec mount
-   * (e.g. /data on some vendor kernels). Fall back to setcon() which
-   * switches the current process context in-place without a re-exec.
-   * This is less clean than the exec-based transition (open fds are not
-   * re-validated by the kernel) but is safe here because we haven't
-   * opened any sensitive descriptors yet - we are still at the very top
-   * of ds_daemon_run(), before daemonize() or any socket work.
-   *
-   * If setcon() also fails (e.g. the policy doesn't allow dyntransition),
-   * we clear the stale exec context and continue in the current domain.
-   * Since droidspacesd is typepermissive, this is still functional.
-   */
-  {
-    int sfd = open("/proc/self/attr/current", O_WRONLY);
-    if (sfd >= 0) {
-      if (write(sfd, DS_SELINUX_CTX, strlen(DS_SELINUX_CTX)) < 0) {
-        /* ignore */
-      }
-      close(sfd);
-    }
-  }
-  /* Clear the stale exec context regardless of whether setcon worked */
-  fd = open("/proc/self/attr/exec", O_WRONLY);
-  if (fd >= 0) {
-    if (write(fd, "\0", 1) < 0) {
-      /* ignore */
-    }
-    close(fd);
-  }
-}
-
-#undef DS_SELINUX_CTX
-
-int ds_daemon_run(int foreground, char **argv) {
-  ensure_workspace();
-
-  if (ds_daemon_probe()) {
-    ds_error("Daemon is already running (@%s)", DS_SOCK_NAME);
+  if (daemon_probe()) {
+    log_error("Daemon is already running (@%s)", SOCK_NAME);
     return 1;
   }
-
-  /* Transition into our SELinux domain before daemonizing, so the daemon
-   * and all its children run under u:r:droidspacesd:s0 regardless of how
-   * we were launched (init, Magisk, KernelSU, APatch, shell, etc.) */
-  ds_selinux_transition(argv);
 
   daemonize(foreground);
 
@@ -979,37 +871,25 @@ int ds_daemon_run(int foreground, char **argv) {
   /* SIGUSR2: app sends this after a live binary swap as an acknowledgment */
   signal(SIGUSR2, sigusr2_handler);
 
-  /* Write PID file so the Android app can signal us */
-  {
-    char pid_path[PATH_MAX];
-    snprintf(pid_path, sizeof(pid_path), "%s/droidspacesd.pid",
-             get_workspace_dir());
-    FILE *pf = fopen(pid_path, "w");
-    if (pf) {
-      fprintf(pf, "%d\n", getpid());
-      fclose(pf);
-    }
-  }
-
   int srv = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (srv < 0) {
-    ds_error("daemon: socket: %s", strerror(errno));
+    log_error("daemon: socket: %s", strerror(errno));
     return 1;
   }
 
   struct sockaddr_un addr;
   socklen_t alen = make_addr(&addr);
   if (bind(srv, (struct sockaddr *)&addr, alen) < 0) {
-    ds_error("daemon: bind(@%s): %s", DS_SOCK_NAME, strerror(errno));
+    log_error("daemon: bind(@%s): %s", SOCK_NAME, strerror(errno));
     if (errno == EADDRINUSE) {
-      ds_log("Is another droidspaces daemon stuck? Check 'ps' to see.");
+      log_info("Is another " PROJECT_NAME " daemon stuck? Check 'ps' to see.");
     }
     close(srv);
     return 1;
   }
 
-  if (listen(srv, DS_BACKLOG) < 0) {
-    ds_error("daemon: listen: %s", strerror(errno));
+  if (listen(srv, BACKLOG) < 0) {
+    log_error("daemon: listen: %s", strerror(errno));
     close(srv);
     return 1;
   }
@@ -1017,9 +897,9 @@ int ds_daemon_run(int foreground, char **argv) {
   signal(SIGCHLD, SIG_IGN); /* auto-reap children */
   signal(SIGPIPE, SIG_IGN); /* ignore broken pipes */
 
-  fprintf(stdout, "\nDroidspaces Daemon - v" DS_VERSION "\n\n");
+  fprintf(stdout, "\nds-fork Daemon - v" RUNTIME_VERSION "\n\n");
   fflush(stdout);
-  ds_log("Listening on @" DS_SOCK_NAME " (PID %d)", getpid());
+  log_info("Listening on @" SOCK_NAME " (PID %d)", getpid());
 
   for (;;) {
     /* Rotate log if it exceeds 4MB */
@@ -1028,26 +908,26 @@ int ds_daemon_run(int foreground, char **argv) {
     /* Acknowledge a live binary swap signalled by the Android app. */
     if (g_sigusr2_received) {
       g_sigusr2_received = 0;
-      ds_log("Binary updated on disk (SIGUSR2). New sessions will use updated "
-             "binary automatically.");
+      log_info(
+          "Binary updated on disk (SIGUSR2). New sessions will use updated "
+          "binary automatically.");
     }
 
     int conn = accept4(srv, NULL, NULL, SOCK_CLOEXEC);
     if (conn < 0) {
       if (errno == EINTR || errno == EAGAIN)
         continue;
-      ds_error("accept4: %s", strerror(errno));
+      log_error("accept4: %s", strerror(errno));
       continue;
     }
 
     /*
-     * authenticate the peer: only root or members of the 'droidspaces' group
+     * authenticate the peer: only root or members of the 'ds-fork' group
      * may connect. abstract socket has no filesystem permissions, so we
      * enforce this via SO_PEERCRED + getgrouplist() -- same model as Docker's
      * unix group.
      */
     {
-#define DS_GROUP "droidspaces"
       struct ucred cred;
       socklen_t clen = sizeof(cred);
       if (getsockopt(conn, SOL_SOCKET, SO_PEERCRED, &cred, &clen) < 0) {
@@ -1055,26 +935,8 @@ int ds_daemon_run(int foreground, char **argv) {
         continue;
       }
 
-      int allowed = (cred.uid == 0);
-      if (!allowed) {
-        struct group *gr = getgrnam(DS_GROUP);
-        struct passwd *pw = getpwuid(cred.uid);
-        if (gr && pw) {
-          int ngroups = 64;
-          gid_t groups[64];
-          getgrouplist(pw->pw_name, pw->pw_gid, groups, &ngroups);
-          for (int i = 0; i < ngroups; i++) {
-            if (groups[i] == gr->gr_gid) {
-              allowed = 1;
-              break;
-            }
-          }
-        }
-      }
-
-      if (!allowed) {
-        const char *msg = "permission denied: only root or '" DS_GROUP
-                          "' group members may connect.";
+      if (cred.uid != 0) {
+        const char *msg = "permission denied: only user 0 may connect.";
         send_frame(conn, MSG_ERR, msg, (uint32_t)strlen(msg));
         send_exit(conn, 1);
         close(conn);
@@ -1107,7 +969,7 @@ int ds_daemon_run(int foreground, char **argv) {
  * poll() buys us nothing here.  A blocking connect() that finds no listener
  * returns ECONNREFUSED immediately.
  */
-int ds_daemon_probe(void) {
+int daemon_probe(void) {
   struct sockaddr_un addr;
   socklen_t alen = make_addr(&addr);
   int s = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
@@ -1120,14 +982,13 @@ int ds_daemon_probe(void) {
 
 /* connect to the daemon and relay our command */
 
-int ds_client_run(int argc, char **argv) {
+int client_run(int argc, char **argv) {
   if (argc < 1)
     return -2;
 
   int interactive = 0;
   for (int i = 0; i < argc; i++) {
-    if (strcmp(argv[i], "enter") == 0 || strcmp(argv[i], "run") == 0 ||
-        strcmp(argv[i], "start") == 0 || strcmp(argv[i], "restart") == 0) {
+    if (strcmp(argv[i], "start") == 0 || strcmp(argv[i], "restart") == 0) {
       interactive = 1;
       break;
     }
@@ -1137,13 +998,7 @@ int ds_client_run(int argc, char **argv) {
 
   if (interactive && !has_tty) {
     int forces_tty = 0;
-    int is_enter = 0;
     for (int i = 0; i < argc; i++) {
-      if (strcmp(argv[i], "enter") == 0) {
-        forces_tty = 1;
-        is_enter = 1;
-        break;
-      }
       if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--foreground") == 0) {
         for (int j = 0; j < argc; j++) {
           if (strcmp(argv[j], "start") == 0 ||
@@ -1157,20 +1012,15 @@ int ds_client_run(int argc, char **argv) {
       }
     }
     if (forces_tty) {
-      if (is_enter) {
-        ds_error("Interactive terminal is required for the enter command\n");
-        return 1;
-      } else {
-        /* Strip -f/--foreground; start_rootfs() will warn and flip the switch.
-         */
-        for (int i = 0; i < argc; i++) {
-          if (strcmp(argv[i], "-f") == 0 ||
-              strcmp(argv[i], "--foreground") == 0) {
-            for (int j = i; j < argc - 1; j++)
-              argv[j] = argv[j + 1];
-            argv[--argc] = NULL;
-            break;
-          }
+      /* Strip -f/--foreground; start_rootfs() will warn and flip the switch.
+       */
+      for (int i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "-f") == 0 ||
+            strcmp(argv[i], "--foreground") == 0) {
+          for (int j = i; j < argc - 1; j++)
+            argv[j] = argv[j + 1];
+          argv[--argc] = NULL;
+          break;
         }
       }
     }
@@ -1256,7 +1106,7 @@ int ds_client_run(int argc, char **argv) {
   epoll_ctl(epfd, EPOLL_CTL_ADD, sock, &ev);
 
   int exit_code = 0;
-  char buf[DS_IOBUF];
+  char buf[IOBUF];
 
   for (;;) {
     int nfds = epoll_wait(epfd, events, 4, -1);

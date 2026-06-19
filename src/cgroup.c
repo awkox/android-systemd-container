@@ -1,11 +1,11 @@
 /*
- * Droidspaces v6 - High-performance Container Runtime
+ * ds-fork v6 - High-performance Container Runtime
  *
  * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "droidspace.h"
+#include "ds-fork.h"
 
 /**
  * Ported LXC-style Cgroup Setup:
@@ -13,20 +13,6 @@
  * 2. If Cgroup Namespace is active (Linux 4.6+), mount hierarchies directly.
  * 3. Otherwise (Legacy), bind-mount the container's subset from the host.
  */
-#ifndef CGROUP2_SUPER_MAGIC
-#define CGROUP2_SUPER_MAGIC 0x63677270
-#endif
-
-/* Returns 1 if the kernel's cgroupv2 controllers are sufficiently complete
- * for systemd. The cpu/io/memory v2 controllers only became usable in 5.2.
- * On kernels like Android 4.14, cgroup2 mounts SUCCEED but the controllers
- * are absent - systemd probes them and falls apart. */
-int ds_cgroup_v2_usable(void) {
-  int major = 0, minor = 0;
-  if (get_kernel_version(&major, &minor) != 0)
-    return 0; /* unknown kernel - assume unusable, safe default */
-  return (major > 5 || (major == 5 && minor >= 2));
-}
 
 /* Scan mountinfo for any host cgroup2 mount (e.g. /dev/cg2_bpf on Android).
  * Returns 1 and fills 'buf' if found. */
@@ -62,8 +48,8 @@ static int find_host_cgroup2_mount(char *buf, size_t size) {
       continue;
     *mp_end = '\0';
 
-    /* Skip Droidspaces-internal mounts to avoid false positives on restart */
-    if (strstr(p, "/Droidspaces/"))
+    /* Skip ds-fork-internal mounts to avoid false positives on restart */
+    if (strstr(p, "/" PROJECT_NAME "/"))
       continue;
 
     if (buf)
@@ -76,11 +62,11 @@ static int find_host_cgroup2_mount(char *buf, size_t size) {
 }
 
 /* Scans mountinfo to find any cgroup2 mount - covers /dev/cg2_bpf (Android)
- * and /sys/fs/cgroup placed by ds_cgroup_host_bootstrap(). */
-int ds_cgroup_host_is_v2(void) { return find_host_cgroup2_mount(NULL, 0); }
+ * and /sys/fs/cgroup placed by cgroup_host_bootstrap(). */
+int cgroup_host_is_v2(void) { return find_host_cgroup2_mount(NULL, 0); }
 
 /* Returns 1 if the kernel supports cgroup2 (check /proc/filesystems). */
-int ds_cgroup_kernel_supports_v2(void) {
+int cgroup_kernel_supports_v2(void) {
   return (grep_file("/proc/filesystems", "cgroup2") > 0);
 }
 
@@ -88,7 +74,7 @@ int ds_cgroup_kernel_supports_v2(void) {
  * Android recovery kernels support cgroup2 but only mount it at /dev/cg2_bpf;
  * systemd needs it at /sys/fs/cgroup. Sequence: mkdir -> tmpfs anchor ->
  * cgroup2. */
-void ds_cgroup_host_bootstrap(int force_cgroupv1) {
+void cgroup_host_bootstrap(int force_cgroupv1) {
   if (force_cgroupv1)
     return;
 
@@ -101,13 +87,14 @@ void ds_cgroup_host_bootstrap(int force_cgroupv1) {
   /* No probe_cgroup2_mount(): mkdtemp fails on ramfs roots (no /tmp).
    * The mount() calls below self-report failure via errno. */
   if (grep_file("/proc/filesystems", "cgroup2") <= 0) {
-    ds_log("[CGROUP] cgroup2 not in /proc/filesystems, skipping bootstrap.");
+    log_info("[CGROUP] cgroup2 not in /proc/filesystems, skipping bootstrap.");
     return;
   }
 
   if (access("/sys/fs/cgroup", F_OK) != 0) {
     if (mkdir_p("/sys/fs/cgroup", 0755) != 0) {
-      ds_error("[CGROUP] Failed to create /sys/fs/cgroup: %s", strerror(errno));
+      log_error("[CGROUP] Failed to create /sys/fs/cgroup: %s",
+                strerror(errno));
       return;
     }
   }
@@ -118,19 +105,19 @@ void ds_cgroup_host_bootstrap(int force_cgroupv1) {
       (unsigned long)sfs.f_type != (unsigned long)CGROUP2_SUPER_MAGIC) {
     if (mount("none", "/sys/fs/cgroup", "tmpfs",
               MS_NOSUID | MS_NODEV | MS_NOEXEC, "mode=755,size=16M") != 0) {
-      ds_error("[CGROUP] Failed to mount tmpfs on /sys/fs/cgroup: %s",
-               strerror(errno));
+      log_error("[CGROUP] Failed to mount tmpfs on /sys/fs/cgroup: %s",
+                strerror(errno));
       return;
     }
-    ds_log("[CGROUP] Mounted tmpfs anchor on /sys/fs/cgroup.");
+    log_info("[CGROUP] Mounted tmpfs anchor on /sys/fs/cgroup.");
   }
 
   if (mount("none", "/sys/fs/cgroup", "cgroup2",
             MS_NOSUID | MS_NODEV | MS_NOEXEC, NULL) != 0) {
-    ds_error("Failed to mount cgroup2 on /sys/fs/cgroup: %s", strerror(errno));
+    log_error("Failed to mount cgroup2 on /sys/fs/cgroup: %s", strerror(errno));
     return;
   }
-  ds_log("Auto-mounted cgroup2 on /sys/fs/cgroup.");
+  log_info("Auto-mounted cgroup2 on /sys/fs/cgroup.");
 }
 
 /*
@@ -179,18 +166,18 @@ static void mount_v1_controllers(void) {
     /* Always synthesize a fresh v1 mount for every subsystem.
      * The kernel translates this to the container's isolated cgroupns root. */
     if (mount("cgroup", mp, "cgroup", flags, name) != 0) {
-      ds_log("[CGROUP] v1 controller '%s' unavailable: %s", name,
-             strerror(errno));
+      log_info("[CGROUP] v1 controller '%s' unavailable: %s", name,
+               strerror(errno));
       rmdir(mp);
     } else {
-      ds_log("[CGROUP] v1 mounted: %s", name);
+      log_info("[CGROUP] v1 mounted: %s", name);
     }
   }
   fclose(f);
 }
 
-int setup_cgroups(int is_systemd, int force_cgroupv1) {
-  ds_cgroup_host_bootstrap(force_cgroupv1);
+int setup_cgroups(int force_cgroupv1) {
+  cgroup_host_bootstrap(force_cgroupv1);
 
   if (access("sys/fs/cgroup", F_OK) != 0) {
     if (mkdir_p("sys/fs/cgroup", 0755) < 0)
@@ -202,7 +189,7 @@ int setup_cgroups(int is_systemd, int force_cgroupv1) {
               MS_NOSUID | MS_NODEV | MS_NOEXEC, "mode=755,size=16M") < 0)
     return -1;
 
-  int v2_active = ds_cgroup_host_is_v2() && !force_cgroupv1;
+  int v2_active = cgroup_host_is_v2() && !force_cgroupv1;
   int systemd_setup_done = 0;
 
   if (v2_active) {
@@ -212,7 +199,7 @@ int setup_cgroups(int is_systemd, int force_cgroupv1) {
               MS_NOSUID | MS_NODEV | MS_NOEXEC, NULL) == 0) {
       systemd_setup_done = 1;
     } else {
-      ds_error("Failed to mount cgroup2: %s", strerror(errno));
+      log_error("Failed to mount cgroup2: %s", strerror(errno));
     }
   } else {
     /* V1 PATH (force_cgroupv1): Synthesize fresh mounts for all controllers. */
@@ -222,203 +209,30 @@ int setup_cgroups(int is_systemd, int force_cgroupv1) {
 
   /* Ensure a systemd cgroup hierarchy exists for systemd containers.
    * On v1 this is a named cgroup; on v2 systemd uses the unified root. */
-  if (is_systemd && !v2_active) {
+  if (!v2_active) {
     if (access("sys/fs/cgroup/systemd", F_OK) != 0) {
       mkdir("sys/fs/cgroup/systemd", 0755);
       if (mount("cgroup", "sys/fs/cgroup/systemd", "cgroup",
                 MS_NOSUID | MS_NODEV | MS_NOEXEC, "none,name=systemd") < 0) {
-        ds_error("Failed to mount systemd cgroup: %s", strerror(errno));
+        log_error("Failed to mount systemd cgroup: %s", strerror(errno));
         return -1;
       }
     }
     systemd_setup_done = 1;
   }
 
-  if (is_systemd && !systemd_setup_done) {
-    ds_error("Systemd cgroup setup failed. Systemd containers cannot boot.");
+  if (!systemd_setup_done) {
+    log_error("Systemd cgroup setup failed. Systemd containers cannot boot.");
     return -1;
   }
 
   return 0;
 }
 
-/**
- * Move a process (usually self) into the same cgroup hierarchy as target_pid.
- * This is used by 'enter' to ensure the process is physically inside the
- * container's cgroup subtree on the host, which is required for D-Bus/logind
- * inside the container to correctly move the process into session scopes.
- */
-int ds_cgroup_attach(pid_t target_pid) {
-  /* On unified v2 hosts, we only need to write to the root v2 hierarchy.
-   * On hybrid hosts, we might need to iterate through mounted v1 controllers.
-   * For simplicity and correctness, we scan sys/fs/cgroup for directories. */
-  DIR *d = opendir("/sys/fs/cgroup");
-  if (!d)
-    return -1;
-
-  char target_cgroup[PATH_MAX];
-  snprintf(target_cgroup, sizeof(target_cgroup), "/proc/%d/cgroup", target_pid);
-
-  struct dirent *de;
-  while ((de = readdir(d)) != NULL) {
-    if (de->d_name[0] == '.')
-      continue;
-
-    char cg_root[PATH_MAX];
-    snprintf(cg_root, sizeof(cg_root), "/sys/fs/cgroup/%s", de->d_name);
-    struct stat st;
-    if (stat(cg_root, &st) != 0 || !S_ISDIR(st.st_mode)) {
-      /* Might be the unified root at /sys/fs/cgroup itself */
-      if (strcmp(de->d_name, "cgroup.procs") == 0) {
-        safe_strncpy(cg_root, "/sys/fs/cgroup", sizeof(cg_root));
-      } else {
-        continue;
-      }
-    }
-
-    /* 1. Discover where target_pid lives in this hierarchy */
-    FILE *f = fopen(target_cgroup, "re");
-    if (!f)
-      continue;
-
-    char line[1024], subpath[PATH_MAX] = {0};
-    while (fgets(line, sizeof(line), f)) {
-      char *col1 = strchr(line, ':');
-      if (!col1)
-        continue;
-      char *col2 = strchr(col1 + 1, ':');
-      if (!col2)
-        continue;
-
-      char *subsys = col1 + 1;
-      char *path = col2 + 1;
-      *col2 = '\0';
-
-      int match = 0;
-      if (strcmp(de->d_name, "cgroup.procs") == 0 && subsys[0] == '\0') {
-        match = 1; /* V2 match */
-      } else if (strstr(subsys, de->d_name)) {
-        match = 1; /* V1 match */
-      }
-
-      if (match) {
-        char *nl = strchr(path, '\n');
-        if (nl)
-          *nl = '\0';
-        safe_strncpy(subpath, path, sizeof(subpath));
-        break;
-      }
-    }
-    fclose(f);
-
-    if (subpath[0] == '\0')
-      continue;
-
-    /* 2. Create leaf and move self - same logic as before but uses local sysfs
-     */
-    char leaf_dir[PATH_MAX * 2 + 512];
-    snprintf(leaf_dir, sizeof(leaf_dir), "%s%s/ds-enter-%d", cg_root, subpath,
-             (int)getpid());
-
-    if (mkdir_p(leaf_dir, 0755) < 0 && errno != EEXIST)
-      continue;
-
-    char procs_path[sizeof(leaf_dir) + 32];
-    snprintf(procs_path, sizeof(procs_path), "%s/cgroup.procs", leaf_dir);
-    int pfd = open(procs_path, O_WRONLY | O_CLOEXEC);
-    if (pfd >= 0) {
-      char pid_s[32];
-      int len = snprintf(pid_s, sizeof(pid_s), "%d", (int)getpid());
-      if (write(pfd, pid_s, len) < 0) {
-        /* best-effort, ignore */
-      }
-      close(pfd);
-    }
-
-    if (strcmp(de->d_name, "cgroup.procs") == 0)
-      break;
-  }
-  closedir(d);
-  return 0;
-}
-
 /* ---------------------------------------------------------------------------
- * ds_cgroup_detach
+ * cgroup_cleanup_container
  *
- * Removes ds-enter-<pid> leaf cgroup dirs created by ds_cgroup_attach().
- * Must be called after waitpid() so the leaf is guaranteed empty.
- *
- * The old implementation reconstructed the path manually and got the depth
- * wrong (missed intermediate scopes like init.scope), causing stale dirs.
- * This version does a recursive scan of /sys/fs/cgroup and removes every
- * dir named "ds-enter-<pid>" regardless of depth - works for both v1 and v2.
- * ---------------------------------------------------------------------------*/
-
-/* Wait up to 500ms for cgroup.events populated=0 (cgroupv2),
- * or tasks file empty (cgroupv1), before rmdir. */
-static void wait_cgroup_empty(const char *leaf_path) {
-  /* cgroupv2: poll cgroup.events */
-  char events[PATH_MAX + 32];
-  snprintf(events, sizeof(events), "%s/cgroup.events", leaf_path);
-  if (access(events, R_OK) == 0) {
-    for (int i = 0; i < 50; i++) {
-      char buf[256] = {0};
-      if (read_file(events, buf, sizeof(buf)) > 0 && strstr(buf, "populated 0"))
-        return;
-      usleep(10000);
-    }
-    return;
-  }
-
-  /* cgroupv1: poll tasks file */
-  char tasks[PATH_MAX + 32];
-  snprintf(tasks, sizeof(tasks), "%s/tasks", leaf_path);
-  for (int i = 0; i < 50; i++) {
-    char buf[64] = {0};
-    if (read_file(tasks, buf, sizeof(buf)) > 0 && buf[0] == '\0')
-      return;
-    usleep(10000);
-  }
-}
-
-/* Recursively walk 'dir_path'; rmdir any entry named 'target'. */
-static void find_and_rmdir(const char *dir_path, const char *target) {
-  DIR *d = opendir(dir_path);
-  if (!d)
-    return;
-
-  struct dirent *de;
-  while ((de = readdir(d)) != NULL) {
-    if (de->d_name[0] == '.')
-      continue;
-    if (de->d_type != DT_DIR)
-      continue;
-
-    char child[PATH_MAX];
-    snprintf(child, sizeof(child), "%s/%s", dir_path, de->d_name);
-
-    if (strcmp(de->d_name, target) == 0) {
-      wait_cgroup_empty(child);
-      rmdir(child);
-    } else {
-      find_and_rmdir(child, target);
-    }
-  }
-  closedir(d);
-}
-
-void ds_cgroup_detach(pid_t child_pid, const char *container_name) {
-  (void)container_name;
-
-  char target[64];
-  snprintf(target, sizeof(target), "ds-enter-%d", (int)child_pid);
-  find_and_rmdir("/sys/fs/cgroup", target);
-}
-
-/* ---------------------------------------------------------------------------
- * ds_cgroup_cleanup_container
- *
- * Removes the entire /sys/fs/cgroup/droidspaces/<container_name>/ subtree
+ * Removes the entire /sys/fs/cgroup/ds-fork/<container_name>/ subtree
  * that was created at container start for cgroup namespace isolation.
  *
  * The kernel requires a bottom-up rmdir walk - a cgroup directory can only
@@ -507,7 +321,7 @@ static void rmdir_cgroup_tree(const char *path) {
   }
 }
 
-void ds_cgroup_cleanup_container(const char *container_name) {
+void cgroup_cleanup_container(const char *container_name) {
   if (!container_name || !container_name[0])
     return;
 
@@ -524,12 +338,12 @@ void ds_cgroup_cleanup_container(const char *container_name) {
       continue;
 
     char cg_path[PATH_MAX];
-    snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/%s/droidspaces/%s",
+    snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/%s/" PROJECT_NAME "/%s",
              de->d_name, safe_name);
 
-    /* Handle unified V2 where droidspaces/ is at root */
+    /* Handle unified V2 where ds-fork/ is at root */
     if (strcmp(de->d_name, "cgroup.procs") == 0)
-      snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/droidspaces/%s",
+      snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/" PROJECT_NAME "/%s",
                safe_name);
 
     if (access(cg_path, F_OK) != 0)
@@ -541,28 +355,29 @@ void ds_cgroup_cleanup_container(const char *container_name) {
   closedir(d);
 }
 
-static int ds_host_supports_v2_cached = -1;
+static int host_supports_v2_cached = -1;
 
-void print_cgroup_status(struct ds_config *cfg) {
+void print_cgroup_status(struct config *cfg) {
   int limits_set = (cfg->memory_limit || cfg->cpu_quota || cfg->pids_limit);
 
   if (cfg->force_cgroupv1) {
-    ds_warn("Using legacy Cgroup V1 hierarchy (forced by --force-cgroupv1)");
+    log_warn("Using legacy Cgroup V1 hierarchy (forced by --force-cgroupv1)");
     if (limits_set) {
-      ds_warn("Resource limits (--memory/--cpus/--pids-limit) require "
-              "cgroup v2 and will not be applied for this container.");
+      log_warn("Resource limits (--memory/--cpus/--pids-limit) require "
+               "cgroup v2 and will not be applied for this container.");
     }
     return;
   }
 
-  if (ds_host_supports_v2_cached == -1)
-    ds_host_supports_v2_cached = ds_cgroup_kernel_supports_v2();
+  if (host_supports_v2_cached == -1)
+    host_supports_v2_cached = cgroup_kernel_supports_v2();
 
-  if (!ds_host_supports_v2_cached) {
-    ds_warn("Host does not support Cgroup V2 (falling back to legacy V1)");
+  if (!host_supports_v2_cached) {
+    log_warn("Host does not support Cgroup V2 (falling back to legacy V1)");
     if (limits_set) {
-      ds_warn("[CGROUP] Resource limits (--memory/--cpus/--pids-limit) require "
-              "cgroup v2 and will not be applied on this host.");
+      log_warn(
+          "[CGROUP] Resource limits (--memory/--cpus/--pids-limit) require "
+          "cgroup v2 and will not be applied on this host.");
     }
   }
 }
@@ -584,7 +399,7 @@ static int ctrl_in_list(const char *list, const char *name) {
 }
 
 /* Public wrapper for cross-TU use (e.g. container.c). */
-int ds_cg_word_in_list(const char *list, const char *name) {
+int cg_word_in_list(const char *list, const char *name) {
   return ctrl_in_list(list, name);
 }
 
@@ -613,14 +428,14 @@ static long long parse_cgroup_ll(const char *buf) {
   return v;
 }
 
-int ds_cgroup_apply_limits(struct ds_config *cfg) {
+int cgroup_apply_limits(struct config *cfg) {
   if (!cfg->memory_limit && !cfg->cpu_quota && !cfg->pids_limit)
     return 0;
 
   /* Resource limits require cgroup v2. v1 hierarchies are often pre-claimed
    * by the host systemd and cannot be reliably delegated. Skip with a
    * warning when --force-cgroupv1 is active or the host has no v2 mount. */
-  if (cfg->force_cgroupv1 || !ds_cgroup_host_is_v2()) {
+  if (cfg->force_cgroupv1 || !cgroup_host_is_v2()) {
     cfg->memory_limit = 0;
     cfg->cpu_quota = 0;
     cfg->pids_limit = 0;
@@ -634,9 +449,9 @@ int ds_cgroup_apply_limits(struct ds_config *cfg) {
   char path[PATH_MAX + 64], val[64];
   int err = 0;
 
-  snprintf(cg, sizeof(cg), "/sys/fs/cgroup/droidspaces/%s", safe_name);
+  snprintf(cg, sizeof(cg), "/sys/fs/cgroup/" PROJECT_NAME "/%s", safe_name);
   if (access(cg, F_OK) != 0) {
-    ds_warn("[CGROUP] Container cgroup not found, limits skipped.");
+    log_warn("[CGROUP] Container cgroup not found, limits skipped.");
     return -1;
   }
   /* Check the delegated cgroup's controllers, not the root. Controllers
@@ -646,12 +461,12 @@ int ds_cgroup_apply_limits(struct ds_config *cfg) {
       snprintf(path, sizeof(path), "%s/memory.max", cg);
       snprintf(val, sizeof(val), "%lld", cfg->memory_limit);
       if (write_file(path, val) < 0) {
-        ds_warn("[CGROUP] memory.max: %s", strerror(errno));
+        log_warn("[CGROUP] memory.max: %s", strerror(errno));
         cfg->memory_limit = 0;
         err++;
       }
     } else {
-      ds_warn("[CGROUP] 'memory' controller not supported, limit skipped.");
+      log_warn("[CGROUP] 'memory' controller not supported, limit skipped.");
       cfg->memory_limit = 0;
     }
   }
@@ -661,12 +476,12 @@ int ds_cgroup_apply_limits(struct ds_config *cfg) {
       snprintf(path, sizeof(path), "%s/cpu.max", cg);
       snprintf(val, sizeof(val), "%lld %lld", cfg->cpu_quota, period);
       if (write_file(path, val) < 0) {
-        ds_warn("[CGROUP] cpu.max: %s", strerror(errno));
+        log_warn("[CGROUP] cpu.max: %s", strerror(errno));
         cfg->cpu_quota = 0;
         err++;
       }
     } else {
-      ds_warn("[CGROUP] 'cpu' controller not supported, limit skipped.");
+      log_warn("[CGROUP] 'cpu' controller not supported, limit skipped.");
       cfg->cpu_quota = 0;
     }
   }
@@ -675,20 +490,20 @@ int ds_cgroup_apply_limits(struct ds_config *cfg) {
       snprintf(path, sizeof(path), "%s/pids.max", cg);
       snprintf(val, sizeof(val), "%lld", cfg->pids_limit);
       if (write_file(path, val) < 0) {
-        ds_warn("[CGROUP] pids.max: %s", strerror(errno));
+        log_warn("[CGROUP] pids.max: %s", strerror(errno));
         cfg->pids_limit = 0;
         err++;
       }
     } else {
-      ds_warn("[CGROUP] 'pids' controller not supported, limit skipped.");
+      log_warn("[CGROUP] 'pids' controller not supported, limit skipped.");
       cfg->pids_limit = 0;
     }
   }
   return err ? -1 : 0;
 }
 
-int ds_cgroup_get_usage(struct ds_config *cfg, long long *mem,
-                        long long *cpu_us, long long *pids) {
+int cgroup_get_usage(struct config *cfg, long long *mem, long long *cpu_us,
+                     long long *pids) {
   if (mem)
     *mem = -1;
   if (cpu_us)
@@ -699,14 +514,14 @@ int ds_cgroup_get_usage(struct ds_config *cfg, long long *mem,
   char safe_name[256];
   sanitize_container_name(cfg->container_name, safe_name, sizeof(safe_name));
 
-  int v2 = ds_cgroup_host_is_v2();
+  int v2 = cgroup_host_is_v2();
   /* Keep cg strictly within PATH_MAX-64 so the suffix appended
    * into path never overflows the PATH_MAX+64 path buffer. */
   char cg[PATH_MAX - 64];
   char path[PATH_MAX + 64], buf[256];
 
   if (v2) {
-    snprintf(cg, sizeof(cg), "/sys/fs/cgroup/droidspaces/%s", safe_name);
+    snprintf(cg, sizeof(cg), "/sys/fs/cgroup/" PROJECT_NAME "/%s", safe_name);
     if (access(cg, F_OK) != 0)
       return -1;
     /* Use parse_cgroup_ll() so that "max" (= unlimited/not set)

@@ -1,14 +1,13 @@
 /*
- * Droidspaces v6 - Resource Visibility Virtualization
+ * ds-fork v6 - Resource Visibility Virtualization
  *
  * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 #include "virtualize.h"
-#include <time.h>
 
-#define VPROC_PATH "/run/droidspaces/vproc"
+#define VPROC_PATH FORK_MARKER "/vproc"
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 /* ---------------------------------------------------------------------------
@@ -16,10 +15,11 @@
  * ---------------------------------------------------------------------------*/
 
 /* In-place overwrite: preserves the bind-mount inode (rename(2) breaks it).
- * Hardened with O_NOFOLLOW and filesystem type checks to prevent attacks. */
-static int write_inplace(const char *path, const char *buf, size_t len) {
-  /* Use O_NOFOLLOW to prevent the container from tricking us with symlinks */
-  int fd = open(path, O_WRONLY | O_CLOEXEC | O_NOFOLLOW);
+ * Opens via safe_openat_proc() which rejects symlinks at ALL path levels,
+ * not just the final component (O_NOFOLLOW alone is insufficient). */
+static int write_inplace(pid_t pid, const char *subpath, const char *buf,
+                         size_t len) {
+  int fd = safe_openat_proc(pid, subpath, O_WRONLY, 0);
   if (fd < 0)
     return -1;
 
@@ -30,7 +30,7 @@ static int write_inplace(const char *path, const char *buf, size_t len) {
     return -1;
   }
 
-  /* Security check: must be on tmpfs (the container's /run/droidspaces/vproc)
+  /* Security check: must be on tmpfs (the container's /run/ds-fork/vproc)
    */
   struct statfs sfs;
   if (fstatfs(fd, &sfs) < 0 || sfs.f_type != TMPFS_MAGIC) {
@@ -51,7 +51,7 @@ static int write_inplace(const char *path, const char *buf, size_t len) {
 }
 
 /* Compute container CPU count from quota/period, capped at host CPUs. */
-static int container_cpus(struct ds_config *cfg) {
+static int container_cpus(struct config *cfg) {
   int host = (int)sysconf(_SC_NPROCESSORS_ONLN);
   if (host < 1)
     host = 1;
@@ -71,8 +71,8 @@ static long long read_cg_ll(const char *container_name, const char *file) {
   sanitize_container_name(container_name, safe_name, sizeof(safe_name));
   char path[PATH_MAX];
   char buf[64];
-  snprintf(path, sizeof(path), "/sys/fs/cgroup/droidspaces/%s/%s", safe_name,
-           file);
+  snprintf(path, sizeof(path), "/sys/fs/cgroup/" PROJECT_NAME "/%s/%s",
+           safe_name, file);
   if (read_file(path, buf, sizeof(buf)) <= 0)
     return -1;
   if (strncmp(buf, "max", 3) == 0)
@@ -88,7 +88,7 @@ static long long read_cg_ll(const char *container_name, const char *file) {
  * ---------------------------------------------------------------------------*/
 
 /* /proc/meminfo - virtualized when memory_limit > 0 */
-static char *gen_meminfo(struct ds_config *cfg, size_t *out_len) {
+static char *gen_meminfo(struct config *cfg, size_t *out_len) {
   long long mem_limit = cfg->memory_limit; /* bytes */
   long long mem_used = read_cg_ll(cfg->container_name, "memory.current");
   if (mem_used < 0)
@@ -117,8 +117,8 @@ static char *gen_meminfo(struct ds_config *cfg, size_t *out_len) {
     char safe_name[256];
     sanitize_container_name(cfg->container_name, safe_name, sizeof(safe_name));
     char path[PATH_MAX], sbuf[4096];
-    snprintf(path, sizeof(path), "/sys/fs/cgroup/droidspaces/%s/memory.stat",
-             safe_name);
+    snprintf(path, sizeof(path),
+             "/sys/fs/cgroup/" PROJECT_NAME "/%s/memory.stat", safe_name);
     if (read_file(path, sbuf, sizeof(sbuf)) > 0) {
       char *p;
       if ((p = strstr(sbuf, "anon ")))
@@ -209,7 +209,7 @@ static char *gen_meminfo(struct ds_config *cfg, size_t *out_len) {
 }
 
 /* /proc/cpuinfo - truncated to container_cpus() entries */
-static char *gen_cpuinfo(struct ds_config *cfg, size_t *out_len) {
+static char *gen_cpuinfo(struct config *cfg, size_t *out_len) {
   int max_cpus = container_cpus(cfg);
   FILE *f = fopen("/proc/cpuinfo", "r");
   if (!f)
@@ -252,7 +252,7 @@ static char *gen_cpuinfo(struct ds_config *cfg, size_t *out_len) {
 }
 
 /* /proc/stat - recomputed aggregate + only max_cpus cpuN lines */
-static char *gen_stat(struct ds_config *cfg, size_t *out_len) {
+static char *gen_stat(struct config *cfg, size_t *out_len) {
   int max_cpus = container_cpus(cfg);
   FILE *f = fopen("/proc/stat", "r");
   if (!f)
@@ -335,7 +335,7 @@ static double cg_cpu_busy_secs(const char *container_name) {
   char safe_name[256];
   sanitize_container_name(container_name, safe_name, sizeof(safe_name));
   char path[PATH_MAX], buf[128];
-  snprintf(path, sizeof(path), "/sys/fs/cgroup/droidspaces/%s/cpu.stat",
+  snprintf(path, sizeof(path), "/sys/fs/cgroup/" PROJECT_NAME "/%s/cpu.stat",
            safe_name);
   if (read_file(path, buf, sizeof(buf)) <= 0)
     return -1.0;
@@ -376,7 +376,7 @@ static double container_start_time_secs(pid_t pid) {
 /* /proc/uptime - lxcfs-style: uptime = CLOCK_BOOTTIME - container_init_start.
  * idle = up*ncpus - cpu_busy (from cgv2 cpu.stat).
  * Falls back to cfg->start_time only if container_pid is not yet available. */
-static char *gen_uptime(struct ds_config *cfg, size_t *out_len) {
+static char *gen_uptime(struct config *cfg, size_t *out_len) {
   struct timespec boot;
   clock_gettime(CLOCK_BOOTTIME, &boot);
   double boottime = (double)boot.tv_sec + (double)boot.tv_nsec / 1e9;
@@ -408,7 +408,7 @@ static char *gen_uptime(struct ds_config *cfg, size_t *out_len) {
 }
 
 /* /proc/loadavg - CPU-ratio scaled */
-static char *gen_loadavg(struct ds_config *cfg, size_t *out_len) {
+static char *gen_loadavg(struct config *cfg, size_t *out_len) {
   FILE *f = fopen("/proc/loadavg", "r");
   if (!f)
     return NULL;
@@ -440,7 +440,7 @@ static char *gen_loadavg(struct ds_config *cfg, size_t *out_len) {
 }
 
 /* /sys/devices/system/cpu/{online,possible,present} - for nproc */
-static char *gen_cpu_sysfs(struct ds_config *cfg, size_t *out_len) {
+static char *gen_cpu_sysfs(struct config *cfg, size_t *out_len) {
   int n = container_cpus(cfg);
   char *buf = malloc(32);
   if (!buf)
@@ -454,7 +454,7 @@ static char *gen_cpu_sysfs(struct ds_config *cfg, size_t *out_len) {
  * Public API
  * ---------------------------------------------------------------------------*/
 
-unsigned long ds_get_pid_ns_inode(pid_t pid) {
+unsigned long get_pid_ns_inode(pid_t pid) {
   char path[64];
   struct stat st;
   snprintf(path, sizeof(path), "/proc/%d/ns/pid", (int)pid);
@@ -475,13 +475,13 @@ static void bind_vfile(const char *vpath, const char *target,
       close(fd);
   }
   if (bind_mount(vpath, target) < 0)
-    ds_warn("[VIRT] bind_mount %s -> %s failed (continuing)", vpath, target);
+    log_warn("[VIRT] bind_mount %s -> %s failed (continuing)", vpath, target);
 }
 
 /* Set process CPU affinity to match the virtualized CPU count.
  * This ensures tools like nproc and htop that use sched_getaffinity()
  * see the correct number of available cores. */
-static void ds_virtualize_affinity(struct ds_config *cfg) {
+static void virtualize_affinity(struct config *cfg) {
   int n = container_cpus(cfg);
   int host = (int)sysconf(_SC_NPROCESSORS_ONLN);
   if (n >= host || n <= 0)
@@ -511,29 +511,29 @@ static void ds_virtualize_affinity(struct ds_config *cfg) {
   }
 }
 
-int ds_virtualize_init(struct ds_config *cfg) {
+int virtualize_init(struct config *cfg) {
   int has_mem = (cfg->memory_limit > 0);
   int has_cpu = (cfg->cpu_quota > 0);
 
   /* Apply CPU affinity masking so syscall-based tools (nproc) are fooled */
   if (has_cpu)
-    ds_virtualize_affinity(cfg);
+    virtualize_affinity(cfg);
 
   /* Create tmpfs backing store inside container */
   if (mkdir_p(VPROC_PATH, 0755) < 0) {
-    ds_warn("[VIRT] mkdir_p %s: %s", VPROC_PATH, strerror(errno));
+    log_warn("[VIRT] mkdir_p %s: %s", VPROC_PATH, strerror(errno));
     return -1;
   }
   if (domount("none", VPROC_PATH, "tmpfs", MS_NOSUID | MS_NODEV,
               "mode=755,size=1M") < 0) {
-    ds_warn("[VIRT] tmpfs mount failed: %s", strerror(errno));
+    log_warn("[VIRT] tmpfs mount failed: %s", strerror(errno));
     return -1;
   }
 
   /* Struct-of-arrays for proc files: name, generator, condition */
   struct {
     const char *name;
-    char *(*gen)(struct ds_config *, size_t *);
+    char *(*gen)(struct config *, size_t *);
     int enabled;
   } proc_files[] = {
       {"meminfo", gen_meminfo, has_mem}, {"cpuinfo", gen_cpuinfo, has_cpu},
@@ -572,7 +572,7 @@ int ds_virtualize_init(struct ds_config *cfg) {
         if (access(realcpu, F_OK) == 0) {
           if (mkdir(vcpu, 0755) == 0) {
             if (bind_mount(realcpu, vcpu) < 0)
-              ds_warn("[VIRT] bind_mount %s -> %s failed", realcpu, vcpu);
+              log_warn("[VIRT] bind_mount %s -> %s failed", realcpu, vcpu);
           }
         }
       }
@@ -594,24 +594,24 @@ int ds_virtualize_init(struct ds_config *cfg) {
        * readdir() on /sys/devices/system/cpu will now only see cpu0...cpu(N-1).
        */
       if (bind_mount(sysfs_base, "/sys/devices/system/cpu") < 0)
-        ds_warn("[VIRT] Failed to mask /sys/devices/system/cpu (htop may show "
-                "host cores)");
+        log_warn("[VIRT] Failed to mask /sys/devices/system/cpu (htop may show "
+                 "host cores)");
     }
   }
 
-  ds_log("[VIRT] Resource virtualization active (mem=%d cpu=%d uptime=1 "
-         "loadavg=1)",
-         has_mem, has_cpu);
+  log_info("[VIRT] Resource virtualization active (mem=%d cpu=%d uptime=1 "
+           "loadavg=1)",
+           has_mem, has_cpu);
   return 0;
 }
 
-void ds_virtualize_update(struct ds_config *cfg) {
+void virtualize_update(struct config *cfg) {
   if (cfg->container_pid <= 0)
     return;
 
   /* PID-recycling guard: verify container identity before touching its fs */
   if (cfg->ns_inode) {
-    unsigned long live = ds_get_pid_ns_inode(cfg->container_pid);
+    unsigned long live = get_pid_ns_inode(cfg->container_pid);
     if (live != cfg->ns_inode) {
       write_monitor_debug_log(cfg->container_name,
                               "[VIRT] update skipped: ns_inode mismatch "
@@ -638,7 +638,7 @@ void ds_virtualize_update(struct ds_config *cfg) {
   /* Dynamic files only (cpuinfo is static after boot, skip it) */
   struct {
     const char *name;
-    char *(*gen)(struct ds_config *, size_t *);
+    char *(*gen)(struct config *, size_t *);
     int enabled;
   } dyn[] = {
       {"meminfo", gen_meminfo, has_mem},
@@ -658,11 +658,13 @@ void ds_virtualize_update(struct ds_config *cfg) {
       continue;
     }
 
-    char path[PATH_MAX];
-    snprintf(path, sizeof(path), "/proc/%d/root/" VPROC_PATH "/%s",
-             (int)cfg->container_pid, dyn[i].name);
+    char subpath[PATH_MAX];
+    snprintf(subpath, sizeof(subpath), VPROC_PATH "/%s", dyn[i].name);
 
     struct stat st;
+    char path[PATH_MAX];
+    snprintf(path, sizeof(path), "/proc/%d/root/%s", (int)cfg->container_pid,
+             subpath);
     if (stat(path, &st) != 0) {
       write_monitor_debug_log(cfg->container_name,
                               "[VIRT] vfile missing: %s (%s)", path,
@@ -671,7 +673,7 @@ void ds_virtualize_update(struct ds_config *cfg) {
       continue;
     }
 
-    if (write_inplace(path, buf, len) < 0)
+    if (write_inplace(cfg->container_pid, subpath, buf, len) < 0)
       write_monitor_debug_log(cfg->container_name,
                               "[VIRT] write_inplace failed: %s (%s)", path,
                               strerror(errno));

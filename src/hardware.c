@@ -1,11 +1,11 @@
 /*
- * Droidspaces v6 - Hardware Access Module
+ * ds-fork v6 - Hardware Access Module
  *
  * This module manages GPU acceleration and hardware device nodes. To keep your
  * system stable, we exclusively use "render nodes" (/dev/dri/renderD*) for GPU
  * access.
  *
- * Why? Because render nodes allow multiple processes (like Droidspaces and your
+ * Why? Because render nodes allow multiple processes (like ds-fork and your
  * host's X11/Wayland) to share the GPU safely. "Card nodes" (/dev/dri/card*)
  * are avoided because they require exclusive control (DRM master), and trying
  * to share them often leads to driver hangs or kernel panics on desktop Linux.
@@ -18,26 +18,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "droidspace.h"
-#include <dirent.h>
-
-#ifndef TMPFS_MAGIC
-#define TMPFS_MAGIC 0x01021994
-#endif
-
-/*
- * Unified GPU group bridge.
- *
- * Every hardware node mirrored into the container is chowned to this group.
- * root is added to it in setup_gpu_groups() so GPU access works regardless
- * of which host GID the node originally carried (GID 44 for video, GID 1006
- * for render, etc.). Users can be added manually with usermod.
- *
- * GID 786 is well outside the standard Debian/Ubuntu range (0-999 system,
- * 1000+ users) and has never been assigned to a named group in the FHS.
- */
-#define DS_GPU_GROUP_NAME "droidspaces-gpu"
-#define DS_GPU_UNIFIED_GID 786
+#include "ds-fork.h"
 
 /*
  * Shared GPU/hardware device lists.
@@ -59,40 +40,26 @@ static const struct {
 /* Static paths: individual nodes that don't fit a directory scan */
 static const char *gpu_static_devices[] = {
     /* Android IPC (Critical for Android containers/hosts) */
-    "/dev/binder",
-    "/dev/vndbinder",
-    "/dev/hwbinder",
+    "/dev/binder", "/dev/vndbinder", "/dev/hwbinder",
 
     /* Legacy Android Memory Allocators */
-    "/dev/ion",
-    "/dev/ashmem",
+    "/dev/ion", "/dev/ashmem",
 
     /* ARM Mali / Adreno aliases */
-    "/dev/mali",
-    "/dev/genlock",
+    "/dev/mali", "/dev/genlock",
 
     /* AMD ROCm Compute */
     "/dev/kfd",
 
     /* PowerVR */
-    "/dev/pvrsrvkm",
-    "/dev/pvr_sync",
+    "/dev/pvrsrvkm", "/dev/pvr_sync",
 
     /* Tegra */
-    "/dev/nvhost-ctrl",
-    "/dev/nvhost-gpu",
-    "/dev/nvhost-ctrl-gpu",
-    "/dev/nvhost-as-gpu",
-    "/dev/nvhost-dbg-gpu",
-    "/dev/nvhost-prof-gpu",
-    "/dev/nvhost-tsg",
-    "/dev/nvhost-tsg-gpu",
-    "/dev/nvhost-vic",
-    "/dev/nvhost-nvdec",
-    "/dev/nvhost-nvdec1",
-    "/dev/nvhost-nvenc",
-    "/dev/nvhost-msenc",
-    "/dev/nvmap",
+    "/dev/nvhost-ctrl", "/dev/nvhost-gpu", "/dev/nvhost-ctrl-gpu",
+    "/dev/nvhost-as-gpu", "/dev/nvhost-dbg-gpu", "/dev/nvhost-prof-gpu",
+    "/dev/nvhost-tsg", "/dev/nvhost-tsg-gpu", "/dev/nvhost-vic",
+    "/dev/nvhost-nvdec", "/dev/nvhost-nvdec1", "/dev/nvhost-nvenc",
+    "/dev/nvhost-msenc", "/dev/nvmap",
 
     /* WSL2 */
     "/dev/dxg",
@@ -205,7 +172,7 @@ int is_dangerous_node(const char *name) {
   /* Systemic Hardening (Phase 12) */
   /* Tier 10: Direct Host Access */
   if (strcmp(name, "mem") == 0 || strcmp(name, "kmem") == 0 ||
-      strcmp(name, "port") == 0)
+      strcmp(name, "port") == 0 || strcmp(name, "kmsg") == 0)
     return 1;
   /* Tier 11: DisplayPort Aux */
   if (strncmp(name, "drm_dp_aux", 10) == 0)
@@ -384,104 +351,6 @@ int is_dangerous_node(const char *name) {
 }
 
 /*
- * add_gpu_gid()
- *
- * Helper to stat a device and add its group ID if it's unique.
- */
-static void add_gpu_gid(const char *path, gid_t *gids, int *count,
-                        int max_gids) {
-  /* Defense in Depth: Always check against the dangerous node blocklist */
-  const char *name = strrchr(path, '/');
-  name = name ? name + 1 : path;
-  if (is_dangerous_node(name)) {
-    return;
-  }
-
-  struct stat st;
-  if (stat(path, &st) < 0)
-    return;
-
-  gid_t gid = st.st_gid;
-  if (gid == 0)
-    return;
-
-  for (int i = 0; i < *count; i++) {
-    if (gids[i] == gid)
-      return;
-  }
-
-  if (*count < max_gids) {
-    gids[(*count)++] = gid;
-    ds_log("[GPU] GPU device %-30s → GID %d", path, (int)gid);
-  }
-}
-
-/*
- * scan_gpu_dir()
- *
- * Dynamically scan a directory for device nodes matching a prefix.
- */
-static void scan_gpu_dir(const char *dir_path, const char *prefix, gid_t *gids,
-                         int *count, int max_gids) {
-  DIR *dir = opendir(dir_path);
-  if (!dir)
-    return;
-
-  struct dirent *entry;
-  char full_path[PATH_MAX];
-
-  while ((entry = readdir(dir)) != NULL) {
-    /* Skip . and .. */
-    if (entry->d_name[0] == '.')
-      continue;
-
-    /* Restricted to character devices only */
-    if (entry->d_type != DT_CHR && entry->d_type != DT_UNKNOWN)
-      continue;
-
-    if (prefix && strncmp(entry->d_name, prefix, strlen(prefix)) != 0)
-      continue;
-
-    /* Defense in Depth: Skip dangerous nodes during GID scanning */
-    if (is_dangerous_node(entry->d_name)) {
-      continue;
-    }
-
-    snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
-    add_gpu_gid(full_path, gids, count, max_gids);
-  }
-
-  closedir(dir);
-}
-
-/*
- * scan_host_gpu_gids()
- *
- * Scan known GPU device paths on the HOST and collect unique non-root GIDs.
- * Uses dynamic discovery where possible to avoid hardcoded path fragility.
- * Must be called BEFORE pivot_root while /dev still refers to the host.
- *
- * Returns: number of unique GIDs found (0 = no GPU devices)
- */
-int scan_host_gpu_gids(gid_t *gids, int max_gids) {
-  int count = 0;
-
-  /* 1. Dynamic directories */
-  for (int i = 0; gpu_scan_dirs[i].dir != NULL; i++)
-    scan_gpu_dir(gpu_scan_dirs[i].dir, gpu_scan_dirs[i].prefix, gids, &count,
-                 max_gids);
-
-  /* 2. Static individual nodes */
-  for (int i = 0; gpu_static_devices[i] != NULL; i++)
-    add_gpu_gid(gpu_static_devices[i], gids, &count, max_gids);
-
-  if (count > 0)
-    ds_log("[GPU] Discovered %d unique GPU/Hardware group(s)", count);
-
-  return count;
-}
-
-/*
  * mirror_gpu_node()
  *
  * For a single host GPU device path: if the node is absent or wrongly a
@@ -536,12 +405,13 @@ static void mirror_gpu_node(const char *host_path, const char *dev_path) {
   struct stat tgt_st;
   if (lstat(tgt, &tgt_st) == 0) {
     if (S_ISCHR(tgt_st.st_mode)) {
-      /* devtmpfs already has a proper node. Re-own it to the unified group
-       * so the container user can access it regardless of the host GID. */
-      if (chown(tgt, 0, DS_GPU_UNIFIED_GID) < 0)
-        ds_warn("[GPU] chown (pre-existing) %s → unified group: %s", tgt,
-                strerror(errno));
-      chmod(tgt, 0660);
+      /* devtmpfs already has a proper node. Re-own it to root:root with
+       * 0666 mode so the container user can access it regardless of
+       * the host GID. */
+      if (chown(tgt, 0, 0) < 0)
+        log_warn("[GPU] chown (pre-existing) %s → root:root: %s", tgt,
+                 strerror(errno));
+      chmod(tgt, 0666);
       return;
     }
 
@@ -549,8 +419,8 @@ static void mirror_gpu_node(const char *host_path, const char *dev_path) {
      * (the /dev/kgsl-3d0 case seen in the screenshot).  Nuke it. */
     if (S_ISDIR(tgt_st.st_mode)) {
       if (rmdir(tgt) < 0) {
-        ds_warn("[GPU] Cannot remove stale directory %s: %s", tgt,
-                strerror(errno));
+        log_warn("[GPU] Cannot remove stale directory %s: %s", tgt,
+                 strerror(errno));
         return;
       }
     } else {
@@ -561,20 +431,20 @@ static void mirror_gpu_node(const char *host_path, const char *dev_path) {
   /* Create the node with the same major:minor and permissions as the host */
   mode_t mode = S_IFCHR | (host_st.st_mode & 0666);
   if (mknod(tgt, mode, host_st.st_rdev) < 0) {
-    ds_warn("[GPU] mknod %s (%d:%d) failed: %s", tgt,
-            (int)major(host_st.st_rdev), (int)minor(host_st.st_rdev),
-            strerror(errno));
+    log_warn("[GPU] mknod %s (%d:%d) failed: %s", tgt,
+             (int)major(host_st.st_rdev), (int)minor(host_st.st_rdev),
+             strerror(errno));
     return;
   }
 
-  /* Force ownership to the unified GPU group so UID 1000 can access
-   * the node regardless of which GID the host assigned to it. */
-  if (chown(tgt, 0, DS_GPU_UNIFIED_GID) < 0)
-    ds_warn("[GPU] chown %s → unified group: %s", tgt, strerror(errno));
-  chmod(tgt, 0660);
+  /* Force ownership to root:root with 0666 mode so UID 1000 can
+   * access the node regardless of which GID the host assigned to it. */
+  if (chown(tgt, 0, 0) < 0)
+    log_warn("[GPU] chown %s → root:root: %s", tgt, strerror(errno));
+  chmod(tgt, 0666);
 
-  ds_log("[GPU] Mirrored missing node: %-30s (%d:%d)", tgt,
-         (int)major(host_st.st_rdev), (int)minor(host_st.st_rdev));
+  log_info("[GPU] Mirrored missing node: %-30s (%d:%d)", tgt,
+           (int)major(host_st.st_rdev), (int)minor(host_st.st_rdev));
 }
 
 /*
@@ -628,183 +498,4 @@ void mirror_gpu_nodes(const char *dev_path) {
   /* Static individual nodes */
   for (int i = 0; gpu_static_devices[i] != NULL; i++)
     mirror_gpu_node(gpu_static_devices[i], dev_path);
-}
-
-/*
- * setup_gpu_groups()
- *
- * After pivot_root, create matching groups inside the container's /etc/group
- * and add root to each. Groups are named "gpu_<gid>" to avoid conflicts
- * with existing groups.
- *
- * Idempotent: safe to call on container restart (skips existing groups).
- */
-
-/* Helper to check if a username exists in a comma-separated list of users */
-static int has_user(const char *users, const char *username) {
-  if (!users || !username)
-    return 0;
-
-  size_t len = strlen(username);
-  const char *p = users;
-
-  while ((p = strstr(p, username)) != NULL) {
-    /* Check if it's a whole word match */
-    int at_start = (p == users);
-    int prev_comma = (p > users && *(p - 1) == ',');
-    int next_comma = (*(p + len) == ',' || *(p + len) == '\0');
-
-    if ((at_start || prev_comma) && next_comma) {
-      return 1;
-    }
-    p++;
-  }
-  return 0;
-}
-
-int setup_gpu_groups(void) {
-  /* Check if /etc/group exists - some minimal rootfs may not have it */
-  if (access("/etc/group", F_OK) != 0) {
-    ds_warn("No /etc/group found, skipping GPU group setup");
-    return 0;
-  }
-
-  /* We'll rewrite the group file to a temporary location */
-  const char *group_path = "/etc/group";
-  const char *tmp_path = "/etc/group.tmp";
-
-  FILE *fin = fopen(group_path, "re");
-  if (!fin) {
-    ds_warn("Cannot read /etc/group: %s", strerror(errno));
-    return -1;
-  }
-
-  FILE *fout = fopen(tmp_path, "we");
-  if (!fout) {
-    ds_warn("Cannot create /etc/group.tmp: %s", strerror(errno));
-    fclose(fin);
-    return -1;
-  }
-
-  char line[2048];
-  int modified_count = 0;
-  int unified_group_found = 0; /* set when DS_GPU_GROUP_NAME is seen */
-
-  while (fgets(line, sizeof(line), fin)) {
-    /* Format: name:password:GID:user_list */
-    char *users_ptr = NULL;
-
-    char line_copy[2048];
-    safe_strncpy(line_copy, line, sizeof(line_copy));
-
-    char *nl = strrchr(line_copy, '\n');
-    if (nl)
-      *nl = '\0';
-
-    int colons = 0;
-    char *p = line_copy;
-    char *gid_str = NULL;
-
-    while (*p) {
-      if (*p == ':') {
-        colons++;
-        if (colons == 2)
-          gid_str = p + 1;
-        else if (colons == 3) {
-          *p = '\0';
-          users_ptr = p + 1;
-          break;
-        }
-      }
-      p++;
-    }
-
-    if (gid_str && users_ptr) {
-      int gid_val = atoi(gid_str);
-
-      /* If the unified group already exists, ensure root is a member */
-      if (gid_val == DS_GPU_UNIFIED_GID) {
-        unified_group_found = 1;
-
-        if (!has_user(users_ptr, "root")) {
-          char new_members[2048];
-          safe_strncpy(new_members, users_ptr, sizeof(new_members));
-          if (strlen(new_members) > 0)
-            strncat(new_members, ",root",
-                    sizeof(new_members) - strlen(new_members) - 1);
-          else
-            safe_strncpy(new_members, "root", sizeof(new_members));
-
-          fprintf(fout, "%.*s:%s\n", (int)(users_ptr - line_copy - 1),
-                  line_copy, new_members);
-          ds_log("[GPU] Updated " DS_GPU_GROUP_NAME " (GID %d) members: %s",
-                 DS_GPU_UNIFIED_GID, new_members);
-          modified_count++;
-          continue;
-        }
-        /* root already present - fall through to fputs */
-      }
-    }
-
-    /* Print original line if not modified */
-    fputs(line, fout);
-  }
-
-  /* Create the unified group if it wasn't already in the file */
-  if (!unified_group_found) {
-    fprintf(fout, DS_GPU_GROUP_NAME ":x:%d:root\n", DS_GPU_UNIFIED_GID);
-    ds_log("[GPU] Created unified group " DS_GPU_GROUP_NAME " (GID %d)",
-           DS_GPU_UNIFIED_GID);
-    modified_count++;
-  }
-
-  fclose(fin);
-  fclose(fout);
-
-  /* Atomic replacement */
-  if (modified_count > 0) {
-    if (rename(tmp_path, group_path) < 0) {
-      ds_warn("Failed to update /etc/group: %s", strerror(errno));
-      unlink(tmp_path);
-      return -1;
-    }
-    ds_log("[GPU] Finalized GPU group membership (Updated %d entry/entries)",
-           modified_count);
-  } else {
-    unlink(tmp_path);
-  }
-
-  return 0;
-}
-
-/*
- * setup_hardware_access()
- *
- * Top-level entry point called from boot.c AFTER pivot_root.
- * Orchestrates GPU group creation and X11 socket mounting.
- *
- * All operations are non-fatal: failures produce warnings but don't
- * prevent the container from booting.
- *
- */
-int setup_hardware_access(struct ds_config *cfg) {
-  /* 1. Create GPU groups inside the container.
-   *    hw_access: full hardware passthrough - always set up GPU groups.
-   *    gpu_mode:  isolated tmpfs with GPU nodes mirrored in - also needs the
-   *               unified droidspaces-gpu group so the container user can
-   *               actually open those nodes. */
-  if (cfg->hw_access || cfg->gpu_mode)
-    setup_gpu_groups();
-
-  /* 2. Mount X11 socket for GUI applications (always attempt on Linux, check
-   * flag on Android) */
-  ds_setup_x11_socket(cfg);
-
-  /* 3. Setup VirGL socket (Android only) */
-  ds_setup_virgl_socket(cfg);
-
-  /* 4. Setup PulseAudio socket (Android only) */
-  ds_setup_pulse_socket(cfg);
-
-  return 0;
 }

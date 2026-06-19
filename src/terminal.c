@@ -1,12 +1,11 @@
 /*
- * Droidspaces v6 - High-performance Container Runtime
+ * ds-fork v6 - High-performance Container Runtime
  *
  * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "droidspace.h"
-#include <sys/uio.h>
+#include "ds-fork.h"
 
 /* ---------------------------------------------------------------------------
  * PTY Allocation
@@ -15,7 +14,7 @@
 /* Open master + slave without relying on /dev/ptmx symlink resolution.
  * TIOCGPTPEER (4.13+) opens slave directly from master fd.
  * Falls back to TIOCGPTN + path open for kernel 3.x. */
-int ds_openpty(int *master, int *slave, char *name) {
+int openpty(int *master, int *slave, char *name) {
   int m = open("/dev/ptmx", O_RDWR | O_NOCTTY | O_CLOEXEC);
   if (m < 0)
     return -1;
@@ -56,9 +55,9 @@ err:
   return -1;
 }
 
-int ds_terminal_create(struct ds_tty_info *tty) {
-  if (ds_openpty(&tty->master, &tty->slave, tty->name) < 0) {
-    ds_error("openpty failed: %s", strerror(errno));
+int terminal_create(struct tty_info *tty) {
+  if (openpty(&tty->master, &tty->slave, tty->name) < 0) {
+    log_error("openpty failed: %s", strerror(errno));
     return -1;
   }
 
@@ -71,7 +70,7 @@ int ds_terminal_create(struct ds_tty_info *tty) {
   return 0;
 }
 
-int ds_terminal_set_stdfds(int fd) {
+int terminal_set_stdfds(int fd) {
   if (dup2(fd, STDIN_FILENO) < 0)
     return -1;
   if (dup2(fd, STDOUT_FILENO) < 0)
@@ -81,13 +80,13 @@ int ds_terminal_set_stdfds(int fd) {
   return 0;
 }
 
-int ds_terminal_make_controlling(int fd) {
+int terminal_make_controlling(int fd) {
   /* Drop existing controlling terminal and session */
   setsid();
 
   /* Make fd the new controlling terminal */
   if (ioctl(fd, TIOCSCTTY, (char *)NULL) < 0) {
-    ds_error("TIOCSCTTY failed: %s", strerror(errno));
+    log_error("TIOCSCTTY failed: %s", strerror(errno));
     return -1;
   }
 
@@ -98,7 +97,7 @@ int ds_terminal_make_controlling(int fd) {
  * Termios / TIOS
  * ---------------------------------------------------------------------------*/
 
-int ds_setup_tios(int fd, struct termios *old) {
+int setup_tios(int fd, struct termios *old) {
   struct termios new_tios;
 
   if (!isatty(fd))
@@ -135,115 +134,6 @@ int ds_setup_tios(int fd, struct termios *old) {
 
   if (tcsetattr(fd, TCSAFLUSH, &new_tios) < 0)
     return -1;
-
-  return 0;
-}
-
-/* ---------------------------------------------------------------------------
- * Runtime Utilities
- * ---------------------------------------------------------------------------*/
-
-static volatile sig_atomic_t g_sigwinch_received = 0;
-static void handle_sigwinch(int sig) {
-  (void)sig;
-  g_sigwinch_received = 1;
-}
-
-static void update_terminal_size(int master_fd) {
-  struct winsize ws;
-  if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0) {
-    ioctl(master_fd, TIOCSWINSZ, &ws);
-  }
-}
-
-int ds_terminal_proxy(int master_fd) {
-  int epfd = epoll_create1(EPOLL_CLOEXEC);
-  if (epfd < 0)
-    return -1;
-
-  struct epoll_event ev, events[10];
-  char buf[8192];
-
-  /* NOTE: Do NOT set O_NONBLOCK on STDIN or master_fd here.
-   * This is an epoll-driven loop - read() is only called after epoll_wait()
-   * signals readability, so it will never block.  O_NONBLOCK causes read() to
-   * return -1 EAGAIN between events, which the n<=0 EOF check then
-   * misinterprets as a hangup, closes master_fd, and sends EIO to the slave
-   * (bash), killing the session. */
-
-  /* Propagate initial window size */
-  update_terminal_size(master_fd);
-
-  struct sigaction sa;
-  sa.sa_handler = handle_sigwinch;
-  sigemptyset(&sa.sa_mask);
-  sa.sa_flags = SA_RESTART;
-  sigaction(SIGWINCH, &sa, NULL);
-
-  /* 1. Watch stdin */
-  ev.events = EPOLLIN;
-  ev.data.fd = STDIN_FILENO;
-  if (epoll_ctl(epfd, EPOLL_CTL_ADD, STDIN_FILENO, &ev) < 0) {
-    close(epfd);
-    return -1;
-  }
-
-  /* 2. Watch master PTY */
-  ev.events = EPOLLIN | EPOLLHUP | EPOLLERR;
-  ev.data.fd = master_fd;
-  if (epoll_ctl(epfd, EPOLL_CTL_ADD, master_fd, &ev) < 0) {
-    close(epfd);
-    return -1;
-  }
-
-  int running = 1;
-  while (running) {
-    int nfds = epoll_wait(epfd, events, 10, -1);
-    if (g_sigwinch_received) {
-      g_sigwinch_received = 0;
-      update_terminal_size(master_fd);
-    }
-
-    if (nfds < 0) {
-      if (errno == EINTR)
-        continue;
-      break;
-    }
-
-    for (int i = 0; i < nfds; i++) {
-      int fd = events[i].data.fd;
-
-      if (fd == STDIN_FILENO) {
-        ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
-        if (n <= 0) {
-          running = 0;
-          break;
-        }
-        if (write_all(master_fd, buf, (size_t)n) < 0) {
-          running = 0;
-          break;
-        }
-      } else if (fd == master_fd) {
-        if (events[i].events & (EPOLLHUP | EPOLLERR)) {
-          running = 0;
-          break;
-        }
-        ssize_t n = read(master_fd, buf, sizeof(buf));
-        if (n > 0) {
-          if (write_all(STDOUT_FILENO, buf, (size_t)n) < 0) {
-            running = 0;
-            break;
-          }
-        } else {
-          running = 0;
-          break;
-        }
-      }
-    }
-  }
-
-  sigaction(SIGWINCH, &(struct sigaction){.sa_handler = SIG_DFL}, NULL);
-  close(epfd);
 
   return 0;
 }

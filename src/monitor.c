@@ -1,28 +1,28 @@
 /*
- * Droidspaces v6 - High-performance Container Runtime
+ * ds-fork v6 - High-performance Container Runtime
  *
  * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "droidspace.h"
+#include "ds-fork.h"
 
 /* ---------------------------------------------------------------------------
- * ds_monitor_run - Supervisor process for a single container instance.
+ * monitor_run - Supervisor process for a single container instance.
  *
  * Called immediately after fork() in start_rootfs(). Never returns - always
  * ends with _exit(). sync_pipe_write is the write-end of the parent sync
  * pipe; the monitor (or its intermediate child) writes the container init PID
  * through it on the first boot cycle, then closes it.
  * ---------------------------------------------------------------------------*/
-void ds_monitor_run(struct ds_config *cfg, int sync_pipe_write) {
+void monitor_run(struct config *cfg, int sync_pipe_write) {
   int sync_pipe[2];
   sync_pipe[0] = -1;
   sync_pipe[1] = sync_pipe_write;
 
   if (setsid() < 0 && errno != EPERM) {
     /* Fatal only if it's not EPERM (which means already leader) */
-    ds_error("setsid failed: %s", strerror(errno));
+    log_error("setsid failed: %s", strerror(errno));
     _exit(EXIT_FAILURE);
   }
 
@@ -39,12 +39,7 @@ void ds_monitor_run(struct ds_config *cfg, int sync_pipe_write) {
   signal(SIGUSR2, SIG_IGN);
 
   /* Make monitor unkillable */
-  ds_oom_protect();
-
-  /* Enter droidspacesd domain. Best-effort: if policy not yet loaded
-   * (user hasn't rebooted after module install), we stay in the inherited
-   * domain -- still functional since droidspacesd is typepermissive. */
-  ds_selinux_enter_domain();
+  oom_protect();
 
   prctl(PR_SET_NAME, "[ds-monitor]", 0, 0, 0);
 
@@ -61,7 +56,7 @@ void ds_monitor_run(struct ds_config *cfg, int sync_pipe_write) {
    * If --force-cgroupv1 is set, we skip cgroupns so setup_cgroups()
    * has full rights to create named V1 hierarchies from the host context. */
   int cg_ns_ok = (access("/proc/self/ns/cgroup", F_OK) == 0) &&
-                 (ds_cgroup_host_is_v2() && !cfg->force_cgroupv1);
+                 (cgroup_host_is_v2() && !cfg->force_cgroupv1);
   if (cg_ns_ok) {
     /* To get isolation from a cgroup namespace, we must be in a sub-cgroup
      * BEFORE we unshare. If we are in the root '/', the namespace root
@@ -75,10 +70,10 @@ void ds_monitor_run(struct ds_config *cfg, int sync_pipe_write) {
       /* v2: enable requested controllers top-down BEFORE mkdir.
        * Controllers only appear in a child cgroup if the parent's
        * subtree_control has them enabled first. Walk two levels:
-       * /sys/fs/cgroup -> /sys/fs/cgroup/droidspaces */
+       * /sys/fs/cgroup -> /sys/fs/cgroup/ds-fork */
       if (cfg->memory_limit || cfg->cpu_quota || cfg->pids_limit) {
         /* Build enable string with snprintf offsets instead of strncat to
-         * avoid truncation. Use ds_cg_word_in_list() for exact word-boundary
+         * avoid truncation. Use cg_word_in_list() for exact word-boundary
          * matching to prevent false positives (e.g. matching "cpuset"
          * when looking for "cpu"). */
         char enable[64] = {0};
@@ -86,19 +81,19 @@ void ds_monitor_run(struct ds_config *cfg, int sync_pipe_write) {
         int eoff = 0;
         if (read_file("/sys/fs/cgroup/cgroup.controllers", buf, sizeof(buf)) >
             0) {
-          if (cfg->memory_limit && ds_cg_word_in_list(buf, "memory")) {
+          if (cfg->memory_limit && cg_word_in_list(buf, "memory")) {
             int n = snprintf(enable + eoff, sizeof(enable) - (size_t)eoff,
                              "%s+memory", eoff ? " " : "");
             if (n > 0)
               eoff += n;
           }
-          if (cfg->cpu_quota && ds_cg_word_in_list(buf, "cpu")) {
+          if (cfg->cpu_quota && cg_word_in_list(buf, "cpu")) {
             int n = snprintf(enable + eoff, sizeof(enable) - (size_t)eoff,
                              "%s+cpu", eoff ? " " : "");
             if (n > 0)
               eoff += n;
           }
-          if (cfg->pids_limit && ds_cg_word_in_list(buf, "pids")) {
+          if (cfg->pids_limit && cg_word_in_list(buf, "pids")) {
             int n = snprintf(enable + eoff, sizeof(enable) - (size_t)eoff,
                              "%s+pids", eoff ? " " : "");
             if (n > 0)
@@ -107,17 +102,18 @@ void ds_monitor_run(struct ds_config *cfg, int sync_pipe_write) {
         }
         if (eoff > 0) {
           if (write_file("/sys/fs/cgroup/cgroup.subtree_control", enable) < 0)
-            ds_warn("[CGROUP] subtree_control (root): %s", strerror(errno));
-          mkdir_p("/sys/fs/cgroup/droidspaces", 0755);
-          if (write_file("/sys/fs/cgroup/droidspaces/cgroup.subtree_control",
+            log_warn("[CGROUP] subtree_control (root): %s", strerror(errno));
+          mkdir_p("/sys/fs/cgroup/" PROJECT_NAME, 0755);
+          if (write_file("/sys/fs/cgroup/" PROJECT_NAME
+                         "/cgroup.subtree_control",
                          enable) < 0)
-            ds_warn("[CGROUP] subtree_control (droidspaces): %s",
-                    strerror(errno));
+            log_warn("[CGROUP] subtree_control (" PROJECT_NAME "): %s",
+                     strerror(errno));
         }
       }
 
       char cg_path[PATH_MAX];
-      snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/droidspaces/%s",
+      snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/" PROJECT_NAME "/%s",
                safe_name);
       mkdir_p(cg_path, 0755);
 
@@ -141,12 +137,12 @@ void ds_monitor_run(struct ds_config *cfg, int sync_pipe_write) {
   /* Apply resource limits. On v2 hosts this writes memory.max / cpu.max /
    * pids.max into the delegated cgroup. On v1 or --force-cgroupv1 the
    * function skips with a warning since v1 delegation is unreliable. */
-  if (ds_cgroup_apply_limits(cfg) < 0 &&
+  if (cgroup_apply_limits(cfg) < 0 &&
       (cfg->memory_limit || cfg->cpu_quota || cfg->pids_limit))
-    ds_warn("[CGROUP] Some resource limits could not be enforced.");
+    log_warn("[CGROUP] Some resource limits could not be enforced.");
 
   if (unshare(ns_flags) < 0)
-    ds_die("unshare failed: %s", strerror(errno));
+    log_die("unshare failed: %s", strerror(errno));
 
   int stdio_redirected = 0;
 
@@ -157,43 +153,12 @@ void ds_monitor_run(struct ds_config *cfg, int sync_pipe_write) {
    * Reboot detection uses EXIT CODES ONLY (no signal interception):
    *   1. Init calls reboot(2) → kernel kills init with SIGHUP
    *   2. Intermediate sees WTERMSIG(init)==SIGHUP via waitpid()
-   *   3. Intermediate exits with DS_REBOOT_EXIT (249)
+   *   3. Intermediate exits with REBOOT_EXIT (249)
    *   4. Monitor sees WEXITSTATUS(mid)==249 → loop back
    *
    * This eliminates ghost containers because the Monitor never handles
    * SIGHUP - it only checks a deterministic exit code. */
 reboot_loop:;
-  /* Close existing pipes from previous cycle to prevent FD leaks */
-  if (cfg->net_ready_pipe[0] >= 0) {
-    close(cfg->net_ready_pipe[0]);
-    close(cfg->net_ready_pipe[1]);
-    cfg->net_ready_pipe[0] = cfg->net_ready_pipe[1] = -1;
-  }
-  if (cfg->net_done_pipe[0] >= 0) {
-    close(cfg->net_done_pipe[0]);
-    close(cfg->net_done_pipe[1]);
-    cfg->net_done_pipe[0] = cfg->net_done_pipe[1] = -1;
-  }
-
-  /* Networking pipes (created fresh for every boot cycle) */
-  int mid_sync_pipe[2] = {-1, -1};
-  if (cfg->net_mode != DS_NET_HOST) {
-    if (pipe(cfg->net_ready_pipe) < 0 || pipe(cfg->net_done_pipe) < 0 ||
-        pipe(mid_sync_pipe) < 0) {
-      ds_error("Failed to create NAT sync pipes: %s", strerror(errno));
-      _exit(EXIT_FAILURE);
-    }
-
-    /* Set FD_CLOEXEC on all new pipe ends */
-    fcntl(cfg->net_ready_pipe[0], F_SETFD, FD_CLOEXEC);
-    fcntl(cfg->net_ready_pipe[1], F_SETFD, FD_CLOEXEC);
-    fcntl(cfg->net_done_pipe[0], F_SETFD, FD_CLOEXEC);
-    fcntl(cfg->net_done_pipe[1], F_SETFD, FD_CLOEXEC);
-    fcntl(mid_sync_pipe[0], F_SETFD, FD_CLOEXEC);
-    fcntl(mid_sync_pipe[1], F_SETFD, FD_CLOEXEC);
-
-    ds_log("[NET] Sync pipes created for net_mode=%d", cfg->net_mode);
-  }
 
   /* First boot only: ensure no stale container with the same name is running
    */
@@ -203,13 +168,13 @@ reboot_loop:;
       if (existing_pid != getpid()) {
         /*
          * Crucial Safety: Only kill the process if it's confirmed to be a
-         * Droidspaces container. This prevents killing random processes that
+         * ds-fork container. This prevents killing random processes that
          * might have recycled the PID after the container died without
          * cleanup.
          */
         if (is_valid_container_pid(existing_pid)) {
-          ds_warn("Killing stale container with same name (PID %d)",
-                  existing_pid);
+          log_warn("Killing stale container with same name (PID %d)",
+                   existing_pid);
           kill(existing_pid, SIGKILL);
           usleep(100000);
         }
@@ -220,9 +185,7 @@ reboot_loop:;
   /* Stdio handling for monitor in background mode (early redirection).
    * We must do this BEFORE forking the intermediate process, otherwise
    * the intermediate inherits the user's stdout/stderr (e.g. a pipe)
-   * and holds it open indefinitely, causing CLI hangs in direct mode.
-   * We only keep it open if we haven't reached the networking setup yet,
-   * as setup_veth_host_side() might still need to print logs. */
+   * and holds it open indefinitely, causing CLI hangs in direct mode. */
   if (!cfg->foreground && !stdio_redirected) {
     int devnull = open("/dev/null", O_RDWR);
     if (devnull >= 0) {
@@ -242,11 +205,11 @@ reboot_loop:;
      * Create a fresh PID namespace (and NET namespace for NAT/none modes)
      * for this boot cycle. */
     int clone_flags = CLONE_NEWPID;
-    if (cfg->net_mode != DS_NET_HOST)
+    if (cfg->net_mode != NET_HOST)
       clone_flags |= CLONE_NEWNET;
 
     if (unshare(clone_flags) < 0) {
-      ds_error("unshare(PID|NET) failed: %s", strerror(errno));
+      log_error("unshare(PID|NET) failed: %s", strerror(errno));
       _exit(EXIT_FAILURE);
     }
 
@@ -256,13 +219,6 @@ reboot_loop:;
 
     if (init_pid == 0) {
       /* CONTAINER INIT (PID 1 inside namespace) */
-      /* Close pipe ends the init process doesn't use */
-      if (cfg->net_mode != DS_NET_HOST) {
-        if (mid_sync_pipe[0] >= 0)
-          close(mid_sync_pipe[0]);
-        if (mid_sync_pipe[1] >= 0)
-          close(mid_sync_pipe[1]);
-      }
       close(sync_pipe[1]);
       _exit(internal_boot(cfg));
     }
@@ -273,7 +229,7 @@ reboot_loop:;
      *
      * BUG FIX: this redirect was previously placed BEFORE the fork(), which
      * caused init_pid to inherit /dev/null for fd 1 and fd 2. Every
-     * ds_log() call inside internal_boot() writes to stdout, so all boot
+     * log_info() call inside internal_boot() writes to stdout, so all boot
      * logs were silently swallowed by /dev/null - visible only in the log
      * file (which uses direct file I/O, not stdout). Moving the redirect
      * here means only the intermediate itself goes silent; internal_boot()
@@ -289,17 +245,6 @@ reboot_loop:;
       }
     }
 
-    /* Send init PID to monitor so it can target /proc/<pid>/ns/net */
-    if (cfg->net_mode != DS_NET_HOST && mid_sync_pipe[1] >= 0) {
-      if (write(mid_sync_pipe[1], &init_pid, sizeof(pid_t)) != sizeof(pid_t)) {
-        ds_warn(
-            "[NET] Intermediate: failed to write init_pid to mid_sync_pipe");
-      }
-      close(mid_sync_pipe[1]);
-      close(mid_sync_pipe[0]);
-      mid_sync_pipe[0] = mid_sync_pipe[1] = -1;
-    }
-
     /* Send init PID to parent via sync pipe (first boot only) */
     if (sync_pipe[1] >= 0) {
       if (write(sync_pipe[1], &init_pid, sizeof(pid_t)) != sizeof(pid_t)) {
@@ -308,17 +253,7 @@ reboot_loop:;
       close(sync_pipe[1]);
       sync_pipe[1] = -1;
     } else {
-      /* Reboot cycle - update PID file directly so
-       * 'droidspaces show/status' report the correct PID. */
-      char pid_str[32];
-      snprintf(pid_str, sizeof(pid_str), "%d", init_pid);
-      write_file_atomic(cfg->pidfile, pid_str);
-
-      char global_pf[PATH_MAX];
-      resolve_pidfile_from_name(cfg->container_name, global_pf,
-                                sizeof(global_pf));
-      if (strcmp(cfg->pidfile, global_pf) != 0)
-        write_file_atomic(global_pf, pid_str);
+      /* Reboot cycle - PID will be discovered via /proc scan. */
     }
 
     /* Wait for init to exit */
@@ -327,10 +262,10 @@ reboot_loop:;
       ;
 
     /* Convert kernel signal to exit code:
-     * SIGHUP from reboot(RESTART) → DS_REBOOT_EXIT (249)
+     * SIGHUP from reboot(RESTART) → REBOOT_EXIT (249)
      * Everything else → pass through as-is */
     if (WIFSIGNALED(init_status) && WTERMSIG(init_status) == SIGHUP) {
-      _exit(DS_REBOOT_EXIT);
+      _exit(REBOOT_EXIT);
     }
 
     _exit(WIFEXITED(init_status) ? WEXITSTATUS(init_status) : EXIT_FAILURE);
@@ -344,82 +279,14 @@ reboot_loop:;
     sync_pipe[1] = -1;
   }
 
-  /* Monitor: NAT networking handshake
-   *
-   * Sequence (all non-blocking after pipes are ready):
-   *   1. Read init_pid from mid_sync_pipe[0]
-   *   2. Read "ready" byte from net_ready_pipe[0]  (init sent it)
-   *   3. Call setup_veth_host_side → creates bridge/veth/rules
-   *   4. Write ds_net_handshake to net_done_pipe[1] (init reads it)
-   *
-   * This handshake ensures the veth peer is moved into the container's
-   * netns while the init process is alive and waiting, avoiding the race
-   * where we try to open /proc/<pid>/ns/net before the process exists. */
-  if (cfg->net_mode != DS_NET_HOST && mid_sync_pipe[0] >= 0) {
-    close(mid_sync_pipe[1]); /* monitor is reader */
-
-    pid_t netns_pid = -1;
-    ssize_t nr = read(mid_sync_pipe[0], &netns_pid, sizeof(pid_t));
-    close(mid_sync_pipe[0]);
-
-    if (nr != sizeof(pid_t) || netns_pid <= 0) {
-      ds_warn("[NET] Monitor: failed to read init_pid from mid_sync_pipe "
-              "(nr=%zd pid=%d)",
-              nr, (int)netns_pid);
-    } else {
-      ds_log("[NET] Monitor: received init_pid=%d, waiting for READY...",
-             (int)netns_pid);
-      cfg->container_pid = netns_pid;
-
-      /* Close the ends we don't need */
-      close(cfg->net_ready_pipe[1]); /* monitor reads, init writes */
-      close(cfg->net_done_pipe[0]);  /* monitor writes, init reads  */
-
-      char rdy;
-      if (read(cfg->net_ready_pipe[0], &rdy, 1) < 0) {
-        ds_warn("[NET] Monitor: failed to read READY signal: %s",
-                strerror(errno));
-      } else {
-        ds_log("[NET] Monitor: READY received from init (pid=%d)",
-               (int)netns_pid);
-      }
-      close(cfg->net_ready_pipe[0]);
-
-      if (cfg->net_mode == DS_NET_NAT) {
-        if (setup_veth_host_side(cfg, netns_pid) < 0) {
-          ds_warn("[NET] Monitor: setup_veth_host_side failed - "
-                  "container will have no internet");
-        } else {
-          /* Start the dynamic route monitor thread to handle WiFi/Mobile
-           * switches */
-          ds_net_start_route_monitor();
-        }
-      } else if (cfg->net_mode == DS_NET_GATEWAY) {
-        if (setup_gateway_veth_side(cfg, netns_pid) < 0) {
-          ds_warn("[NET] Monitor: setup_gateway_veth_side failed - "
-                  "container will remain isolated");
-        }
-      }
-
-      /* Send handshake to init */
-      struct ds_net_handshake hs;
-      ds_net_derive_handshake(netns_pid, cfg, &hs);
-      ds_log("[NET] Monitor: sending DONE: peer=%s ip=%s", hs.peer_name,
-             hs.ip_str);
-      if (write(cfg->net_done_pipe[1], &hs, sizeof(hs)) != (ssize_t)sizeof(hs))
-        ds_warn("[NET] Monitor: failed to write handshake to init");
-      close(cfg->net_done_pipe[1]);
-    }
-  }
-
   /* Capture PID namespace inode for virtualization PID-recycling guard.
    * container_pid may be 0 on HOST mode until pidfile is written - that's
-   * fine; ds_get_pid_ns_inode(0) returns 0 and update will skip safely. */
-  cfg->ns_inode = ds_get_pid_ns_inode(cfg->container_pid);
+   * fine; get_pid_ns_inode(0) returns 0 and update will skip safely. */
+  cfg->ns_inode = get_pid_ns_inode(cfg->container_pid);
 
   /* Ensure monitor is not sitting inside any mount point */
   if (chdir("/") < 0) {
-    ds_warn("Failed to chdir to /: %s", strerror(errno));
+    log_warn("Failed to chdir to /: %s", strerror(errno));
   }
 
   /* Stdio handling for monitor in background mode (first boot only) */
@@ -463,22 +330,21 @@ reboot_loop:;
       if (r < 0 && errno != EINTR)
         break;
 
-      /* HOST mode: monitor never gets container_pid via mid_sync_pipe.
-       * Poll the pidfile (written by parent shortly after sync_pipe read)
-       * until we have a valid PID, then capture ns_inode once. */
-      if (cfg->container_pid <= 0 && cfg->pidfile[0]) {
-        pid_t p = -1;
-        if (read_and_validate_pid(cfg->pidfile, &p) == 0 && p > 0) {
+      /* HOST mode: resolve container_pid via /proc scan using UUID.
+       * Poll until we have a valid PID, then capture ns_inode once. */
+      if (cfg->container_pid <= 0 && cfg->uuid[0] != '\0') {
+        pid_t p = find_container_init_pid(cfg->uuid);
+        if (p > 0) {
           cfg->container_pid = p;
-          cfg->ns_inode = ds_get_pid_ns_inode(p);
+          cfg->ns_inode = get_pid_ns_inode(p);
           write_monitor_debug_log(cfg->container_name,
                                   "[VIRT] resolved container_pid=%d "
-                                  "ns_inode=%lu from pidfile",
+                                  "ns_inode=%lu from /proc",
                                   (int)p, cfg->ns_inode);
         }
       }
 
-      ds_virtualize_update(cfg);
+      virtualize_update(cfg);
 
       if (sfd >= 0) {
         struct pollfd pfd = {.fd = sfd, .events = POLLIN};
@@ -501,7 +367,7 @@ reboot_loop:;
   /* Log what monitor saw */
   if (WIFEXITED(status)) {
     int code = WEXITSTATUS(status);
-    if (code == DS_REBOOT_EXIT) {
+    if (code == REBOOT_EXIT) {
       write_monitor_debug_log(cfg->container_name, "Detected internal REBOOT");
     } else {
       write_monitor_debug_log(cfg->container_name,
@@ -514,7 +380,7 @@ reboot_loop:;
   }
 
   /* Reboot detection (internal reboot) */
-  if (WIFEXITED(status) && WEXITSTATUS(status) == DS_REBOOT_EXIT) {
+  if (WIFEXITED(status) && WEXITSTATUS(status) == REBOOT_EXIT) {
     /* Check for external lock - if exists, abort reboot and let CLI handle it
      */
     if (is_external_lock_active(cfg->container_name)) {
@@ -525,47 +391,42 @@ reboot_loop:;
     }
 
     if (cfg->foreground) {
-      printf("\n" C_WHITE "Droidspaces v%s : Container " C_GREEN
+      printf("\n" C_WHITE PROJECT_NAME " v%s : Container " C_GREEN
              "%s" C_RESET C_WHITE " is now Rebooting...." C_RESET "\n",
-             DS_VERSION, cfg->container_name);
+             RUNTIME_VERSION, cfg->container_name);
       fflush(stdout);
     }
 
-    /* Synchronize container_pid in Monitor */
-    pid_t new_pid = -1;
-    if (read_and_validate_pid(cfg->pidfile, &new_pid) == 0) {
-      cfg->container_pid = new_pid;
+    /* Synchronize container_pid in Monitor via /proc scan */
+    if (cfg->uuid[0] != '\0') {
+      pid_t new_pid = find_container_init_pid(cfg->uuid);
+      if (new_pid > 0)
+        cfg->container_pid = new_pid;
     }
 
-    /* Re-write the same UUID to sync file for the next boot cycle.
-     * internal_boot reads this across the pivot_root boundary. */
-    if (!cfg->volatile_mode && cfg->rootfs_path[0]) {
-      char uuid_sync[PATH_MAX];
-      snprintf(uuid_sync, sizeof(uuid_sync), "%.4060s/.droidspaces-uuid",
-               cfg->rootfs_path);
-      write_file(uuid_sync, cfg->uuid);
+    /* Write UUID to container /run (via procfs) so internal_boot can read it
+     * across the pivot_root boundary without touching user's rootfs. */
+    if (!cfg->volatile_mode && cfg->container_pid > 0) {
+      char run_dir[PATH_MAX];
+      snprintf(run_dir, sizeof(run_dir), "/proc/%d/root/run",
+               cfg->container_pid);
+      mkdir(run_dir, 0755);
+      int fd = safe_openat_proc(cfg->container_pid, "run/.boot-uuid",
+                                O_WRONLY | O_CREAT | O_TRUNC, 0644);
+      if (fd >= 0) {
+        size_t ulen = strlen(cfg->uuid);
+        write_all(fd, cfg->uuid, ulen);
+        close(fd);
+      }
     }
 
     /* Reload from workspace (canonical path the user edits) */
     {
       free_config_binds(cfg);
-      /* Preserve env_vars across the reboot */
-      struct ds_env_var *saved_vars = cfg->env_vars;
-      int saved_count = cfg->env_var_count;
-      int saved_cap = cfg->env_var_capacity;
       int old_force_cgv1 = cfg->force_cgroupv1;
 
-      struct ds_config reboot_cfg = *cfg;
-      if (ds_config_load_by_name(cfg->container_name, &reboot_cfg) == 0) {
-        reboot_cfg.env_vars = saved_vars;
-        reboot_cfg.env_var_count = saved_count;
-        reboot_cfg.env_var_capacity = saved_cap;
-        if (strcmp(cfg->dns_servers, reboot_cfg.dns_servers) != 0) {
-          reboot_cfg.dns_server_content[0] = '\0';
-          ds_get_dns_servers(reboot_cfg.dns_servers,
-                             reboot_cfg.dns_server_content,
-                             sizeof(reboot_cfg.dns_server_content));
-        }
+      struct config reboot_cfg = *cfg;
+      if (config_load_by_name(cfg->container_name, &reboot_cfg) == 0) {
         /* Cgroup namespace is locked at monitor startup - can't change */
         if (reboot_cfg.force_cgroupv1 != old_force_cgv1) {
           printf("\n" C_BOLD C_YELLOW "force_cgroupv1 changed but "
@@ -574,9 +435,7 @@ reboot_loop:;
         }
         *cfg = reboot_cfg;
         /* Restore mount point for img-based containers */
-        if (cfg->is_img_mount && cfg->img_mount_point[0]) {
-          safe_strncpy(cfg->rootfs_path, cfg->img_mount_point,
-                       sizeof(cfg->rootfs_path));
+        if (cfg->img_mount_point[0]) {
         }
       }
     }
@@ -584,36 +443,12 @@ reboot_loop:;
     cfg->reboot_cycle = 1;
     clock_gettime(CLOCK_BOOTTIME, &cfg->start_time);
 
-    /* Mirror restart behavior: ensure X, VirGL, and PulseAudio servers are up
-     * before next boot */
-    if (is_android() && cfg->termux_x11) {
-      if (ds_x11_daemon_start(cfg) == 0)
-        wait_for_socket_or_death(
-            cfg->x11_pid, TX11_SOCK_DIR "/" TX11_DISPLAY_SOCK, 5000, 50000);
-    }
-
-    if (is_android() && cfg->virgl) {
-      if (ds_virgl_daemon_start(cfg) == 0)
-        wait_for_socket_or_death(cfg->virgl_pid, TX11_VIRGL_SOCKET, 2000,
-                                 20000);
-    }
-
-    if (is_android() && cfg->pulseaudio) {
-      ds_pulse_daemon_start(cfg);
-    }
-
     /* Refresh ns_inode: new container has a new PID namespace inode.
-     * Without this, ds_virtualize_update's PID-recycling guard rejects
+     * Without this, virtualize_update's PID-recycling guard rejects
      * all writes after the first reboot cycle (stale inode != new pid ns). */
-    cfg->ns_inode = ds_get_pid_ns_inode(cfg->container_pid);
+    cfg->ns_inode = get_pid_ns_inode(cfg->container_pid);
     if (cfg->foreground)
-      ds_log_silent = 1;
-
-    /* ds_dhcp_server_start() memsets g_dhcp under g_dhcp_lock on the next
-     * cycle, racing the still-running dhcp_server_loop thread that reads from
-     * the same memory.  The DHCP thread is intentionally joinable so stop()
-     * can join before memset. */
-    ds_dhcp_server_stop();
+      log_silent = 1;
 
     goto reboot_loop;
   }
@@ -631,9 +466,9 @@ reboot_loop:;
 
   /* Before cleaning up the container's cgroup subtree, move the
    * monitor process itself back to the root cgroup.  The monitor wrote its
-   * own PID into /sys/fs/cgroup/droidspaces/<name>/ at start (for cgroup
+   * own PID into /sys/fs/cgroup/ds-fork/<name>/ at start (for cgroup
    * namespace isolation).  If it is still in that cgroup when
-   * ds_cgroup_cleanup_container() calls rmdir, the kernel sees a non-empty
+   * cgroup_cleanup_container() calls rmdir, the kernel sees a non-empty
    * cgroup and returns EBUSY - the directory is never removed.
    *
    * Writing our PID to the root cgroup.procs atomically migrates us out.
@@ -649,10 +484,10 @@ reboot_loop:;
     }
   }
 
-  cleanup_container_resources(cfg, 0, 0, 0);
+  cleanup_container_resources(cfg, 0, 0);
 
 monitor_cleanup_and_exit:
   /* Free dynamically allocated configuration members before exit */
-  ds_config_free(cfg);
+  config_free(cfg);
   _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 0);
 }

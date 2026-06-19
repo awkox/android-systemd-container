@@ -1,5 +1,5 @@
 /*
- * Droidspaces v6 - Resource Visibility Virtualization
+ * ds-fork v6 - Resource Visibility Virtualization
  *
  * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -10,25 +10,25 @@
  * cgroup v2 resource limits. Only active limiters incur overhead.
  */
 
-#ifndef DS_VIRTUALIZE_H
-#define DS_VIRTUALIZE_H
+#ifndef VIRTUALIZE_H
+#define VIRTUALIZE_H
 
-#include "droidspace.h"
+#include "ds-fork.h"
 
 /* Initialize virtual proc in container rootfs (called inside container,
- * pre-exec). Creates tmpfs at /run/droidspaces/vproc, writes and bind-mounts
+ * pre-exec). Creates tmpfs at /run/ds-fork/vproc, writes and bind-mounts
  * only the proc/sysfs files relevant to active limits. No-op if no limits set.
  */
-int ds_virtualize_init(struct ds_config *cfg);
+int virtualize_init(struct config *cfg);
 
 /* Update dynamic virtual files from monitor process every 500ms.
  * Writes in-place to preserve bind-mount inodes. Guards against PID recycling
  * via ns_inode check. Always runs for uptime/loadavg regardless of limits.
  * Uptime derived from container init PID's /proc/<pid>/stat starttime and
  * CLOCK_BOOTTIME (lxcfs-style), not from host /proc/uptime. */
-void ds_virtualize_update(struct ds_config *cfg);
+void virtualize_update(struct config *cfg);
 
 /* Return PID namespace inode for identity verification. Returns 0 on error. */
-unsigned long ds_get_pid_ns_inode(pid_t pid);
+unsigned long get_pid_ns_inode(pid_t pid);
 
-#endif /* DS_VIRTUALIZE_H */
+#endif /* VIRTUALIZE_H */
