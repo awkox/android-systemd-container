@@ -33,12 +33,10 @@ static int parse_bool(const char *val) {
   if (!val)
     return 0;
 
-  if (strcasecmp(val, "1") == 0 || strcasecmp(val, "true") == 0 ||
-      strcasecmp(val, "yes") == 0 || strcasecmp(val, "on") == 0)
+  if (strcasecmp(val, "1") == 0)
     return 1;
 
-  if (strcasecmp(val, "0") == 0 || strcasecmp(val, "false") == 0 ||
-      strcasecmp(val, "no") == 0 || strcasecmp(val, "off") == 0)
+  if (strcasecmp(val, "0") == 0)
     return 0;
 
   return 0;
