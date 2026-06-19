@@ -1,1 +1,0 @@
-/bin/droidspaces /data/local/Droidspaces/bin/droidspaces 0 0 777 u:object_r:droidspacesd_exec:s0

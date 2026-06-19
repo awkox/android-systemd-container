@@ -1,2 +1,0 @@
-/bin/droidspaces_autoboot.sh u:object_r:droidspacesd_exec:s0
-/etc/init/init.droidspaces.rc u:object_r:vendor_configs_file:s0
