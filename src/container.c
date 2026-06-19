@@ -320,9 +320,20 @@ int start_rootfs(struct config *cfg) {
 
   /* 2. Mount rootfs image (using the resolved name) */
   if (cfg->rootfs_img_path[0] && !lock_acquired) {
+    
+    /* VFS 防删保护：通过自我绑定挂载防止宿主机意外删除或重命名镜像文件 */
+    struct stat img_st;
+    if (stat(cfg->rootfs_img_path, &img_st) == 0 && S_ISREG(img_st.st_mode)) {
+      if (mount(cfg->rootfs_img_path, cfg->rootfs_img_path, NULL, MS_BIND, NULL) == 0) {
+        log_info("Image file locked against deletion (VFS self-bind)");
+      } else if (errno != EBUSY) {
+        log_warn("Failed to lock image file: %s", strerror(errno));
+      }
+    }
+
     if (mount_rootfs_img(cfg->rootfs_img_path, cfg->img_mount_point,
                          sizeof(cfg->img_mount_point), cfg->container_name) < 0) {
-      goto cleanup;
+      goto cleanup; /* 失败时跳转到清理流程，下方 cleanup 函数会自动解除绑定 */
     }
   }
 
