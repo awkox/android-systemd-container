@@ -763,18 +763,6 @@ static void handle_conn(int conn) {
 
 /* daemonize the process: detach from terminal and protect from OOM killer */
 static void daemonize(int foreground) {
-  if (is_android()) {
-    setenv(
-        "PATH",
-        "/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:"
-        "/system_ext/bin:/system/bin:/system/xbin:/odm/bin:/vendor/bin:/vendor/"
-        "xbin",
-        1);
-  } else {
-    setenv("PATH",
-           "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", 1);
-  }
-
   if (!foreground) {
     pid_t pid = fork();
     if (pid < 0)
