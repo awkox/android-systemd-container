@@ -97,7 +97,7 @@ int internal_boot(struct config *cfg) {
   open_container_log(cfg);
 
   /* NET_NONE: bring up loopback in the isolated network namespace */
-  if (cfg->net_mode != NET_HOST) {
+  if (cfg->isolation_network) {
     nl_ctx_t *nlctx = nl_open();
     if (nlctx) {
       nl_link_up(nlctx, "lo");

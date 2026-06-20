@@ -205,7 +205,7 @@ reboot_loop:;
      * Create a fresh PID namespace (and NET namespace for NAT/none modes)
      * for this boot cycle. */
     int clone_flags = CLONE_NEWPID;
-    if (cfg->net_mode != NET_HOST)
+    if (cfg->isolation_network)
       clone_flags |= CLONE_NEWNET;
 
     if (unshare(clone_flags) < 0) {

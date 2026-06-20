@@ -148,7 +148,7 @@ static int auto_resolve_container_name(struct config *cfg) {
  * ---------------------------------------------------------------------------*/
 
 static void check_network_namespace(struct config *cfg) {
-  if (cfg->net_mode != NET_HOST) {
+  if (cfg->isolation_network) {
     if (!check_ns(CLONE_NEWNET, "net")) {
       printf("\n" C_RED C_BOLD
              "[ FATAL: NETWORK NAMESPACE UNSUPPORTED ]" C_RESET "\n\n");

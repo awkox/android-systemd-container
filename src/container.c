@@ -819,16 +819,7 @@ int show_info(struct config *cfg, int trust_cfg_pid) {
       }
     }
 
-    const char *net;
-    switch (cfg->net_mode) {
-    case NET_NONE:
-      net = "none";
-      break;
-    default:
-      net = "host";
-      break;
-    }
-    printf("NETWORKING_MODE=%s\n", net);
+    printf("ISOLATION_NETWORK=%d\n", cfg->isolation_network);
 
     if (cfg->hw_access)
       printf("HW_ACCESS=full\n");
@@ -905,18 +896,11 @@ int show_info(struct config *cfg, int trust_cfg_pid) {
     printf("\n" C_GREEN "Features:" C_RESET "\n");
     int feat_count = 0;
 
-    /* 1. Networking Mode */
-    const char *net;
-    switch (cfg->net_mode) {
-    case NET_NONE:
-      net = "none";
-      break;
-    default:
-      net = "host";
-      break;
+    /* 1. Isolation Network */
+    if (cfg->isolation_network) {
+      printf("  Isolation network: enabled\n");
+      feat_count++;
     }
-    printf("  Networking: %s\n", net);
-    feat_count++;
 
     /* 2. HW/GPU Access */
     if (cfg->hw_access) {

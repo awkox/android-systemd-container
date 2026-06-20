@@ -300,17 +300,8 @@ int config_load(const char *config_path, struct config *cfg) {
       parse_bind_mounts(val, cfg);
     } else if (strcmp(key, "uuid") == 0) {
       safe_strncpy(cfg->uuid, val, sizeof(cfg->uuid));
-    } else if (strcmp(key, "net_mode") == 0) {
-      if (strcmp(val, "none") == 0) {
-        cfg->net_mode = NET_NONE;
-      } else if (strcmp(val, "host") == 0) {
-        cfg->net_mode = NET_HOST;
-      } else {
-        log_warn(
-            "Unknown network mode '%s' in config file. Defaulting to 'host'.",
-            val);
-        cfg->net_mode = NET_HOST;
-      }
+    } else if (strcmp(key, "isolation_network") == 0) {
+      cfg->isolation_network = parse_bool(val);
     } else {
       /* Unknown key - preserve verbatim so Android App metadata
        * (run_at_boot, use_sparse_image, sparse_image_size_gb, etc.)
@@ -414,11 +405,7 @@ static void config_serialize_known(FILE *f, struct config *cfg) {
     fprintf(f, "\n");
   }
 
-  if (cfg->net_mode == NET_NONE) {
-    fprintf(f, "net_mode=none\n");
-  } else {
-    fprintf(f, "net_mode=host\n");
-  }
+  fprintf(f, "isolation_network=%d\n", cfg->isolation_network);
 
   if (cfg->uuid[0])
     fprintf(f, "uuid=%s\n", cfg->uuid);

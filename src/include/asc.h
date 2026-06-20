@@ -141,13 +141,6 @@ int check_ns(int flag, const char *name);
  * Data structures
  * ---------------------------------------------------------------------------*/
 
-/* Networking modes */
-
-enum net_mode {
-  NET_HOST = 0, /* share host network namespace (default) */
-  NET_NONE,     /* isolated netns with loopback only       */
-};
-
 /* Opaque RTNETLINK context - defined in netlink.c */
 typedef struct nl_ctx nl_ctx_t;
 
@@ -186,7 +179,7 @@ struct config {
   /* Paths */
   char rootfs_img_path[PATH_MAX]; /* --rootfs-img= */
   char container_name[256];       /* --name= (mandatory) */
-  enum net_mode net_mode;         /* --net=host|none */
+  int isolation_network;          /* --isolation_network */
 
   /* UUID for PID discovery */
   char uuid[UUID_LEN + 1];
