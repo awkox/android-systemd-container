@@ -748,9 +748,8 @@ int show_info(struct config *cfg, int trust_cfg_pid) {
     int count = count_running_containers(first_name, sizeof(first_name));
 
     if (count == 0) {
-      const char *host = is_android() ? "Android" : "Linux";
       const char *arch = get_architecture();
-      printf(C_GREEN "Host:" C_RESET " %s %s\n", host, arch);
+      printf(C_GREEN "Host:" C_RESET " %s\n", arch);
       printf("\n" C_YELLOW "Container:" C_RESET " No containers running.\n\n");
       return 0;
     }
@@ -761,9 +760,8 @@ int show_info(struct config *cfg, int trust_cfg_pid) {
                    sizeof(cfg->container_name));
     } else {
       /* Multiple containers running, show Host info and list */
-      const char *host = is_android() ? "Android" : "Linux";
       const char *arch = get_architecture();
-      printf(C_GREEN "Host:" C_RESET " %s %s\n", host, arch);
+      printf(C_GREEN "Host:" C_RESET " %s\n", arch);
       printf("\n" C_YELLOW "Multiple containers running:" C_RESET "\n");
       show_containers(cfg);
       printf("\nUse '" C_GREEN "--name <NAME> info" C_RESET
@@ -797,9 +795,7 @@ int show_info(struct config *cfg, int trust_cfg_pid) {
 
   /* Success - print Host and detailed Container info */
   if (cfg->format_output) {
-    const char *host = is_android() ? "Android" : "Linux";
     const char *arch = get_architecture();
-    printf("HOST_PLATFORM=%s\n", host);
     printf("HOST_ARCH=%s\n", arch);
     printf("CONTAINER_NAME=%s\n", cfg->container_name);
     printf("CONTAINER_PID=%d\n", pid);
@@ -880,9 +876,8 @@ int show_info(struct config *cfg, int trust_cfg_pid) {
     show_container_usage(cfg);
   } else {
     /* Human-readable output */
-    const char *host = is_android() ? "Android" : "Linux";
     const char *arch = get_architecture();
-    printf(C_GREEN "Host:" C_RESET " %s %s\n", host, arch);
+    printf(C_GREEN "Host:" C_RESET " %s\n", arch);
 
     printf("\n" C_GREEN "Container:" C_RESET " %s (RUNNING)\n",
            cfg->container_name);

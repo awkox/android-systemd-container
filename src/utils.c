@@ -710,12 +710,6 @@ static int fw_remove_token(const char *buf, const char *token, char *out,
 }
 
 void firmware_path_add(const char *fw_path) {
-  /* Firmware path manipulation is an Android-kernel-specific feature.
-   * Desktop Linux firmware_class does not support this sysfs node in the
-   * same way - skip entirely on non-Android hosts. */
-  if (!is_android())
-    return;
-
   /* Bail silently if /lib/firmware is absent in the rootfs. */
   struct stat st;
   if (stat(fw_path, &st) < 0)
@@ -764,9 +758,6 @@ void firmware_path_add(const char *fw_path) {
 }
 
 void firmware_path_remove(const char *fw_path) {
-  if (!is_android())
-    return;
-
   /* Read current list - read_file() strips trailing newlines. */
   char current[FW_PATH_BUF_SIZE] = {0};
   if (read_file(FW_PATH_FILE, current, sizeof(current)) < 0)

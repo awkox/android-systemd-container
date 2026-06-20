@@ -311,7 +311,6 @@ void parse_privileged(const char *value, struct config *cfg);
  * android.c
  * ---------------------------------------------------------------------------*/
 
-int is_android(void);
 int android_seccomp_setup(int block_nested_ns, int privileged_mask);
 int seccomp_apply_minimal(int privileged_mask);
 

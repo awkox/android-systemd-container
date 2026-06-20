@@ -22,7 +22,6 @@ configure_file(
 add_executable(asc
 	src/main.c
 	src/utils.c
-	src/android.c
 	src/seccomp.c
 	src/mount.c
 	src/cgroup.c

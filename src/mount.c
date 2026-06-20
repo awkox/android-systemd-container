@@ -471,8 +471,7 @@ int setup_dev(const char *rootfs, int hw_access, int gpu_mode,
        * On Linux, /dev is the host's shared devtmpfs (one instance,
        * kernel-managed). Unlinking nodes here removes them from the host
        * permanently. Skip on Linux. */
-      if (is_android())
-        prune_host_devices(dev_path, privileged_mask);
+      prune_host_devices(dev_path, privileged_mask);
 
       /* devtmpfs is the kernel's own instance and does NOT contain nodes
        * that Android's ueventd created in its tmpfs-based /dev (kgsl-3d0,
@@ -714,17 +713,9 @@ int setup_volatile_overlay(struct config *cfg) {
 
   /* 4. Perform Overlay mount */
   char opts[32768];
-  int n;
-
-  if (is_android()) {
-    n = snprintf(opts, sizeof(opts),
-                 "lowerdir=%s,upperdir=%s/upper,workdir=%s/work,context=\"%s\"",
-                 cfg->img_mount_point, base, base, ANDROID_TMPFS_CONTEXT);
-  } else {
-    n = snprintf(opts, sizeof(opts),
-                 "lowerdir=%s,upperdir=%s/upper,workdir=%s/work",
-                 cfg->img_mount_point, base, base);
-  }
+  int n = snprintf(opts, sizeof(opts),
+    "lowerdir=%s,upperdir=%s/upper,workdir=%s/work,context=\""
+    ANDROID_TMPFS_CONTEXT "\"", cfg->img_mount_point, base, base);
 
   if (n < 0 || (size_t)n >= sizeof(opts)) {
     log_error("OverlayFS options too long");
@@ -933,13 +924,8 @@ out:
  * cross-try the other path, then mknod as a last resort (major 7, minor=devnr).
  */
 static int open_loop_dev(long devnr, char *path_out, size_t path_size) {
-  int android = is_android();
-
   /* Android: /dev/block/loopN; recovery/desktop: /dev/loopN */
-  if (android)
-    snprintf(path_out, path_size, "/dev/block/loop%ld", devnr);
-  else
-    snprintf(path_out, path_size, "/dev/loop%ld", devnr);
+  snprintf(path_out, path_size, "/dev/block/loop%ld", devnr);
 
   /* Wait up to 500ms for ueventd/udev to create the node */
   for (int i = 0; i < 5; i++) {
@@ -950,10 +936,7 @@ static int open_loop_dev(long devnr, char *path_out, size_t path_size) {
   }
 
   /* Cross-environment fallback (recovery acts like desktop, etc.) */
-  if (android)
-    snprintf(path_out, path_size, "/dev/loop%ld", devnr);
-  else
-    snprintf(path_out, path_size, "/dev/block/loop%ld", devnr);
+  snprintf(path_out, path_size, "/dev/loop%ld", devnr);
 
   int fd = open(path_out, O_RDWR | O_CLOEXEC);
   if (fd >= 0)
@@ -1118,8 +1101,7 @@ int mount_rootfs_img(const char *img_path, char *mount_point, size_t mp_size,
     if (ret == 0) {
       /* Android FIX: Some kernels enforce nosuid/nodev on all loop mounts
        * if the backing file is on /data. Explicitly remount to clear them. */
-      if (is_android())
-        mount(NULL, mount_point, NULL, MS_REMOUNT | mnt_flags, mnt_data);
+      mount(NULL, mount_point, NULL, MS_REMOUNT | mnt_flags, mnt_data);
       return 0;
     }
 
