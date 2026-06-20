@@ -422,7 +422,7 @@ int internal_boot(struct config *cfg) {
 
   /* 20. Clear environment and set container defaults */
   clearenv();
-  setenv("container", CONTAINER_MARKER, 1);
+  setenv("container", PROJECT_NAME, 1);
   if (cfg->img_mount_point[0])
     setenv("RUNTIME_MOUNT_PATH", cfg->img_mount_point, 1);
 

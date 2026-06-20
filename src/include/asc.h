@@ -91,9 +91,6 @@
 #define DEFAULT_INIT "/sbin/init"
 #define ANDROID_TMPFS_CONTEXT "u:object_r:tmpfs:s0"
 
-/* Device nodes to create in container /dev (when using tmpfs) */
-#define CONTAINER_MARKER PROJECT_NAME
-
 /* Common Paths & Patterns */
 #define PROC_ROOT_FMT "/proc/%d/root"
 #define PROC_CMDLINE_FMT "/proc/%d/cmdline"
