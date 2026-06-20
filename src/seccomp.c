@@ -28,16 +28,16 @@ int seccomp_apply_minimal(int privileged_mask) {
   /* 1. Validate Architecture */
   filter[curr++] = (struct sock_filter)BPF_STMT(
       BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch));
-#if defined(__aarch64__)
+#ifdef __aarch64__
   filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
                                                 AUDIT_ARCH_AARCH64, 1, 0);
-#elif defined(__x86_64__)
+#elifdef __x86_64__
   filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
                                                 AUDIT_ARCH_X86_64, 1, 0);
-#elif defined(__arm__)
+#elifdef __arm__
   filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
                                                 AUDIT_ARCH_ARM, 1, 0);
-#elif defined(__i386__)
+#elifdef __i386__
   filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
                                                 AUDIT_ARCH_I386, 1, 0);
 #endif
@@ -48,7 +48,7 @@ int seccomp_apply_minimal(int privileged_mask) {
   filter[curr++] = (struct sock_filter)BPF_STMT(
       BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
 
-#if defined(__x86_64__)
+#ifdef __x86_64__
   /* 3. Block x32 ABI */
   filter[curr++] =
       (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, 0x40000000, 0, 1);
@@ -244,13 +244,13 @@ int android_seccomp_setup(int block_nested_ns, int privileged_mask) {
   struct sock_filter filter_base[] = {
       /* Same wrong-arch fix as seccomp_apply_minimal: KILL on mismatch. */
       BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch)),
-#if defined(__aarch64__)
+#ifdef __aarch64__
       BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_AARCH64, 1, 0),
-#elif defined(__x86_64__)
+#elifdef __x86_64__
       BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_X86_64, 1, 0),
-#elif defined(__arm__)
+#elifdef __arm__
       BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_ARM, 1, 0),
-#elif defined(__i386__)
+#elifdef __i386__
       BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_I386, 1, 0),
 #endif
       BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS), /* wrong arch */
