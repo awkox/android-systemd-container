@@ -56,7 +56,7 @@ char *resolve_path_arg(const char *path) {
     return strdup("");
 
   const char *p = path;
-  char *to_free = NULL;
+  _cleanup_free_ char *to_free = NULL;
 
   /* Handle ~/ expansion */
   if (p[0] == '~' && (p[1] == '/' || p[1] == '\0')) {
@@ -82,16 +82,13 @@ char *resolve_path_arg(const char *path) {
         len--;
       }
     }
-    free(to_free);
     return res;
   }
 
   /* Fast path: realpath handles .., symlinks, and validates existence. */
   char resolved[PATH_MAX];
-  if (realpath(p, resolved)) {
-    free(to_free);
+  if (realpath(p, resolved))
     return strdup(resolved);
-  }
 
   /* Path does not exist yet - build an absolute path from the current CWD.
    * Strip leading ./ noise before joining so the result stays clean. */
@@ -101,35 +98,23 @@ char *resolve_path_arg(const char *path) {
   if (!*suffix) {
     /* Input was pure "./" - resolve to CWD itself. */
     char cwd[PATH_MAX];
-    char *res = strdup(getcwd(cwd, sizeof(cwd)) ? cwd : ".");
-    free(to_free);
-    return res;
+    return strdup(getcwd(cwd, sizeof(cwd)) ? cwd : ".");
   }
 
   char cwd[PATH_MAX];
-  if (!getcwd(cwd, sizeof(cwd))) {
-    char *res = strdup(p);
-    free(to_free);
-    return res;
-  }
+  if (!getcwd(cwd, sizeof(cwd)))
+    return strdup(p);
 
   size_t clen = strlen(cwd), plen = strlen(suffix);
-  if (clen + 1 + plen >= PATH_MAX) {
-    char *res = strdup(p);
-    free(to_free);
-    return res;
-  }
+  if (clen + 1 + plen >= PATH_MAX)
+    return strdup(p);
 
   char *out = malloc(clen + 1 + plen + 1);
-  if (!out) {
-    char *res = strdup(p);
-    free(to_free);
-    return res;
-  }
+  if (!out)
+    return strdup(p);
   memcpy(out, cwd, clen);
   out[clen] = '/';
   memcpy(out + clen + 1, suffix, plen + 1); /* copies the NUL terminator */
-  free(to_free);
   return out;
 }
 
@@ -195,33 +180,23 @@ int is_ramfs(const char *path) {
 }
 
 int is_subpath(const char *parent, const char *child) {
-  char *real_parent = resolve_path_arg(parent);
-  char *real_child = resolve_path_arg(child);
+  _cleanup_free_ char *real_parent = resolve_path_arg(parent);
+  _cleanup_free_ char *real_child = resolve_path_arg(child);
 
-  if (!real_parent || !real_child || !real_parent[0] || !real_child[0]) {
-    free(real_parent);
-    free(real_child);
+  if (!real_parent || !real_child || !real_parent[0] || !real_child[0])
     return 0;
-  }
 
   size_t len = strlen(real_parent);
 
   /* Special case for the root directory */
-  if (len == 1 && real_parent[0] == '/') {
-    free(real_parent);
-    free(real_child);
+  if (len == 1 && real_parent[0] == '/')
     return 1;
-  }
 
-  int result = 0;
-  if (strncmp(real_parent, real_child, len) == 0) {
+  if (strncmp(real_parent, real_child, len) == 0)
     if (real_child[len] == '\0' || real_child[len] == '/')
-      result = 1;
-  }
+      return 1;
 
-  free(real_parent);
-  free(real_child);
-  return result;
+  return 0;
 }
 
 int mkdir_p(const char *path, mode_t mode) {
@@ -303,13 +278,14 @@ int remove_recursive(const char *path) {
  * ---------------------------------------------------------------------------*/
 
 int write_file(const char *path, const char *content) {
-  int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+  _cleanup_close_ int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
   if (fd < 0)
     return -1;
 
   size_t len = strlen(content);
   ssize_t w = write_all(fd, content, len);
   int close_ret = close(fd);
+  fd = -1;
 
   return (w == (ssize_t)len && close_ret == 0) ? 0 : -1;
 }
@@ -334,7 +310,7 @@ int read_file(const char *path, char *buf, size_t size) {
   if (size == 0)
     return -1;
 
-  int fd = open(path, O_RDONLY | O_CLOEXEC);
+  _cleanup_close_ int fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0)
     return -1;
 
@@ -344,8 +320,6 @@ int read_file(const char *path, char *buf, size_t size) {
          (r = read(fd, buf + total_read, size - 1 - (size_t)total_read)) > 0) {
     total_read += r;
   }
-
-  close(fd);
 
   if (r < 0)
     return -1;
@@ -372,10 +346,9 @@ int generate_uuid(char *buf, size_t size) {
   unsigned char raw[UUID_LEN / 2];
 
   /* Primary path: /dev/urandom */
-  int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+  _cleanup_close_ int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
   if (fd >= 0) {
     ssize_t r = read(fd, raw, sizeof(raw));
-    close(fd);
 
     if (r == (ssize_t)sizeof(raw)) {
       for (int i = 0; i < (int)sizeof(raw); i++)
@@ -420,7 +393,7 @@ int collect_pids(pid_t **pids_out, size_t *count_out) {
   *pids_out = NULL;
   *count_out = 0;
 
-  DIR *d = opendir("/proc");
+  _cleanup_closedir_ DIR *d = opendir("/proc");
   if (!d)
     return -1;
 
@@ -428,10 +401,8 @@ int collect_pids(pid_t **pids_out, size_t *count_out) {
   size_t count = 0;
 
   pid_t *pids = malloc(cap * sizeof(pid_t));
-  if (!pids) {
-    closedir(d);
+  if (!pids)
     return -1;
-  }
 
   struct dirent *ent;
   while ((ent = readdir(d)) != NULL) {
@@ -452,7 +423,6 @@ int collect_pids(pid_t **pids_out, size_t *count_out) {
       pid_t *tmp = realloc(pids, cap * sizeof(pid_t));
       if (!tmp) {
         free(pids);
-        closedir(d);
         return -1;
       }
       pids = tmp;
@@ -460,8 +430,6 @@ int collect_pids(pid_t **pids_out, size_t *count_out) {
 
     pids[count++] = (pid_t)val;
   }
-
-  closedir(d);
 
   *pids_out = pids;
   *count_out = count;
@@ -556,7 +524,7 @@ int read_proc_environ(pid_t pid, const char *key, char *value, size_t size) {
   char path[PATH_MAX];
   snprintf(path, sizeof(path), "/proc/%d/environ", pid);
 
-  FILE *f = fopen(path, "re");
+  _cleanup_fclose_ FILE *f = fopen(path, "re");
   if (!f)
     return -1;
 
@@ -600,7 +568,6 @@ int read_proc_environ(pid_t pid, const char *key, char *value, size_t size) {
       ;
   }
 
-  fclose(f);
   return found;
 }
 
@@ -788,11 +755,10 @@ static int internal_run(char *const argv[], int quiet) {
 
   if (pid == 0) {
     if (quiet) {
-      int devnull = open("/dev/null", O_RDWR);
+      _cleanup_close_ int devnull = open("/dev/null", O_RDWR);
       if (devnull >= 0) {
         dup2(devnull, 1);
         dup2(devnull, 2);
-        close(devnull);
       }
     }
     execvp(argv[0], argv);
@@ -879,16 +845,14 @@ static void write_to_log_file(const char *name, const char *component,
 
   rotate_log(log_path, 2 * 1024 * 1024);
 
-  FILE *f = fopen(log_path, "ae"); /* append + close-on-exec */
+  _cleanup_fclose_ FILE *f = fopen(log_path, "ae"); /* append + close-on-exec */
   if (!f)
     return;
 
   fprintf(f, "[%04d-%02d-%02d %02d:%02d:%02d.%03ld] [%s] %s\n",
           tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
           tm.tm_sec, ts.tv_nsec / 1000000, component, raw_msg);
-  fclose(f);
 }
-
 __attribute__((format(printf, 4, 5))) void log_internal(const char *prefix,
                                                         const char *color,
                                                         int is_err,
@@ -1038,35 +1002,32 @@ long get_container_uptime(pid_t pid) {
   char stat_path[PATH_MAX];
   snprintf(stat_path, sizeof(stat_path), "/proc/%d/stat", (int)pid);
 
-  FILE *f = fopen(stat_path, "r");
-  if (!f)
-    return -1;
-
   unsigned long long start_ticks = 0;
-  /* starttime is the 22nd field */
-  for (int i = 1; i <= 21; i++) {
-    if (fscanf(f, "%*s") == EOF)
-      break;
+  {
+    _cleanup_fclose_ FILE *f = fopen(stat_path, "r");
+    if (!f)
+      return -1;
+    /* starttime is the 22nd field */
+    for (int i = 1; i <= 21; i++) {
+      if (fscanf(f, "%*s") == EOF)
+        break;
+    }
+    if (fscanf(f, "%llu", &start_ticks) != 1)
+      start_ticks = 0;
   }
-  if (fscanf(f, "%llu", &start_ticks) != 1)
-    start_ticks = 0;
-  fclose(f);
-
   if (start_ticks == 0)
     return -1;
 
-  f = fopen("/proc/uptime", "r");
-  if (!f)
-    return -1;
-
-  double host_uptime_sec = 0.0;
-  if (fscanf(f, "%lf", &host_uptime_sec) != 1)
-    host_uptime_sec = 0.0;
-  fclose(f);
-
-  long uptime_sec =
-      (long)(host_uptime_sec - (double)start_ticks / (double)clk_tck);
-  return (uptime_sec < 0) ? 0 : uptime_sec;
+  {
+    _cleanup_fclose_ FILE *f = fopen("/proc/uptime", "r");
+    if (!f)
+      return -1;
+    double host_uptime_sec = 0.0;
+    if (fscanf(f, "%lf", &host_uptime_sec) != 1)
+      host_uptime_sec = 0.0;
+    long uptime_sec = (long)(host_uptime_sec - (double)start_ticks / (double)clk_tck);
+    return (uptime_sec < 0) ? 0 : uptime_sec;
+  }
 }
 
 void format_uptime(long uptime_sec, char *buf, size_t size) {
@@ -1130,9 +1091,8 @@ int show_container_usage(struct config *cfg) {
   long ram_used_kb = 0;
   long long cpu_t1 = 0;
   long long cpu_host_t1 = 0;
-  FILE *f = NULL;
 
-  DIR *proc_dir = opendir("/proc");
+  _cleanup_closedir_ DIR *proc_dir = opendir("/proc");
   if (!proc_dir) {
     log_error("Failed to open /proc: %s", strerror(errno));
     return -1;
@@ -1156,7 +1116,7 @@ int show_container_usage(struct config *cfg) {
     /* RAM: VmRSS from /proc/<pid>/status */
     char status_path[PATH_MAX];
     snprintf(status_path, sizeof(status_path), "/proc/%s/status", de->d_name);
-    FILE *sf = fopen(status_path, "r");
+    _cleanup_fclose_ FILE *sf = fopen(status_path, "r");
     if (sf) {
       char line[128];
       while (fgets(line, sizeof(line), sf)) {
@@ -1167,13 +1127,12 @@ int show_container_usage(struct config *cfg) {
           break;
         }
       }
-      fclose(sf);
     }
 
     /* CPU sample 1: utime+stime from /proc/<pid>/stat fields 14+15 */
     char pstat_path[PATH_MAX];
     snprintf(pstat_path, sizeof(pstat_path), "/proc/%s/stat", de->d_name);
-    FILE *pf = fopen(pstat_path, "r");
+    _cleanup_fclose_ FILE *pf = fopen(pstat_path, "r");
     if (pf) {
       long long utime = 0, stime = 0;
       for (int i = 1; i <= 13; i++)
@@ -1181,33 +1140,33 @@ int show_container_usage(struct config *cfg) {
           break;
       if (fscanf(pf, "%lld %lld", &utime, &stime) == 2)
         cpu_t1 += utime + stime;
-      fclose(pf);
     }
   }
-  closedir(proc_dir);
 
   /* host CPU total sample 1 */
-  f = fopen("/proc/stat", "r");
-  if (f) {
-    long long u, n, s, i, iow, irq, sirq;
-    if (fscanf(f, "cpu %lld %lld %lld %lld %lld %lld %lld", &u, &n, &s, &i,
-               &iow, &irq, &sirq) == 7)
-      cpu_host_t1 = u + n + s + i + iow + irq + sirq;
-    fclose(f);
+  {
+    _cleanup_fclose_ FILE *f = fopen("/proc/stat", "r");
+    if (f) {
+      long long u, n, s, i, iow, irq, sirq;
+      if (fscanf(f, "cpu %lld %lld %lld %lld %lld %lld %lld", &u, &n, &s, &i,
+                 &iow, &irq, &sirq) == 7)
+        cpu_host_t1 = u + n + s + i + iow + irq + sirq;
+    }
   }
 
   /* total device RAM from /proc/meminfo */
   long ram_total_kb = 0;
-  f = fopen("/proc/meminfo", "r");
-  if (f) {
-    char line[128];
-    while (fgets(line, sizeof(line), f)) {
-      if (strncmp(line, "MemTotal:", 9) == 0) {
-        sscanf(line + 9, "%ld", &ram_total_kb);
-        break;
+  {
+    _cleanup_fclose_ FILE *f = fopen("/proc/meminfo", "r");
+    if (f) {
+      char line[128];
+      while (fgets(line, sizeof(line), f)) {
+        if (strncmp(line, "MemTotal:", 9) == 0) {
+          sscanf(line + 9, "%ld", &ram_total_kb);
+          break;
+        }
       }
     }
-    fclose(f);
   }
 
   /* 250ms measurement window - short enough for a responsive UI,
@@ -1222,44 +1181,45 @@ int show_container_usage(struct config *cfg) {
   long long cpu_t2 = 0;
   long long cpu_host_t2 = 0;
 
-  proc_dir = opendir("/proc");
-  if (proc_dir) {
-    while ((de = readdir(proc_dir)) != NULL) {
-      if (de->d_name[0] < '1' || de->d_name[0] > '9')
-        continue;
-      char ns_path[PATH_MAX];
-      snprintf(ns_path, sizeof(ns_path), "/proc/%s/ns/pid", de->d_name);
-      char ns_buf[256] = {0};
-      ssize_t r = readlink(ns_path, ns_buf, sizeof(ns_buf) - 1);
-      if (r <= 0)
-        continue;
-      ns_buf[r] = '\0';
-      if (strcmp(ns_buf, container_ns) != 0)
-        continue;
+  {
+    _cleanup_closedir_ DIR *proc_dir2 = opendir("/proc");
+    if (proc_dir2) {
+      while ((de = readdir(proc_dir2)) != NULL) {
+        if (de->d_name[0] < '1' || de->d_name[0] > '9')
+          continue;
+        char ns_path[PATH_MAX];
+        snprintf(ns_path, sizeof(ns_path), "/proc/%s/ns/pid", de->d_name);
+        char ns_buf[256] = {0};
+        ssize_t r = readlink(ns_path, ns_buf, sizeof(ns_buf) - 1);
+        if (r <= 0)
+          continue;
+        ns_buf[r] = '\0';
+        if (strcmp(ns_buf, container_ns) != 0)
+          continue;
 
-      char pstat_path[PATH_MAX];
-      snprintf(pstat_path, sizeof(pstat_path), "/proc/%s/stat", de->d_name);
-      FILE *pf = fopen(pstat_path, "r");
-      if (pf) {
-        long long utime = 0, stime = 0;
-        for (int i = 1; i <= 13; i++)
-          if (fscanf(pf, "%*s") == EOF)
-            break;
-        if (fscanf(pf, "%lld %lld", &utime, &stime) == 2)
-          cpu_t2 += utime + stime;
-        fclose(pf);
+        char pstat_path[PATH_MAX];
+        snprintf(pstat_path, sizeof(pstat_path), "/proc/%s/stat", de->d_name);
+        _cleanup_fclose_ FILE *pf2 = fopen(pstat_path, "r");
+        if (pf2) {
+          long long utime = 0, stime = 0;
+          for (int i = 1; i <= 13; i++)
+            if (fscanf(pf2, "%*s") == EOF)
+              break;
+          if (fscanf(pf2, "%lld %lld", &utime, &stime) == 2)
+            cpu_t2 += utime + stime;
+        }
       }
     }
-    closedir(proc_dir);
   }
 
-  f = fopen("/proc/stat", "r");
-  if (f) {
-    long long u, n, s, i, iow, irq, sirq;
-    if (fscanf(f, "cpu %lld %lld %lld %lld %lld %lld %lld", &u, &n, &s, &i,
-               &iow, &irq, &sirq) == 7)
-      cpu_host_t2 = u + n + s + i + iow + irq + sirq;
-    fclose(f);
+  {
+    _cleanup_fclose_ FILE *f = fopen("/proc/stat", "r");
+    if (f) {
+      long long u, n, s, i, iow, irq, sirq;
+      if (fscanf(f, "cpu %lld %lld %lld %lld %lld %lld %lld", &u, &n, &s, &i,
+                 &iow, &irq, &sirq) == 7)
+        cpu_host_t2 = u + n + s + i + iow + irq + sirq;
+    }
   }
 
   long long delta_container = cpu_t2 - cpu_t1;
@@ -1440,7 +1400,7 @@ void format_size(long long bytes, char *buf, size_t sz) {
  * containers from the get_runtime_dir directory
  */
 int count_folders(const char *path) {
-  DIR *dir = opendir(path);
+  _cleanup_closedir_ DIR *dir = opendir(path);
   struct dirent *entry;
   struct stat st;
   char fullpath[PATH_MAX];
@@ -1466,7 +1426,6 @@ int count_folders(const char *path) {
       count++;
   }
 
-  closedir(dir);
   return count;
 }
 
@@ -1510,9 +1469,7 @@ int multi_stop(const char *raw_names) {
 
 /* Set oom_score_adj to -1000 (unkillable).  Best-effort, no error return. */
 void oom_protect(void) {
-  FILE *f = fopen("/proc/self/oom_score_adj", "w");
-  if (f) {
+  _cleanup_fclose_ FILE *f = fopen("/proc/self/oom_score_adj", "w");
+  if (f)
     fprintf(f, "-1000\n");
-    fclose(f);
-  }
 }

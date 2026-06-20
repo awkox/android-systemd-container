@@ -75,7 +75,7 @@ int is_container_running(struct config *cfg, pid_t *pid_out) {
 }
 
 int count_running_containers(char *first_name, size_t size) {
-  pid_t *pids = NULL;
+  _cleanup_free_ pid_t *pids = NULL;
   size_t pcount = 0;
   char path[PATH_MAX];
   int running = 0;
@@ -103,7 +103,6 @@ int count_running_containers(char *first_name, size_t size) {
     }
   }
 
-  free(pids);
   return running;
 }
 
@@ -118,7 +117,7 @@ pid_t find_container_init_pid(const char *uuid) {
   char marker[PATH_MAX];
   snprintf(marker, sizeof(marker), FORK_MARKER "/%s", uuid);
 
-  pid_t *pids = NULL;
+  _cleanup_free_ pid_t *pids = NULL;
   size_t count = 0;
   char path[PATH_MAX];
 
@@ -137,14 +136,12 @@ pid_t find_container_init_pid(const char *uuid) {
       if (access(path, F_OK) == 0) {
         if (is_valid_container_pid(pids[i])) {
           pid_t found = pids[i];
-          free(pids);
           return found;
         }
       }
     }
   }
 
-  free(pids);
   return 0;
 }
 
@@ -152,7 +149,7 @@ int collect_active_uuids(char uuids[][UUID_LEN + 1], int max_uuids) {
   if (!uuids || max_uuids <= 0)
     return 0;
 
-  pid_t *pids = NULL;
+  _cleanup_free_ pid_t *pids = NULL;
   size_t count = 0;
   char path[PATH_MAX];
   int found = 0;
@@ -166,7 +163,7 @@ int collect_active_uuids(char uuids[][UUID_LEN + 1], int max_uuids) {
     if (access(path, F_OK) != 0)
       continue;
 
-    DIR *d = opendir(path);
+    _cleanup_closedir_ DIR *d = opendir(path);
     if (!d)
       continue;
 
@@ -189,10 +186,8 @@ int collect_active_uuids(char uuids[][UUID_LEN + 1], int max_uuids) {
         found++;
       }
     }
-    closedir(d);
   }
 
-  free(pids);
   return found;
 }
 
@@ -201,10 +196,7 @@ int collect_active_uuids(char uuids[][UUID_LEN + 1], int max_uuids) {
  * ---------------------------------------------------------------------------*/
 
 int show_containers(struct config *cfg) {
-  struct container_info {
-    char name[128];
-    pid_t pid;
-  } *containers = NULL;
+  _cleanup_free_ struct container_info *containers = NULL;
 
   int count = 0;
   int cap = 32;
@@ -220,7 +212,7 @@ int show_containers(struct config *cfg) {
     return -1;
 
   /* Scan /proc for running containers */
-  pid_t *pids = NULL;
+  _cleanup_free_ pid_t *pids = NULL;
   size_t pcount = 0;
   char path[PATH_MAX];
 
@@ -246,16 +238,12 @@ int show_containers(struct config *cfg) {
 
       if (count >= cap) {
         if (cap > 8192) {
-          free(containers);
-          free(pids);
           return -1;
         }
         cap *= 2;
         struct container_info *tmp =
             realloc(containers, (size_t)cap * sizeof(struct container_info));
         if (!tmp) {
-          free(containers);
-          free(pids);
           return -1;
         }
         containers = tmp;
@@ -272,11 +260,9 @@ int show_containers(struct config *cfg) {
       count++;
     }
 
-    free(pids);
 
     if (count == 0) {
       printf("\n(No containers running)\n\n");
-      free(containers);
       return 0;
     }
 
@@ -328,14 +314,13 @@ int show_containers(struct config *cfg) {
     printf("\n(No containers running)\n\n");
   }
 
-  free(containers);
   return 0;
 }
 
 int is_container_init(pid_t pid) {
   char path[PATH_MAX];
   snprintf(path, sizeof(path), "/proc/%d/status", pid);
-  FILE *f = fopen(path, "re");
+  _cleanup_fclose_ FILE *f = fopen(path, "re");
   if (!f)
     return 0;
 
@@ -364,7 +349,6 @@ int is_container_init(pid_t pid) {
       break;
     }
   }
-  fclose(f);
 
   if (nspid_found)
     return is_init;
@@ -456,24 +440,23 @@ int metadata_sync(pid_t pid) {
     }
   }
 
-  free_config_binds(&recovery_cfg);
+  config_free(&recovery_cfg);
   return 0;
 }
 
 int scan_containers(void) {
   log_info("Scanning system for untracked " PROJECT_NAME " containers...");
 
-  pid_t *pids;
+  _cleanup_free_ pid_t *pids = NULL;
   size_t count;
   if (collect_pids(&pids, &count) < 0)
     return -1;
 
   /* 1. Tracked Mount Points (to detect orphaned mounts) */
   typedef char mount_path_t[PATH_MAX];
-  mount_path_t *tracked_mounts =
+  _cleanup_free_ mount_path_t *tracked_mounts =
       calloc(MAX_TRACKED_ENTRIES, sizeof(mount_path_t));
   if (!tracked_mounts) {
-    free(pids);
     return -1;
   }
   int tracked_mount_count = 0;
@@ -502,7 +485,7 @@ int scan_containers(void) {
     char cdir[PATH_MAX];
     snprintf(cdir, sizeof(cdir), "%s/%s", get_runtime_dir(),
              RUNTIME_CONFIG_SUBDIR);
-    DIR *cd = opendir(cdir);
+    _cleanup_closedir_ DIR *cd = opendir(cdir);
     if (cd) {
       struct dirent *ent;
       while ((ent = readdir(cd)) != NULL &&
@@ -519,16 +502,15 @@ int scan_containers(void) {
                          tmp_cfg.img_mount_point, PATH_MAX);
             tracked_mount_count++;
           }
-          free_config_binds(&tmp_cfg);
+          config_free(&tmp_cfg);
         }
       }
-      closedir(cd);
     }
   }
 
   /* 4. Scan for orphaned loop mounts in /tmp/ds-fork/mnt */
   int orphaned_found = 0;
-  DIR *md = opendir(IMG_MOUNT_ROOT);
+  _cleanup_closedir_ DIR *md = opendir(IMG_MOUNT_ROOT);
   if (md) {
     struct dirent *ent;
     while ((ent = readdir(md)) != NULL) {
@@ -556,11 +538,7 @@ int scan_containers(void) {
         rmdir(mpath);
       }
     }
-    closedir(md);
   }
-
-  free(pids);
-  free(tracked_mounts);
 
   if (recovered_found == 0 && orphaned_found == 0)
     log_info("No untracked resources found.");

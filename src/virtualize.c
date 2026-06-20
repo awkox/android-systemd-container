@@ -19,24 +19,20 @@
  * not just the final component (O_NOFOLLOW alone is insufficient). */
 static int write_inplace(pid_t pid, const char *subpath, const char *buf,
                          size_t len) {
-  int fd = safe_openat_proc(pid, subpath, O_WRONLY, 0);
+  _cleanup_close_ int fd = safe_openat_proc(pid, subpath, O_WRONLY, 0);
   if (fd < 0)
     return -1;
 
   /* Security check: must be a regular file */
   struct stat st;
-  if (fstat(fd, &st) < 0 || !S_ISREG(st.st_mode)) {
-    close(fd);
+  if (fstat(fd, &st) < 0 || !S_ISREG(st.st_mode))
     return -1;
-  }
 
   /* Security check: must be on tmpfs (the container's /run/ds-fork/vproc)
    */
   struct statfs sfs;
-  if (fstatfs(fd, &sfs) < 0 || sfs.f_type != TMPFS_MAGIC) {
-    close(fd);
+  if (fstatfs(fd, &sfs) < 0 || sfs.f_type != TMPFS_MAGIC)
     return -1;
-  }
 
   ssize_t w = write_all(fd, buf, len);
   if (w == (ssize_t)len) {
@@ -46,7 +42,6 @@ static int write_inplace(pid_t pid, const char *subpath, const char *buf,
       /* ignore */
     }
   }
-  close(fd);
   return (w == (ssize_t)len) ? 0 : -1;
 }
 
@@ -94,7 +89,7 @@ static char *gen_meminfo(struct config *cfg, size_t *out_len) {
   if (mem_used < 0)
     mem_used = 0;
 
-  FILE *f = fopen("/proc/meminfo", "r");
+  _cleanup_fclose_ FILE *f = fopen("/proc/meminfo", "r");
   if (!f)
     return NULL;
 
@@ -132,10 +127,8 @@ static char *gen_meminfo(struct config *cfg, size_t *out_len) {
 
   size_t cap = 16384;
   char *buf = malloc(cap);
-  if (!buf) {
-    fclose(f);
+  if (!buf)
     return NULL;
-  }
   size_t off = 0;
 
   while (fgets(line, sizeof(line), f)) {
@@ -144,7 +137,6 @@ static char *gen_meminfo(struct config *cfg, size_t *out_len) {
       char *nb = realloc(buf, cap);
       if (!nb) {
         free(buf);
-        fclose(f);
         return NULL;
       }
       buf = nb;
@@ -202,7 +194,6 @@ static char *gen_meminfo(struct config *cfg, size_t *out_len) {
       off += len;
     }
   }
-  fclose(f);
   buf[off] = '\0';
   *out_len = off;
   return buf;
@@ -211,16 +202,14 @@ static char *gen_meminfo(struct config *cfg, size_t *out_len) {
 /* /proc/cpuinfo - truncated to container_cpus() entries */
 static char *gen_cpuinfo(struct config *cfg, size_t *out_len) {
   int max_cpus = container_cpus(cfg);
-  FILE *f = fopen("/proc/cpuinfo", "r");
+  _cleanup_fclose_ FILE *f = fopen("/proc/cpuinfo", "r");
   if (!f)
     return NULL;
 
   size_t cap = 65536;
   char *buf = malloc(cap);
-  if (!buf) {
-    fclose(f);
+  if (!buf)
     return NULL;
-  }
   size_t off = 0;
   int cur_cpu = -1;
   char line[4096];
@@ -237,7 +226,6 @@ static char *gen_cpuinfo(struct config *cfg, size_t *out_len) {
       char *nb = realloc(buf, cap);
       if (!nb) {
         free(buf);
-        fclose(f);
         return NULL;
       }
       buf = nb;
@@ -245,7 +233,6 @@ static char *gen_cpuinfo(struct config *cfg, size_t *out_len) {
     memcpy(buf + off, line, len);
     off += len;
   }
-  fclose(f);
   buf[off] = '\0';
   *out_len = off;
   return buf;
@@ -254,16 +241,14 @@ static char *gen_cpuinfo(struct config *cfg, size_t *out_len) {
 /* /proc/stat - recomputed aggregate + only max_cpus cpuN lines */
 static char *gen_stat(struct config *cfg, size_t *out_len) {
   int max_cpus = container_cpus(cfg);
-  FILE *f = fopen("/proc/stat", "r");
+  _cleanup_fclose_ FILE *f = fopen("/proc/stat", "r");
   if (!f)
     return NULL;
 
   size_t cap = 65536;
   char *buf = malloc(cap);
-  if (!buf) {
-    fclose(f);
+  if (!buf)
     return NULL;
-  }
   size_t off = 0;
   char line[2048];
 
@@ -299,7 +284,6 @@ static char *gen_stat(struct config *cfg, size_t *out_len) {
       char *nb = realloc(buf, cap);
       if (!nb) {
         free(buf);
-        fclose(f);
         return NULL;
       }
       buf = nb;
@@ -323,7 +307,6 @@ static char *gen_stat(struct config *cfg, size_t *out_len) {
     memcpy(buf + off, line, len);
     off += len;
   }
-  fclose(f);
   buf[off] = '\0';
   *out_len = off;
   return buf;
@@ -354,7 +337,7 @@ static double cg_cpu_busy_secs(const char *container_name) {
 static double container_start_time_secs(pid_t pid) {
   char path[64];
   snprintf(path, sizeof(path), "/proc/%d/stat", (int)pid);
-  FILE *f = fopen(path, "r");
+  _cleanup_fclose_ FILE *f = fopen(path, "r");
   if (!f)
     return -1.0;
   unsigned long long starttime = 0;
@@ -364,7 +347,6 @@ static double container_start_time_secs(pid_t pid) {
                  "%*u %*u %*u %*u %*u %*u %*d %*d "     /* 10-17 */
                  "%*d %*d %*d %*d %llu",                /* 18-22 */
                  &starttime);
-  fclose(f);
   if (r != 1 || starttime == 0)
     return -1.0;
   long ticks = sysconf(_SC_CLK_TCK);
@@ -409,16 +391,13 @@ static char *gen_uptime(struct config *cfg, size_t *out_len) {
 
 /* /proc/loadavg - CPU-ratio scaled */
 static char *gen_loadavg(struct config *cfg, size_t *out_len) {
-  FILE *f = fopen("/proc/loadavg", "r");
+  _cleanup_fclose_ FILE *f = fopen("/proc/loadavg", "r");
   if (!f)
     return NULL;
   double l1, l5, l15;
   int run, tot;
-  if (fscanf(f, "%lf %lf %lf %d/%d %*d", &l1, &l5, &l15, &run, &tot) != 5) {
-    fclose(f);
+  if (fscanf(f, "%lf %lf %lf %d/%d %*d", &l1, &l5, &l15, &run, &tot) != 5)
     return NULL;
-  }
-  fclose(f);
 
   int hcpus = (int)sysconf(_SC_NPROCESSORS_ONLN);
   int ccpus = container_cpus(cfg);

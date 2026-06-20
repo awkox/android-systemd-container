@@ -17,7 +17,7 @@
 /* Scan mountinfo for any host cgroup2 mount (e.g. /dev/cg2_bpf on Android).
  * Returns 1 and fills 'buf' if found. */
 static int find_host_cgroup2_mount(char *buf, size_t size) {
-  FILE *f = fopen("/proc/self/mountinfo", "re");
+  _cleanup_fclose_ FILE *f = fopen("/proc/self/mountinfo", "re");
   if (!f)
     return 0;
 
@@ -57,7 +57,6 @@ static int find_host_cgroup2_mount(char *buf, size_t size) {
     found = 1;
     break;
   }
-  fclose(f);
   return found;
 }
 
@@ -136,14 +135,13 @@ void cgroup_host_bootstrap(int force_cgroupv1) {
  * get symlinks for their secondary names, matching historical behaviour.
  */
 static void mount_v1_controllers(void) {
-  FILE *f = fopen("/proc/cgroups", "re");
+  _cleanup_fclose_ FILE *f = fopen("/proc/cgroups", "re");
   if (!f)
     return;
 
   unsigned long flags = MS_NOSUID | MS_NODEV | MS_NOEXEC;
   char line[256];
   if (!fgets(line, sizeof(line), f)) { /* skip header */
-    fclose(f);
     return;
   }
 
@@ -173,7 +171,6 @@ static void mount_v1_controllers(void) {
       log_info("[CGROUP] v1 mounted: %s", name);
     }
   }
-  fclose(f);
 }
 
 int setup_cgroups(int force_cgroupv1) {
@@ -259,7 +256,7 @@ int setup_cgroups(int force_cgroupv1) {
  *   2. Retry loop: for older kernels without cgroup.kill, retry rmdir
  *      with short sleeps to let the async cleanup complete. */
 static void rmdir_cgroup_tree(const char *path) {
-  DIR *d = opendir(path);
+  _cleanup_closedir_ DIR *d = opendir(path);
   if (!d) {
     rmdir(path);
     return;
@@ -279,6 +276,7 @@ static void rmdir_cgroup_tree(const char *path) {
     rmdir_cgroup_tree(child);
   }
   closedir(d);
+  d = NULL;
 
   /* 1. cgroup.kill - available on kernel 5.14+.
    *    Writing "1" sends SIGKILL to every process in the subtree
@@ -287,11 +285,10 @@ static void rmdir_cgroup_tree(const char *path) {
   safe_strncpy(kill_path, path, sizeof(kill_path));
   strncat(kill_path, "/cgroup.kill", sizeof(kill_path) - strlen(kill_path) - 1);
   if (access(kill_path, W_OK) == 0) {
-    int kfd = open(kill_path, O_WRONLY | O_CLOEXEC);
+    _cleanup_close_ int kfd = open(kill_path, O_WRONLY | O_CLOEXEC);
     if (kfd >= 0) {
       if (write(kfd, "1", 1) < 0) {
       }
-      close(kfd);
     }
   }
 
@@ -328,7 +325,7 @@ void cgroup_cleanup_container(const char *container_name) {
   char safe_name[256];
   sanitize_container_name(container_name, safe_name, sizeof(safe_name));
 
-  DIR *d = opendir("/sys/fs/cgroup");
+  _cleanup_closedir_ DIR *d = opendir("/sys/fs/cgroup");
   if (!d)
     return;
 
@@ -352,7 +349,6 @@ void cgroup_cleanup_container(const char *container_name) {
     if (strcmp(de->d_name, "cgroup.procs") == 0)
       break;
   }
-  closedir(d);
 }
 
 static int host_supports_v2_cached = -1;

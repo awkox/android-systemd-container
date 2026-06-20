@@ -229,7 +229,7 @@ int internal_boot(struct config *cfg) {
      * everything in /sys and 'pin' subdirectories as independent RW mounts.
      * This ensures 100% hardware visibility (devices, bus, class, block, etc)
      * even after we remount the top-level /sys as RO for systemd's benefit. */
-    DIR *d = opendir("sys");
+    _cleanup_closedir_ DIR *d = opendir("sys");
     if (d) {
       struct dirent *de;
       while ((de = readdir(d)) != NULL) {
@@ -246,7 +246,6 @@ int internal_boot(struct config *cfg) {
           }
         }
       }
-      closedir(d);
     }
   } else if (!cfg->hw_access) {
     /* Hardware isolation: network only mixed mode */

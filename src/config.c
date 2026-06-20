@@ -113,8 +113,8 @@ static void parse_bind_mounts(const char *value, struct config *cfg) {
       }
       const char *dest_raw = trim_whitespace(rest);
 
-      char *src_exp = resolve_path_arg(src_raw);
-      char *dest_exp = resolve_path_arg(dest_raw);
+      _cleanup_free_ char *src_exp = resolve_path_arg(src_raw);
+      _cleanup_free_ char *dest_exp = resolve_path_arg(dest_raw);
       const char *src = src_exp ? src_exp : src_raw;
       const char *dest = dest_exp ? dest_exp : dest_raw;
 
@@ -124,8 +124,6 @@ static void parse_bind_mounts(const char *value, struct config *cfg) {
       } else {
         config_add_bind(cfg, src, dest, ro);
       }
-      free(src_exp);
-      free(dest_exp);
     }
     token = strtok_r(NULL, ",", &saveptr);
   }
@@ -211,7 +209,7 @@ void free_config_binds(struct config *cfg) {
  * ---------------------------------------------------------------------------*/
 
 int config_load(const char *config_path, struct config *cfg) {
-  FILE *f = fopen(config_path, "re");
+  _cleanup_fclose_ FILE *f = fopen(config_path, "re");
   if (!f) {
     if (errno == ENOENT) {
       cfg->config_file_existed = 0;
@@ -309,8 +307,7 @@ int config_load(const char *config_path, struct config *cfg) {
       add_unknown_line(cfg, line);
     }
   }
-
-  fclose(f);
+  
   return 0;
 }
 
@@ -353,9 +350,8 @@ static void config_serialize_known(FILE *f, struct config *cfg) {
     fprintf(f, "name=%s\n", cfg->container_name);
 
   if (cfg->rootfs_img_path[0]) {
-    char *abs_path = resolve_path_arg(cfg->rootfs_img_path);
+    _cleanup_free_ char *abs_path = resolve_path_arg(cfg->rootfs_img_path);
     fprintf(f, "rootfs_path=%s\n", abs_path ? abs_path : cfg->rootfs_img_path);
-    free(abs_path);
   }
 
   if (cfg->img_mount_point[0])
@@ -411,22 +407,19 @@ static void config_serialize_known(FILE *f, struct config *cfg) {
     fprintf(f, "uuid=%s\n", cfg->uuid);
 
   if (cfg->custom_init[0]) {
-    char *abs_path = resolve_path_arg(cfg->custom_init);
+    _cleanup_free_ char *abs_path = resolve_path_arg(cfg->custom_init);
     fprintf(f, "custom_init=%s\n", abs_path ? abs_path : cfg->custom_init);
-    free(abs_path);
   }
 
   if (cfg->bind_count > 0) {
     fprintf(f, "bind_mounts=");
     for (int i = 0; i < cfg->bind_count; i++) {
-      char *abs_src = resolve_path_arg(cfg->binds[i].src);
-      char *abs_dest = resolve_path_arg(cfg->binds[i].dest);
+      _cleanup_free_ char *abs_src = resolve_path_arg(cfg->binds[i].src);
+      _cleanup_free_ char *abs_dest = resolve_path_arg(cfg->binds[i].dest);
       fprintf(f, "%s:%s%s%s", abs_src ? abs_src : cfg->binds[i].src,
               abs_dest ? abs_dest : cfg->binds[i].dest,
               cfg->binds[i].ro ? ":ro" : "",
               (i < cfg->bind_count - 1) ? "," : "");
-      free(abs_src);
-      free(abs_dest);
     }
     fprintf(f, "\n");
   }
@@ -445,29 +438,21 @@ int config_save(const char *config_path, struct config *cfg) {
     if (config_load(config_path, &disk_cfg) == 0) {
       sort_bind_mounts(&disk_cfg);
 
-      char *buf_cfg = NULL;
+      _cleanup_free_ char *buf_cfg = NULL;
       size_t size_cfg = 0;
-      char *buf_disk = NULL;
+      _cleanup_free_ char *buf_disk = NULL;
       size_t size_disk = 0;
-      FILE *f_cfg = open_memstream(&buf_cfg, &size_cfg);
-      FILE *f_disk = open_memstream(&buf_disk, &size_disk);
+      _cleanup_fclose_ FILE *f_cfg = open_memstream(&buf_cfg, &size_cfg);
+      _cleanup_fclose_ FILE *f_disk = open_memstream(&buf_disk, &size_disk);
 
       if (f_cfg && f_disk) {
         config_serialize_known(f_cfg, cfg);
         config_serialize_known(f_disk, &disk_cfg);
-        fclose(f_cfg);
-        fclose(f_disk);
         if (size_cfg == size_disk && memcmp(buf_cfg, buf_disk, size_cfg) == 0) {
           is_equal = 1;
         }
       } else {
-        if (f_cfg)
-          fclose(f_cfg);
-        if (f_disk)
-          fclose(f_disk);
       }
-      free(buf_cfg);
-      free(buf_disk);
       free_config_binds(&disk_cfg);
       free_config_unknown_lines(&disk_cfg);
 
@@ -484,7 +469,7 @@ int config_save(const char *config_path, struct config *cfg) {
   snprintf(temp_path, sizeof(temp_path), "%s.tmp", config_path);
 
   /* Step 2: Write all configurations to temporary file */
-  FILE *f_out = fopen(temp_path, "we");
+  _cleanup_fclose_ FILE *f_out = fopen(temp_path, "we");
   if (!f_out)
     return -1;
 
@@ -498,8 +483,6 @@ int config_save(const char *config_path, struct config *cfg) {
       node = node->next;
     }
   }
-
-  fclose(f_out);
 
   /* Step 4: Atomic rename commit */
   if (rename(temp_path, config_path) < 0) {

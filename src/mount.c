@@ -165,21 +165,18 @@ static void block_read_path(const char *path) {
 }
 
 int bind_mount(const char *src, const char *tgt) {
-  int src_fd = open(src, O_PATH | O_NOFOLLOW | O_CLOEXEC);
+  _cleanup_close_ int src_fd = open(src, O_PATH | O_NOFOLLOW | O_CLOEXEC);
   if (src_fd < 0) {
     /* If it failed because of ELOOP, it's a symlink we should reject anyway */
     return -1;
   }
 
   struct stat st_src;
-  if (fstat(src_fd, &st_src) < 0) {
-    close(src_fd);
+  if (fstat(src_fd, &st_src) < 0)
     return -1;
-  }
 
   /* Reject symlinks explicitly */
   if (S_ISLNK(st_src.st_mode)) {
-    close(src_fd);
     errno = ELOOP;
     return -1;
   }
@@ -190,7 +187,6 @@ int bind_mount(const char *src, const char *tgt) {
      * (lstat only protects the final component from being followed). */
     if (path_has_symlink(tgt)) {
       log_error("Security Violation: symlink in bind target path %s", tgt);
-      close(src_fd);
       errno = ELOOP;
       return -1;
     }
@@ -204,7 +200,6 @@ int bind_mount(const char *src, const char *tgt) {
     }
   } else if (S_ISLNK(st_tgt.st_mode)) {
     log_error("Security Violation: Bind target %s is a symlink!", tgt);
-    close(src_fd);
     errno = ELOOP;
     return -1;
   }
@@ -212,9 +207,7 @@ int bind_mount(const char *src, const char *tgt) {
   char proc_path[64];
   snprintf(proc_path, sizeof(proc_path), "/proc/self/fd/%d", src_fd);
 
-  int res = domount(proc_path, tgt, NULL, MS_BIND | MS_REC, NULL);
-  close(src_fd);
-  return res;
+  return domount(proc_path, tgt, NULL, MS_BIND | MS_REC, NULL);
 }
 
 /*
@@ -285,7 +278,7 @@ int apply_jail_mask(int hw_access, int privileged_mask) {
    * Self-bind + RO remount makes them unwritable while leaving the rest of
    * the cgroup hierarchy fully functional. */
   {
-    DIR *cgdir = opendir("/sys/fs/cgroup");
+    _cleanup_closedir_ DIR *cgdir = opendir("/sys/fs/cgroup");
     if (cgdir) {
       struct dirent *de;
       while ((de = readdir(cgdir)) != NULL) {
@@ -296,7 +289,6 @@ int apply_jail_mask(int hw_access, int privileged_mask) {
                  "/sys/fs/cgroup/%s/release_agent", de->d_name);
         mask_path(agent_path);
       }
-      closedir(cgdir);
     }
   }
 
@@ -381,7 +373,7 @@ static void prune_host_devices(const char *dev_path, int privileged_mask) {
     log_info("[SEC] --privileged=unfiltered-dev: skipping hardware blocklist.");
     return;
   }
-  DIR *dir = opendir(dev_path);
+  _cleanup_closedir_ DIR *dir = opendir(dev_path);
   if (!dir)
     return;
 
@@ -407,7 +399,7 @@ static void prune_host_devices(const char *dev_path, int privileged_mask) {
     /* Subdirectory scanning for Tiers 1 and 2 (caps) */
     if (strcmp(name, "dri") == 0 || strcmp(name, "nvidia-caps") == 0) {
       snprintf(path, sizeof(path), "%.3800s/%s", dev_path, name);
-      DIR *subdir = opendir(path);
+      _cleanup_closedir_ DIR *subdir = opendir(path);
       if (subdir) {
         struct dirent *subentry;
         while ((subentry = readdir(subdir)) != NULL) {
@@ -424,13 +416,12 @@ static void prune_host_devices(const char *dev_path, int privileged_mask) {
             unlink(subpath);
           }
         }
-        closedir(subdir);
 
         /* Special case: Handle /dev/dri/by-path symlinks */
         if (strcmp(name, "dri") == 0) {
           char bp_path[PATH_MAX];
           snprintf(bp_path, sizeof(bp_path), "%.3800s/by-path", path);
-          DIR *bp_dir = opendir(bp_path);
+          _cleanup_closedir_ DIR *bp_dir = opendir(bp_path);
           if (bp_dir) {
             while ((subentry = readdir(bp_dir)) != NULL) {
               if (strstr(subentry->d_name, "-card")) {
@@ -440,14 +431,11 @@ static void prune_host_devices(const char *dev_path, int privileged_mask) {
                 unlink(bppath);
               }
             }
-            closedir(bp_dir);
           }
         }
       }
     }
   }
-
-  closedir(dir);
 }
 
 /* ---------------------------------------------------------------------------
@@ -751,7 +739,7 @@ int setup_volatile_overlay(struct config *cfg) {
  * Returns 1 if mounted, 0 if not.
  */
 static int is_mount_in_namespace(const char *path) {
-  FILE *f = fopen("/proc/self/mountinfo", "r");
+  _cleanup_fclose_ FILE *f = fopen("/proc/self/mountinfo", "r");
   if (!f)
     return 0;
 
@@ -774,11 +762,9 @@ static int is_mount_in_namespace(const char *path) {
     /* p now points at the mount_point field */
     if (strncmp(p, path, path_len) == 0 &&
         (p[path_len] == ' ' || p[path_len] == '\n' || p[path_len] == '\0')) {
-      fclose(f);
       return 1;
     }
   }
-  fclose(f);
   return 0;
 }
 
@@ -885,7 +871,7 @@ int setup_custom_binds(struct config *cfg, const char *rootfs) {
 
 /* Probe superblock magic bytes to identify the filesystem type. */
 static const char *detect_fs_type(const char *img_path) {
-  int fd = open(img_path, O_RDONLY | O_CLOEXEC);
+  _cleanup_close_ int fd = open(img_path, O_RDONLY | O_CLOEXEC);
   if (fd < 0)
     return NULL;
 
@@ -910,7 +896,6 @@ static const char *detect_fs_type(const char *img_path) {
   }
 
 out:
-  close(fd);
   return result;
 }
 
@@ -960,14 +945,13 @@ static int open_loop_dev(long devnr, char *path_out, size_t path_size) {
  */
 static int loop_attach(const char *img_path, char *loop_path_out,
                        size_t path_size) {
-  int ctl_fd = open("/dev/loop-control", O_RDWR | O_CLOEXEC);
+  _cleanup_close_ int ctl_fd = open("/dev/loop-control", O_RDWR | O_CLOEXEC);
   if (ctl_fd < 0) {
     log_error("open /dev/loop-control: %s", strerror(errno));
     return -1;
   }
 
   long devnr = ioctl(ctl_fd, LOOP_CTL_GET_FREE);
-  close(ctl_fd);
   if (devnr < 0) {
     log_error("LOOP_CTL_GET_FREE: %s", strerror(errno));
     return -1;
@@ -979,7 +963,7 @@ static int loop_attach(const char *img_path, char *loop_path_out,
     return -1;
   }
 
-  int img_fd = open(img_path, O_RDWR | O_CLOEXEC);
+  _cleanup_close_ int img_fd = open(img_path, O_RDWR | O_CLOEXEC);
   if (img_fd < 0) {
     log_error("open image %s: %s", img_path, strerror(errno));
     close(loop_fd);
@@ -988,11 +972,9 @@ static int loop_attach(const char *img_path, char *loop_path_out,
 
   if (ioctl(loop_fd, LOOP_SET_FD, img_fd) < 0) {
     log_error("LOOP_SET_FD: %s", strerror(errno));
-    close(img_fd);
     close(loop_fd);
     return -1;
   }
-  close(img_fd); /* kernel holds a ref; we're done with this fd */
 
   struct loop_info64 li;
   memset(&li, 0, sizeof(li));
@@ -1011,17 +993,16 @@ static int loop_attach(const char *img_path, char *loop_path_out,
 static void loop_detach(const char *loop_dev) {
   if (!loop_dev || !loop_dev[0])
     return;
-  int fd = open(loop_dev, O_RDONLY | O_CLOEXEC);
+  _cleanup_close_ int fd = open(loop_dev, O_RDONLY | O_CLOEXEC);
   if (fd < 0)
     return;
   ioctl(fd, LOOP_CLR_FD, 0);
-  close(fd);
 }
 
 /* Find the block device (loop node) backing a given mount point via
  * /proc/mounts. */
 static int get_backing_dev(const char *mnt, char *dev_out, size_t dev_size) {
-  FILE *f = fopen("/proc/mounts", "r");
+  _cleanup_fclose_ FILE *f = fopen("/proc/mounts", "r");
   if (!f)
     return -1;
 
@@ -1036,7 +1017,6 @@ static int get_backing_dev(const char *mnt, char *dev_out, size_t dev_size) {
       break;
     }
   }
-  fclose(f);
   return found ? 0 : -1;
 }
 
@@ -1084,7 +1064,7 @@ int mount_rootfs_img(const char *img_path, char *mount_point, size_t mp_size,
     struct stat st;
     int is_blk = (stat(img_path, &st) == 0 && S_ISBLK(st.st_mode));
     char final_src[PATH_MAX];
-    int loop_fd = -1;
+    _cleanup_close_ int loop_fd = -1;
 
     if (is_blk) {
       safe_strncpy(final_src, img_path, sizeof(final_src));
@@ -1095,8 +1075,7 @@ int mount_rootfs_img(const char *img_path, char *mount_point, size_t mp_size,
     }
 
     int ret = mount(final_src, mount_point, fstype, mnt_flags, mnt_data);
-    if (loop_fd >= 0)
-      close(loop_fd); /* AUTOCLEAR handles cleanup if mount failed */
+    /* AUTOCLEAR handles cleanup if mount failed */
 
     if (ret == 0) {
       /* Android FIX: Some kernels enforce nosuid/nodev on all loop mounts

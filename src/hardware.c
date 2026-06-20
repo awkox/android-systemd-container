@@ -461,7 +461,7 @@ static void mirror_gpu_node(const char *host_path, const char *dev_path) {
  */
 static void do_mirror_gpu_dir(const char *host_dir, const char *prefix,
                               const char *dev_path) {
-  DIR *dir = opendir(host_dir);
+  _cleanup_closedir_ DIR *dir = opendir(host_dir);
   if (!dir)
     return;
 
@@ -477,8 +477,6 @@ static void do_mirror_gpu_dir(const char *host_dir, const char *prefix,
     snprintf(full_path, sizeof(full_path), "%s/%s", host_dir, entry->d_name);
     mirror_gpu_node(full_path, dev_path);
   }
-
-  closedir(dir);
 }
 
 /*

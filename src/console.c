@@ -12,7 +12,7 @@
  * ---------------------------------------------------------------------------*/
 
 int console_monitor_loop(int master_fd, pid_t monitor_pid, struct config *cfg) {
-  int epfd, sfd;
+  _cleanup_close_ int epfd = -1, sfd = -1;
   sigset_t mask;
   struct signalfd_siginfo fdsi;
   struct epoll_event ev, events[10];
@@ -46,10 +46,8 @@ int console_monitor_loop(int master_fd, pid_t monitor_pid, struct config *cfg) {
 
   /* Setup epoll */
   epfd = epoll_create1(EPOLL_CLOEXEC);
-  if (epfd < 0) {
-    close(sfd);
+  if (epfd < 0)
     return -1;
-  }
 
   /* 1. Watch user stdin */
   ev.events = EPOLLIN;
@@ -211,7 +209,5 @@ int console_monitor_loop(int master_fd, pid_t monitor_pid, struct config *cfg) {
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &oldtios);
   }
 
-  close(epfd);
-  close(sfd);
   return ret;
 }

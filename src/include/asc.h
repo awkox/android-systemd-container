@@ -119,6 +119,42 @@
 #define C_BOLD "\033[1m"
 
 /* ---------------------------------------------------------------------------
+ * Cleanup attribute helpers (RAII-style automatic resource management)
+ *
+ * Usage:
+ *   _cleanup_free_ char *buf = malloc(1024);    // auto-free on scope exit
+ *   _cleanup_fclose_ FILE *f = fopen(...);      // auto-fclose on scope exit
+ *   _cleanup_close_ int fd = open(...);          // auto-close on scope exit
+ *   _cleanup_closedir_ DIR *d = opendir(...);    // auto-closedir on scope exit
+ * ---------------------------------------------------------------------------*/
+#define _cleanup_(x) __attribute__((cleanup(x)))
+
+__attribute__((unused)) static inline void _cfree_(void *p) {
+  void **pp = (void **)p;
+  if (*pp) {
+    free(*pp);
+    *pp = NULL;
+  }
+}
+
+__attribute__((unused)) static inline void _cfclose_(FILE **f) {
+  if (*f) fclose(*f);
+}
+
+__attribute__((unused)) static inline void _cclose_(int *fd) {
+  if (*fd >= 0) close(*fd);
+}
+
+__attribute__((unused)) static inline void _cclosedir_(DIR **d) {
+  if (*d) closedir(*d);
+}
+
+#define _cleanup_free_ _cleanup_(_cfree_)
+#define _cleanup_fclose_ _cleanup_(_cfclose_)
+#define _cleanup_close_ _cleanup_(_cclose_)
+#define _cleanup_closedir_ _cleanup_(_cclosedir_)
+
+/* ---------------------------------------------------------------------------
  * Logging macros & Centralized Engine
  * ---------------------------------------------------------------------------*/
 
@@ -162,6 +198,11 @@ struct tty_info {
   int master;          /* master fd (stays in parent/monitor) */
   int slave;           /* slave fd (bind-mounted into container) */
   char name[PATH_MAX]; /* slave device path (e.g. /dev/pts/3) */
+};
+
+struct container_info {
+  char name[128];
+  pid_t pid;
 };
 
 /* Container configuration - replaces all global variables */

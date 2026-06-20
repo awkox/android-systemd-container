@@ -321,7 +321,7 @@ static void handle_session(int conn, req_t *r) {
     }
   }
 
-  char **av = make_exec_argv(r);
+  _cleanup_free_ char **av = make_exec_argv(r);
   if (!av) {
     if (is_pty) {
       close(master);
@@ -338,7 +338,6 @@ static void handle_session(int conn, req_t *r) {
 
   pid_t child = fork();
   if (child < 0) {
-    free(av);
     if (is_pty) {
       close(master);
       close(slave);
@@ -388,8 +387,6 @@ static void handle_session(int conn, req_t *r) {
     signal(SIGCHLD, SIG_DFL);
     reexec(av);
   }
-
-  free(av);
 
   int epfd = epoll_create1(EPOLL_CLOEXEC);
   if (epfd < 0) {
@@ -463,7 +460,7 @@ static void handle_session(int conn, req_t *r) {
    * Prevents blocking the event loop when the PTY kernel buffer is full
    * (e.g. large paste). Excess bytes are queued here and flushed via
    * EPOLLOUT on master. */
-  uint8_t *pty_wbuf = NULL;
+  _cleanup_free_ uint8_t *pty_wbuf = NULL;
   size_t pty_wbuf_len = 0;
   size_t pty_wbuf_cap = 0;
   int conn_suspended = 0; /* 1 = conn EPOLLIN removed (wbuf high-water) */
@@ -688,7 +685,6 @@ static void handle_session(int conn, req_t *r) {
   }
 
 session_end:
-  free(pty_wbuf);
   if (sfd >= 0) {
     epoll_ctl(epfd, EPOLL_CTL_DEL, sfd, NULL);
     close(sfd);
@@ -859,7 +855,7 @@ int daemon_run(int foreground) {
   /* SIGUSR2: app sends this after a live binary swap as an acknowledgment */
   signal(SIGUSR2, sigusr2_handler);
 
-  int srv = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  _cleanup_close_ int srv = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (srv < 0) {
     log_error("daemon: socket: %s", strerror(errno));
     return 1;
@@ -872,13 +868,11 @@ int daemon_run(int foreground) {
     if (errno == EADDRINUSE) {
       log_info("Is another " PROJECT_NAME " daemon stuck? Check 'ps' to see.");
     }
-    close(srv);
     return 1;
   }
 
   if (listen(srv, BACKLOG) < 0) {
     log_error("daemon: listen: %s", strerror(errno));
-    close(srv);
     return 1;
   }
 
@@ -936,14 +930,12 @@ int daemon_run(int foreground) {
       continue;
     }
     if (h == 0) {
-      close(srv);
       signal(SIGCHLD, SIG_DFL);
       /* keep SIGPIPE ignored so we don't die on client disconnect */
       handle_conn(conn);
     }
     close(conn);
   }
-  close(srv);
   return 0;
 }
 
@@ -1058,7 +1050,7 @@ int client_run(int argc, char **argv) {
   /* run the relay loop */
   struct termios orig;
   int raw_tty_active = 0;
-  int winch_sfd = -1;
+  _cleanup_close_ int winch_sfd = -1;
 
   if (interactive && has_tty && tcgetattr(STDIN_FILENO, &orig) == 0) {
     raw_tty_active = 1;
@@ -1074,7 +1066,7 @@ int client_run(int argc, char **argv) {
     winch_sfd = signalfd(-1, &ws, SFD_NONBLOCK | SFD_CLOEXEC);
   }
 
-  int epfd = epoll_create1(EPOLL_CLOEXEC);
+  _cleanup_close_ int epfd = epoll_create1(EPOLL_CLOEXEC);
   struct epoll_event ev, events[4];
 
   if (raw_tty_active) {
@@ -1179,10 +1171,8 @@ int client_run(int argc, char **argv) {
       sigemptyset(&ws);
       sigaddset(&ws, SIGWINCH);
       sigprocmask(SIG_UNBLOCK, &ws, NULL);
-      close(winch_sfd);
     }
   }
-  close(epfd);
   close(sock);
   return exit_code;
 

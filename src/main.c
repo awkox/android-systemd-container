@@ -277,7 +277,7 @@ int main(int argc, char **argv) {
     }
     loaded = 1;
   } else {
-    char *auto_p = config_auto_path(temp_i);
+    _cleanup_free_ char *auto_p = config_auto_path(temp_i);
     if (auto_p) {
       safe_strncpy(cfg.config_file, auto_p, sizeof(cfg.config_file));
       if (config_load(cfg.config_file, &cfg) == 0) {
@@ -286,7 +286,6 @@ int main(int argc, char **argv) {
         log_warn("Failed to load auto-detected config from '%s': %s",
                  cfg.config_file, strerror(errno));
       }
-      free(auto_p);
     }
   }
 

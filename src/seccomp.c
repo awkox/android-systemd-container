@@ -282,7 +282,7 @@ int android_seccomp_setup(int block_nested_ns, int privileged_mask) {
     filter_len += sizeof(filter_ns) / sizeof(struct sock_filter);
   filter_len += sizeof(filter_allow) / sizeof(struct sock_filter);
 
-  struct sock_filter *final_filter =
+  _cleanup_free_ struct sock_filter *final_filter =
       malloc(filter_len * sizeof(struct sock_filter));
   if (!final_filter)
     return -1;
@@ -312,10 +312,8 @@ int android_seccomp_setup(int block_nested_ns, int privileged_mask) {
 
   if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) < 0) {
     log_warn("Failed to apply Seccomp filter: %s", strerror(errno));
-    free(final_filter);
     return -1;
   }
 
-  free(final_filter);
   return 0;
 }

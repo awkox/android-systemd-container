@@ -187,12 +187,11 @@ reboot_loop:;
    * the intermediate inherits the user's stdout/stderr (e.g. a pipe)
    * and holds it open indefinitely, causing CLI hangs in direct mode. */
   if (!cfg->foreground && !stdio_redirected) {
-    int devnull = open("/dev/null", O_RDWR);
+    _cleanup_close_ int devnull = open("/dev/null", O_RDWR);
     if (devnull >= 0) {
       dup2(devnull, 0);
       /* Note: we don't redirect 1 and 2 here yet because we want to see
        * networking setup logs. We'll do a full redirect after the fork. */
-      close(devnull);
     }
   }
 
@@ -236,12 +235,11 @@ reboot_loop:;
      * retains the original terminal fds until it redirects to /dev/console
      * at its own step 24. */
     if (!cfg->foreground) {
-      int devnull = open("/dev/null", O_RDWR);
+      _cleanup_close_ int devnull = open("/dev/null", O_RDWR);
       if (devnull >= 0) {
         dup2(devnull, 0);
         dup2(devnull, 1);
         dup2(devnull, 2);
-        close(devnull);
       }
     }
 
@@ -291,12 +289,11 @@ reboot_loop:;
 
   /* Stdio handling for monitor in background mode (first boot only) */
   if (!cfg->foreground && !stdio_redirected) {
-    int devnull = open("/dev/null", O_RDWR);
+    _cleanup_close_ int devnull = open("/dev/null", O_RDWR);
     if (devnull >= 0) {
       dup2(devnull, 0);
       dup2(devnull, 1);
       dup2(devnull, 2);
-      close(devnull);
     }
     stdio_redirected = 1;
   }
@@ -321,7 +318,7 @@ reboot_loop:;
     sigemptyset(&mask);
     sigaddset(&mask, SIGCHLD);
     sigprocmask(SIG_BLOCK, &mask, NULL);
-    int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+    _cleanup_close_ int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
 
     while (1) {
       pid_t r = waitpid(mid_pid, &status, WNOHANG);
@@ -359,8 +356,6 @@ reboot_loop:;
       }
     }
 
-    if (sfd >= 0)
-      close(sfd);
     sigprocmask(SIG_UNBLOCK, &mask, NULL);
   }
 
@@ -411,12 +406,11 @@ reboot_loop:;
       snprintf(run_dir, sizeof(run_dir), "/proc/%d/root/run",
                cfg->container_pid);
       mkdir(run_dir, 0755);
-      int fd = safe_openat_proc(cfg->container_pid, "run/.boot-uuid",
+      _cleanup_close_ int fd = safe_openat_proc(cfg->container_pid, "run/.boot-uuid",
                                 O_WRONLY | O_CREAT | O_TRUNC, 0644);
       if (fd >= 0) {
         size_t ulen = strlen(cfg->uuid);
         write_all(fd, cfg->uuid, ulen);
-        close(fd);
       }
     }
 
@@ -474,13 +468,12 @@ reboot_loop:;
    * Writing our PID to the root cgroup.procs atomically migrates us out.
    * This is safe: the monitor is about to _exit() anyway. */
   {
-    int root_fd = open("/sys/fs/cgroup/cgroup.procs", O_WRONLY | O_CLOEXEC);
+    _cleanup_close_ int root_fd = open("/sys/fs/cgroup/cgroup.procs", O_WRONLY | O_CLOEXEC);
     if (root_fd >= 0) {
       char pid_s[32];
       int len = snprintf(pid_s, sizeof(pid_s), "%d", (int)getpid());
       if (write(root_fd, pid_s, len) < 0) {
       }
-      close(root_fd);
     }
   }
 

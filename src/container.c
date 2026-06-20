@@ -112,7 +112,7 @@ int is_external_lock_active(const char *name) {
   if (get_lock_path(name, lock_path, sizeof(lock_path)) < 0)
     return 0;
 
-  int fd = open(lock_path, O_RDONLY | O_CLOEXEC);
+  _cleanup_close_ int fd = open(lock_path, O_RDONLY | O_CLOEXEC);
   if (fd < 0)
     return 0; /* 文件不存在 -> 没有锁 */
 
@@ -124,12 +124,9 @@ int is_external_lock_active(const char *name) {
   /* 使用 F_GETLK 向内核确认是否有进程正持有写锁 */
   if (fcntl(fd, F_GETLK, &fl) == 0) {
     if (fl.l_type != F_UNLCK) {
-      close(fd);
       return 1; /* Valid lock held */
     }
   }
-
-  close(fd);
 
   /* 
    * 到这里说明没有任何进程持有锁。由于文件还存在，这说明这是一个宿主异常断电或 
@@ -297,15 +294,13 @@ int start_rootfs(struct config *cfg) {
    *     This prevents symlink-based attacks and ensures that all subsequent
    *     operations use the intended location. */
   if (cfg->rootfs_img_path[0]) {
-    char *abs_path = resolve_path_arg(cfg->rootfs_img_path);
+    _cleanup_free_ char *abs_path = resolve_path_arg(cfg->rootfs_img_path);
     if (!abs_path || access(abs_path, F_OK) != 0) {
       log_error("Failed to resolve rootfs image path '%s': %s",
                 abs_path ? abs_path : cfg->rootfs_img_path, strerror(errno));
-      free(abs_path);
       goto cleanup;
     }
     safe_strncpy(cfg->rootfs_img_path, abs_path, sizeof(cfg->rootfs_img_path));
-    free(abs_path);
   }
 
   /* if foreground was requested but we have no interactive terminal (piped,
@@ -733,12 +728,11 @@ static void get_os_pretty(const char *osrelease_path, char *buf, size_t size) {
     return;
   buf[0] = '\0';
 
-  FILE *fp = fopen(osrelease_path, "r");
+  _cleanup_fclose_ FILE *fp = fopen(osrelease_path, "r");
   if (!fp)
     return;
 
   parse_pretty_name(fp, buf, size);
-  fclose(fp);
 }
 
 int show_info(struct config *cfg, int trust_cfg_pid) {
