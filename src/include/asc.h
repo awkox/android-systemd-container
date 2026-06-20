@@ -377,7 +377,7 @@ void mirror_gpu_nodes(const char *dev_path);
 
 nl_ctx_t *nl_open(void);
 void nl_close(nl_ctx_t *ctx);
-int nl_get_ifindex(nl_ctx_t *ctx, const char *ifname);
+int nl_get_ifindex(const char *ifname);
 int nl_link_up(nl_ctx_t *ctx, const char *ifname);
 
 /* ---------------------------------------------------------------------------

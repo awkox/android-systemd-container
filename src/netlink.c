@@ -122,8 +122,7 @@ static int nl_talk(nl_ctx_t *ctx, struct nlmsghdr *req) {
  * (uses if_nametoindex - one ioctl, no netlink round-trip needed)
  * ---------------------------------------------------------------------------*/
 
-int nl_get_ifindex(nl_ctx_t *ctx, const char *ifname) {
-  (void)ctx;
+int nl_get_ifindex(const char *ifname) {
   unsigned int idx = if_nametoindex(ifname);
   return (idx > 0) ? (int)idx : -ENODEV;
 }
@@ -133,7 +132,7 @@ int nl_get_ifindex(nl_ctx_t *ctx, const char *ifname) {
  * ---------------------------------------------------------------------------*/
 
 int nl_link_up(nl_ctx_t *ctx, const char *ifname) {
-  int idx = nl_get_ifindex(ctx, ifname);
+  int idx = nl_get_ifindex(ifname);
   if (idx <= 0)
     return -ENODEV;
 
