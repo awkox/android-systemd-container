@@ -52,6 +52,7 @@ target_compile_options(asc PRIVATE
 	-Wall
 	-Wextra
 	-Wshadow
+	-Wunused
 )
 target_link_options(asc PRIVATE
 	-Wl,--gc-sections

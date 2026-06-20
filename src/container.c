@@ -84,9 +84,7 @@ static int acquire_external_lock(const char *name) {
 }
 
 /* Release external command lock - ONLY called by CLI parent. */
-static void release_external_lock(const char *name) {
-  (void)name; /* 路径由全局状态管理，无需重新解析 */
-
+static void release_external_lock(void) {
   if (active_lock_fd >= 0) {
     /* 
      * 在关闭 FD 前先 unlink，防止其他排队的进程获取到一个即将被删除的孤儿文件的锁。
@@ -273,7 +271,7 @@ int start_rootfs(struct config *cfg) {
         if (cfg->img_mount_point[0] && is_mountpoint(cfg->img_mount_point)) {
         } else {
           /* Mount not active - remove invalid lock */
-          release_external_lock(cfg->container_name);
+          release_external_lock();
           lock_acquired = 0;
         }
       }
@@ -501,7 +499,7 @@ int start_rootfs(struct config *cfg) {
   if (read(sync_pipe[0], &cfg->container_pid, sizeof(pid_t)) != sizeof(pid_t)) {
     log_error("Monitor failed to send container PID.");
     if (lock_acquired)
-      release_external_lock(cfg->container_name);
+      release_external_lock();
     goto cleanup;
   }
   close(sync_pipe[0]);
@@ -525,7 +523,7 @@ int start_rootfs(struct config *cfg) {
   if (cfg->foreground) {
 
     if (lock_acquired) {
-      release_external_lock(cfg->container_name);
+      release_external_lock();
       lock_acquired = 0;
     }
 
@@ -564,7 +562,7 @@ int start_rootfs(struct config *cfg) {
   }
 
   if (lock_acquired)
-    release_external_lock(cfg->container_name);
+    release_external_lock();
   config_free(cfg);
 
   return 0;
@@ -578,7 +576,7 @@ cleanup:
     cleanup_container_resources(cfg, 0, 1 /* force */);
   }
   if (lock_acquired)
-    release_external_lock(cfg->container_name);
+    release_external_lock();
 
   if (cfg->console.master >= 0) {
     close(cfg->console.master);
@@ -611,7 +609,7 @@ int stop_rootfs_with_timeout(struct config *cfg, int skip_unmount,
   pid_t pid = 0;
   if (!is_container_running(cfg, &pid) || pid <= 0) {
     log_error("Container '%s' is not running or invalid.", cfg->container_name);
-    release_external_lock(cfg->container_name);
+    release_external_lock();
     return -1;
   }
 
@@ -689,7 +687,7 @@ int stop_rootfs_with_timeout(struct config *cfg, int skip_unmount,
   /* Release lock ONLY if this is a final stop.
    * For restarts (skip_unmount=1), keep lock alive as handoff. */
   if (!skip_unmount) {
-    release_external_lock(cfg->container_name);
+    release_external_lock();
   }
 
   return 0;
