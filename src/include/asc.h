@@ -199,7 +199,6 @@ struct config {
   int hw_access;       /* --hw-access */
   int gpu_mode;        /* --gpu: mirror GPU nodes into isolated tmpfs /dev */
   int volatile_mode;   /* --volatile */
-  int android_storage; /* --enable-android-storage */
   int reboot_cycle;    /* 1 if we are in a reboot loop */
   int force_cgroupv1;  /* --force-cgroupv1: use v1 even if v2 is available */
   int block_nested_ns; /* --block-nested-namespaces: fix VFS deadlock by
@@ -316,7 +315,6 @@ void parse_privileged(const char *value, struct config *cfg);
  * ---------------------------------------------------------------------------*/
 
 int is_android(void);
-int android_setup_storage(const char *rootfs_path);
 int android_seccomp_setup(int block_nested_ns, int privileged_mask);
 int seccomp_apply_minimal(int privileged_mask);
 

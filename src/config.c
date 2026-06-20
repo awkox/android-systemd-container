@@ -253,8 +253,6 @@ int config_load(const char *config_path, struct config *cfg) {
       safe_strncpy(cfg->rootfs_img_path, val, sizeof(cfg->rootfs_img_path));
     } else if (strcmp(key, "img_mount_point") == 0) {
       safe_strncpy(cfg->img_mount_point, val, sizeof(cfg->img_mount_point));
-    } else if (strcmp(key, "enable_android_storage") == 0) {
-      cfg->android_storage = parse_bool(val);
     } else if (strcmp(key, "enable_hw_access") == 0) {
       cfg->hw_access = parse_bool(val);
     } else if (strcmp(key, "enable_gpu_mode") == 0) {
@@ -372,9 +370,6 @@ static void config_serialize_known(FILE *f, struct config *cfg) {
   if (cfg->img_mount_point[0])
     fprintf(f, "img_mount_point=%s\n", cfg->img_mount_point);
 
-  if (is_android()) {
-    fprintf(f, "enable_android_storage=%d\n", cfg->android_storage);
-  }
   fprintf(f, "enable_hw_access=%d\n", cfg->hw_access);
   fprintf(f, "enable_gpu_mode=%d\n", cfg->gpu_mode);
   fprintf(f, "volatile_mode=%d\n", cfg->volatile_mode);

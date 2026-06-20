@@ -321,10 +321,6 @@ int start_rootfs(struct config *cfg) {
 
   print_cgroup_status(cfg);
 
-  if (cfg->android_storage && !is_android())
-    log_warn("--enable-android-storage is only supported on Android hosts. "
-             "Skipping.");
-
   has_side_effects = 1;
 
   /* 2. Mount rootfs image (using the resolved name) */
@@ -840,9 +836,6 @@ int show_info(struct config *cfg, int trust_cfg_pid) {
     }
     printf("NETWORKING_MODE=%s\n", net);
 
-    if (is_android())
-      printf("ANDROID_STORAGE=%d\n", cfg->android_storage);
-
     if (cfg->hw_access)
       printf("HW_ACCESS=full\n");
     else if (cfg->gpu_mode)
@@ -932,13 +925,7 @@ int show_info(struct config *cfg, int trust_cfg_pid) {
     printf("  Networking: %s\n", net);
     feat_count++;
 
-    /* 2. Android Storage */
-    if (is_android() && cfg->android_storage) {
-      printf("  Android storage: enabled\n");
-      feat_count++;
-    }
-
-    /* 3. HW/GPU Access */
+    /* 2. HW/GPU Access */
     if (cfg->hw_access) {
       printf("  " C_RED "HW access:" C_RESET " full\n");
       feat_count++;
@@ -947,25 +934,25 @@ int show_info(struct config *cfg, int trust_cfg_pid) {
       feat_count++;
     }
 
-    /* 5. Volatile Mode */
+    /* 3. Volatile Mode */
     if (cfg->volatile_mode) {
       printf("  Volatile mode: enabled\n");
       feat_count++;
     }
 
-    /* 6. Cgroup v1 */
+    /* 4. Cgroup v1 */
     if (cfg->force_cgroupv1) {
       printf("  " C_RED "Force Cgroup V1:" C_RESET " yes\n");
       feat_count++;
     }
 
-    /* 7. Deadlock Shield (block_nested_ns) */
+    /* 5. Deadlock Shield (block_nested_ns) */
     if (cfg->block_nested_ns) {
       printf("  " C_RED "Deadlock Shield:" C_RESET " enabled\n");
       feat_count++;
     }
 
-    /* 8. Privileged Mode */
+    /* 6. Privileged Mode */
     if (cfg->privileged_mask > 0) {
       printf("  " C_RED "Privileged mode:" C_RESET " ");
       if (cfg->privileged_mask == PRIV_FULL) {
@@ -997,13 +984,13 @@ int show_info(struct config *cfg, int trust_cfg_pid) {
       feat_count++;
     }
 
-    /* 9. Bind Mounts */
+    /* 7. Bind Mounts */
     if (cfg->bind_count > 0) {
       printf("  Bind mounts: %d active\n", cfg->bind_count);
       feat_count++;
     }
 
-    /* 10. Custom Init */
+    /* 8. Custom Init */
     if (cfg->custom_init[0]) {
       printf("  " C_RED "Custom Init:" C_RESET " %s\n", cfg->custom_init);
       feat_count++;
