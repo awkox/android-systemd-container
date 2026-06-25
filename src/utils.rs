@@ -1031,7 +1031,7 @@ fn write_to_log_file(name: &str, component: &str, raw_msg: &str, pre_opened_fd: 
 ///
 /// 同时写入文件日志和终端（受 `log_silent` 标志控制）。
 /// 终端输出会过滤 `[DEBUG]`、`[CGROUP]`、`[VIRT]` 等内部前缀。
-pub fn log_internal(prefix: &str, color: &str, is_err: bool, args: fmt::Arguments) {
+pub fn log_internal(prefix: &str, is_err: bool, args: fmt::Arguments) {
     let raw_msg = format!("{}", args);
 
     // 获取日志状态
@@ -1073,8 +1073,8 @@ pub fn log_internal(prefix: &str, color: &str, is_err: bool, args: fmt::Argument
     let mut out = out;
     let _ = writeln!(
         out,
-        "[{}{}\x1b[0m] {}\r",
-        color, prefix, raw_msg
+        "[{}] {}\r",
+        prefix, raw_msg
     );
     let _ = out.flush();
 }
@@ -1092,7 +1092,7 @@ pub fn die_internal(args: fmt::Arguments) {
     }
     drop(state);
 
-    eprintln!("[\x1b[1;31m-\x1b[0m] {}\r", raw_msg);
+    eprintln!("[-] {}\r", raw_msg);
     std::process::exit(libc::EXIT_FAILURE);
 }
 
@@ -1111,39 +1111,36 @@ pub fn write_monitor_debug_log(name: &str, args: fmt::Arguments) {
 // 日志宏
 // ══════════════════════════════════════════════════════════════════════════════
 
-/// 信息级别日志（终端绿色 `[+]`，写入文件日志）。
+/// 信息级别日志（终端 `[+]`，写入文件日志）。
 #[macro_export]
 macro_rules! log_info {
     ($($arg:tt)*) => {
         $crate::utils::log_internal(
             "+",
-            $crate::constants::C_GREEN,
             false,
             format_args!($($arg)*),
         )
     };
 }
 
-/// 警告级别日志（终端黄色 `[!]`，写入文件日志）。
+/// 警告级别日志（终端 `[!]`，写入文件日志）。
 #[macro_export]
 macro_rules! log_warn {
     ($($arg:tt)*) => {
         $crate::utils::log_internal(
             "!",
-            $crate::constants::C_YELLOW,
             true,
             format_args!($($arg)*),
         )
     };
 }
 
-/// 错误级别日志（终端红色 `[-]`，写入文件日志）。
+/// 错误级别日志（终端 `[-]`，写入文件日志）。
 #[macro_export]
 macro_rules! log_error {
     ($($arg:tt)*) => {
         $crate::utils::log_internal(
             "-",
-            $crate::constants::C_RED,
             true,
             format_args!($($arg)*),
         )
@@ -1255,7 +1252,7 @@ pub fn print_privileged_warning(privileged_mask: u32) {
         return;
     }
     println!(
-        "\x1b[1m\x1b[1;31mWARNING: PRIVILEGED MODE ACTIVE - DEVICE SECURITY COMPROMISED\x1b[0m\r\n"
+        "WARNING: PRIVILEGED MODE ACTIVE - DEVICE SECURITY COMPROMISED\r\n"
     );
     let _ = io::stdout().flush();
 }

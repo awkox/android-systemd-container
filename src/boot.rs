@@ -294,7 +294,7 @@ pub fn internal_boot(cfg: &mut Config) -> i32 {
     let _ = write_file(Path::new(&format!("{}/version", FORK_MARKER)), env!("CARGO_PKG_VERSION"));
 
     if cfg.foreground {
-        println!("\x1b[1m\x1b[37m\r\n(to exit from the foreground mode, press CTRL+ALT+Q)\r\n\x1b[0m");
+        println!("\r\n(to exit from the foreground mode, press CTRL+ALT+Q)\r\n");
     }
     println!();
 
@@ -402,13 +402,16 @@ pub fn monitor_run(cfg: &mut Config, sync_pipe_write: i32) -> ! {
                 // Enable controllers in subtree_control
                 let mut enable = String::new();
                 if let Ok(buf) = read_file(Path::new("/sys/fs/cgroup/cgroup.controllers")) {
-                    if cfg.memory_limit.is_some() && buf.contains("memory") {
+                    // 用 cg_word_in_list 按单词边界匹配，而不是裸子串 contains()——
+                    // 否则只有 "cpuset" 没有独立 "cpu" 控制器的宿主机会被误判为
+                    // "cpu" 可用（"cpuset" 这个词本身就包含 "cpu" 子串）。
+                    if cfg.memory_limit.is_some() && crate::cgroup::cg_word_in_list(&buf, "memory") {
                         enable.push_str(if enable.is_empty() { "+memory" } else { " +memory" });
                     }
-                    if cfg.cpu_quota.is_some() && buf.contains("cpu") {
+                    if cfg.cpu_quota.is_some() && crate::cgroup::cg_word_in_list(&buf, "cpu") {
                         enable.push_str(if enable.is_empty() { "+cpu" } else { " +cpu" });
                     }
-                    if cfg.pids_limit.is_some() && buf.contains("pids") {
+                    if cfg.pids_limit.is_some() && crate::cgroup::cg_word_in_list(&buf, "pids") {
                         enable.push_str(if enable.is_empty() { "+pids" } else { " +pids" });
                     }
                 }
@@ -577,7 +580,7 @@ pub fn monitor_run(cfg: &mut Config, sync_pipe_write: i32) -> ! {
             }
 
             if cfg.foreground {
-                println!("\n\x1b[37masc {} : Container \x1b[1;32m{}\x1b[0m\x1b[37m is now Rebooting\x1b[0m\n",
+                println!("\nasc {} : Container {} is now Rebooting\n",
                     env!("CARGO_PKG_VERSION"), cfg.container_name);
             }
 
@@ -604,7 +607,7 @@ pub fn monitor_run(cfg: &mut Config, sync_pipe_write: i32) -> ! {
                 let mut reboot_cfg = cfg.clone();
                 if config_load_by_name(&cfg.container_name, &mut reboot_cfg).is_ok() {
                     if reboot_cfg.force_cgroupv1 != old_force {
-                        println!("\x1b[1m\x1b[33mforce_cgroupv1 changed but requires a full stop/start\x1b[0m\n");
+                        println!("force_cgroupv1 changed but requires a full stop/start\n");
                         reboot_cfg.force_cgroupv1 = old_force;
                     }
                     *cfg = reboot_cfg;

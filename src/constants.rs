@@ -105,15 +105,3 @@ pub const EXT_LOCK: &str = ".lock";
 // ── Android 内核 fw_path_para 缓冲区大小（含 NUL 终止符）──
 
 pub const FW_PATH_BUF_SIZE: usize = 256;
-
-// ── 终端颜色代码 ──
-
-pub const C_RESET: &str = "\x1b[0m";
-pub const C_RED: &str = "\x1b[1;31m";
-pub const C_GREEN: &str = "\x1b[1;32m";
-pub const C_YELLOW: &str = "\x1b[1;33m";
-pub const C_BLUE: &str = "\x1b[1;34m";
-pub const C_CYAN: &str = "\x1b[1;36m";
-pub const C_WHITE: &str = "\x1b[1;37m";
-pub const C_DIM: &str = "\x1b[2m";
-pub const C_BOLD: &str = "\x1b[1m";

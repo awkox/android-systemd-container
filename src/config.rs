@@ -23,12 +23,15 @@ fn trim_whitespace(s: &str) -> &str {
     s.trim()
 }
 
-/// 严格布尔解析器：接受 1/true/yes/on → true，0/false/no/off → false
+/// 严格布尔解析器：只认字面的 "1"（大小写不敏感）为真，其它一切都是假。
+///
+/// 对应 C 的 `parse_bool()`。注意：C 版本的函数注释写着"accepts 0/1,
+/// true/false, yes/no, on/off"，但实际代码只比较了 "1" 和 "0"，其它输入
+/// 一律落到末尾的 `return 0`——也就是说 "true"/"yes"/"on" 在 C 里实际上
+/// 都被当作假。这里按 C 的真实行为对齐，而不是按注释里写的（未被实现的）
+/// 设想行为。
 fn parse_bool(val: &str) -> bool {
-    matches!(
-        val.to_lowercase().as_str(),
-        "1" | "true" | "yes" | "on"
-    )
+    val.eq_ignore_ascii_case("1")
 }
 
 /// 安全正整数解析器，返回 -1 表示任何错误

@@ -37,45 +37,7 @@ static HOST_SUPPORTS_V2_CACHED: Mutex<i32> = Mutex::new(-1);
 
 // ══════════════════════════════════════════════════════════════════════════════
 // 低级 mount(2) 辅助函数（等价于 mount.c 的 domount，待 mount.rs 完成后替换）
-// ══════════════════════════════════════════════════════════════════════════════
-
-/// 调用原始 mount(2) 系统调用。
-///
-/// 这是 mount.c 中 `domount()` 的最小替代，直到该模块被转换为 Rust。
-fn domount_raw(
-    src: &str,
-    tgt: &str,
-    fstype: &str,
-    flags: libc::c_ulong,
-    data: Option<&str>,
-) -> io::Result<()> {
-    let src_c = CString::new(src)?;
-    let tgt_c = CString::new(tgt)?;
-    let fstype_c = CString::new(fstype)?;
-    let data_c = data.map(|d| CString::new(d).unwrap_or_default());
-    let data_ptr = data_c
-        .as_ref()
-        .map(|c| c.as_ptr() as *const libc::c_void)
-        .unwrap_or(std::ptr::null());
-
-    let ret = unsafe {
-        libc::mount(
-            src_c.as_ptr(),
-            tgt_c.as_ptr(),
-            fstype_c.as_ptr(),
-            flags,
-            data_ptr,
-        )
-    };
-
-    if ret < 0 {
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(())
-    }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════// ══════════════════════════════════════════════════════════════════════════════
 // Cgroup v2 探测
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -177,17 +139,14 @@ pub fn cgroup_host_bootstrap(force_cgroupv1: bool) {
         if ftype != libc::TMPFS_MAGIC as libc::c_ulong
             && ftype != CGROUP2_SUPER_MAGIC
         {
-            if let Err(e) = domount_raw(
+            if let Err(_e) = crate::mount::domount(
                 "none",
                 "/sys/fs/cgroup",
                 "tmpfs",
                 libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC,
                 Some("mode=755,size=16M"),
             ) {
-                log_error!(
-                    "[CGROUP] Failed to mount tmpfs on /sys/fs/cgroup: {}",
-                    e
-                );
+                // mount::domount 失败时已经会打印一条通用错误日志，这里不再重复。
                 return;
             }
             log_info!("[CGROUP] Mounted tmpfs anchor on /sys/fs/cgroup.");
@@ -195,17 +154,14 @@ pub fn cgroup_host_bootstrap(force_cgroupv1: bool) {
     }
 
     // 挂载 cgroup2
-    if let Err(e) = domount_raw(
+    if let Err(_e) = crate::mount::domount(
         "none",
         "/sys/fs/cgroup",
         "cgroup2",
         libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC,
         None,
     ) {
-        log_error!(
-            "Failed to mount cgroup2 on /sys/fs/cgroup: {}",
-            e
-        );
+        // mount::domount 失败时已经会打印一条通用错误日志，这里不再重复。
         return;
     }
     log_info!("Auto-mounted cgroup2 on /sys/fs/cgroup.");
@@ -301,7 +257,7 @@ pub fn setup_cgroups(force_cgroupv1: bool) -> io::Result<()> {
     }
 
     // 挂载 tmpfs 作为 cgroup 基础
-    domount_raw(
+    crate::mount::domount(
         "none",
         "sys/fs/cgroup",
         "tmpfs",
@@ -314,26 +270,16 @@ pub fn setup_cgroups(force_cgroupv1: bool) -> io::Result<()> {
 
     if v2_active {
         // 在容器的 cgroup namespace 内挂载全新的 cgroup2 层次
-        let ret = unsafe {
-            let fstype = CString::new("cgroup2").unwrap();
-            let tgt = CString::new("sys/fs/cgroup").unwrap();
-            libc::mount(
-                fstype.as_ptr(),
-                tgt.as_ptr(),
-                fstype.as_ptr(),
-                libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC,
-                std::ptr::null(),
-            )
-        };
-
-        if ret == 0 {
+        if crate::mount::domount(
+            "cgroup2",
+            "sys/fs/cgroup",
+            "cgroup2",
+            libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC,
+            None,
+        ).is_ok() {
             systemd_setup_done = true;
-        } else {
-            log_error!(
-                "Failed to mount cgroup2: {}",
-                io::Error::last_os_error()
-            );
         }
+        // 失败时 mount::domount 已经打印过日志，这里不再重复。
     } else {
         // V1 路径：为所有控制器合成全新挂载
         mount_v1_controllers();
@@ -345,24 +291,15 @@ pub fn setup_cgroups(force_cgroupv1: bool) -> io::Result<()> {
         let systemd_mp = Path::new("sys/fs/cgroup/systemd");
         if !systemd_mp.exists() {
             let _ = std::fs::create_dir(systemd_mp);
-            let ret = unsafe {
-                let fstype = CString::new("cgroup").unwrap();
-                let tgt = CString::new("sys/fs/cgroup/systemd").unwrap();
-                let data = CString::new("none,name=systemd").unwrap();
-                libc::mount(
-                    fstype.as_ptr(),
-                    tgt.as_ptr(),
-                    fstype.as_ptr(),
-                    libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC,
-                    data.as_ptr() as *const libc::c_void,
-                )
-            };
-            if ret < 0 {
-                log_error!(
-                    "Failed to mount systemd cgroup: {}",
-                    io::Error::last_os_error()
-                );
-                return Err(io::Error::last_os_error());
+            if let Err(e) = crate::mount::domount(
+                "cgroup",
+                "sys/fs/cgroup/systemd",
+                "cgroup",
+                libc::MS_NOSUID | libc::MS_NODEV | libc::MS_NOEXEC,
+                Some("none,name=systemd"),
+            ) {
+                // mount::domount 失败时已经打印过通用日志，这里不再重复。
+                return Err(e);
             }
         }
         systemd_setup_done = true;
@@ -605,12 +542,22 @@ fn ctrl_supported_v2(cg_path: &str, name: &str) -> bool {
 /// 解析 cgroup 整数文件，可能包含 "max"（无限制）。
 ///
 /// 返回解析的值，或 -1 表示错误/无限制。
+///
+/// 注意：调用方（cpu.stat 的 "usage_usec " 字段）传进来的可能是从某个
+/// 偏移量开始的整段剩余文件内容（后面还跟着 user_usec/system_usec 等行），
+/// 不是单独一个数字。C 版本用 `strtoll()` 会在第一个非数字字符处自动停止，
+/// 这里必须手动模拟同样的行为——只取开头的整数 token，而不是对整段做
+/// `trim()` 后整体 `parse()`（那样遇到换行+后续文本一定会解析失败，
+/// 直接落到 unwrap_or(-1)，看起来像"不可用"但其实是解析方式错了）。
 fn parse_cgroup_ll(buf: &str) -> i64 {
-    let trimmed = buf.trim();
-    if trimmed == "max" {
+    let trimmed = buf.trim_start();
+    if trimmed.starts_with("max") {
         return -1; // unlimited
     }
-    trimmed.parse().unwrap_or(-1)
+    let token_end = trimmed
+        .find(|c: char| !(c.is_ascii_digit() || c == '-' || c == '+'))
+        .unwrap_or(trimmed.len());
+    trimmed[..token_end].parse().unwrap_or(-1)
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

@@ -187,6 +187,37 @@ fn handle_session(conn: RawFd, r: &Request) {
     let epfd = unsafe { libc::epoll_create1(libc::EPOLL_CLOEXEC) };
     if epfd < 0 { unsafe { libc::kill(child, libc::SIGTERM); libc::waitpid(child, std::ptr::null_mut(), 0) }; send_exit(conn, 1); return; }
 
+    let mut ev: libc::epoll_event = unsafe { mem::zeroed() };
+    let mut active_reads;
+
+    if is_pty {
+        // 父进程不再需要 slave 端——子进程已经把它 dup 成了自己的 stdio。
+        // 必须关闭，否则父进程自己残留的这一份引用会让 master 永远等不到
+        // EPOLLHUP（PTY 的 slave 端只要还有任何进程打开着，内核就不会
+        // 认为它"已经没人在用"）。
+        unsafe { libc::close(slave) };
+        let fl = unsafe { libc::fcntl(master, libc::F_GETFL) };
+        unsafe { libc::fcntl(master, libc::F_SETFL, fl | libc::O_NONBLOCK) };
+        ev.events = (libc::EPOLLIN | libc::EPOLLHUP | libc::EPOLLERR) as u32;
+        ev.u64 = master as u64;
+        unsafe { libc::epoll_ctl(epfd, libc::EPOLL_CTL_ADD, master, &mut ev) };
+        active_reads = 1;
+    } else {
+        // 同理：父进程关闭自己的写端拷贝，否则子进程退出后 out[0]/err[0]
+        // 永远读不到 EOF（父进程自己的写端引用还活着）。
+        unsafe { libc::close(out[1]); libc::close(err[1]) };
+        out[1] = -1; err[1] = -1;
+        unsafe { libc::fcntl(out[0], libc::F_SETFL, libc::O_NONBLOCK) };
+        unsafe { libc::fcntl(err[0], libc::F_SETFL, libc::O_NONBLOCK) };
+        ev.events = (libc::EPOLLIN | libc::EPOLLHUP | libc::EPOLLERR) as u32;
+        ev.u64 = out[0] as u64;
+        unsafe { libc::epoll_ctl(epfd, libc::EPOLL_CTL_ADD, out[0], &mut ev) };
+        ev.events = (libc::EPOLLIN | libc::EPOLLHUP | libc::EPOLLERR) as u32;
+        ev.u64 = err[0] as u64;
+        unsafe { libc::epoll_ctl(epfd, libc::EPOLL_CTL_ADD, err[0], &mut ev) };
+        active_reads = 2;
+    }
+
     let sfd = {
         let mut mask: libc::sigset_t = unsafe { mem::zeroed() };
         unsafe { libc::sigaddset(&mut mask, libc::SIGCHLD) };
@@ -194,8 +225,6 @@ fn handle_session(conn: RawFd, r: &Request) {
         unsafe { libc::signalfd(-1, &mask, libc::SFD_NONBLOCK | libc::SFD_CLOEXEC) }
     };
 
-    let mut ev: libc::epoll_event = unsafe { mem::zeroed() };
-    let mut active_reads = if is_pty { 1 } else { 2 };
     if sfd >= 0 { ev.events = libc::EPOLLIN as u32; ev.u64 = sfd as u64; unsafe { libc::epoll_ctl(epfd, libc::EPOLL_CTL_ADD, sfd, &mut ev) }; }
     ev.events = (if is_pty { libc::EPOLLIN } else { 0 } | libc::EPOLLHUP | libc::EPOLLERR) as u32; ev.u64 = conn as u64;
     unsafe { libc::epoll_ctl(epfd, libc::EPOLL_CTL_ADD, conn, &mut ev) };

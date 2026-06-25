@@ -474,7 +474,7 @@ pub fn show_info(cfg: &Config, trust_cfg_pid: bool) -> i32 {
     if cfg.container_name.is_empty() {
         let (count, _first_name) = count_running_containers();
         if count == 0 {
-            println!("\x1b[1;32mHost:\x1b[0m unknown\n\n\x1b[1;33mContainer:\x1b[0m No containers running.\n");
+            println!("Host: unknown\n\nContainer: No containers running.\n");
             return 0;
         }
         if count == 1 { /* auto-resolve in caller */ }
@@ -498,14 +498,14 @@ pub fn show_info(cfg: &Config, trust_cfg_pid: bool) -> i32 {
         println!("VOLATILE_MODE={}", cfg.volatile_mode as u8);
         crate::utils::show_container_usage(cfg).ok();
     } else {
-        println!("\x1b[1;32mContainer:\x1b[0m {} (RUNNING)", cfg.container_name);
+        println!("Container: {} (RUNNING)", cfg.container_name);
         println!("  PID: {}", pid);
         let uptime = get_container_uptime(pid);
         if uptime >= 0 { println!("  Uptime: {}", format_uptime(uptime)); }
-        println!("\n\x1b[1;32mFeatures:\x1b[0m");
+        println!("\nFeatures:");
         let net = if cfg.net_mode == NetMode::None { "none" } else { "host" };
         println!("  Networking: {}", net);
-        if cfg.hw_access { println!("  \x1b[1;31mHW access:\x1b[0m full"); }
+        if cfg.hw_access { println!("  HW access: full"); }
     }
     println!();
     0

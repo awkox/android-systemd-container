@@ -138,29 +138,16 @@ fn check_append(out: &mut String, args: std::fmt::Arguments) {
 /// * `status` - 是否通过
 /// * `level` - "MUST" 或 "OPT"
 /// * `is_root` - 当前是否 root
-fn print_check(out: &mut String, name: &str, desc: &str, status: bool, level: &str, is_root: bool) {
-    let (c_sym, sym) = if status {
-        (constants::C_GREEN, "✓")
-    } else if level == "MUST" {
-        (constants::C_RED, "✗")
-    } else {
-        (constants::C_YELLOW, "✗")
-    };
+fn print_check(out: &mut String, name: &str, desc: &str, status: bool, _level: &str, is_root: bool) {
+    let sym = if status { "✓" } else { "✗" };
 
-    check_append(out, format_args!(
-        "  [{}{}{}] {}\n",
-        c_sym, sym, constants::C_RESET, name
-    ));
+    check_append(out, format_args!("  [{}] {}\n", sym, name));
 
     if !status {
-        check_append(out, format_args!(
-            "      {}{}{}\n",
-            constants::C_DIM, desc, constants::C_RESET
-        ));
+        check_append(out, format_args!("      {}\n", desc));
         if (name.contains("namespace") || name.contains("Root")) && !is_root {
             check_append(out, format_args!(
-                "      {}(Note: Namespace checks require root privileges){}\n",
-                constants::C_YELLOW, constants::C_RESET
+                "      (Note: Namespace checks require root privileges)\n"
             ));
         }
     }
@@ -242,10 +229,8 @@ pub fn check_requirements_hw(hw_access: bool) -> io::Result<()> {
     if missing > 0 {
         println!();
         log_error!("Missing {} required feature(s) - cannot proceed", missing);
-        log_info!("Please run {}./{} check{} for a full diagnostic report.",
-                  constants::C_BOLD,
-                  constants::PROJECT_NAME,
-                  constants::C_RESET);
+        log_info!("Please run ./{} check for a full diagnostic report.",
+                  constants::PROJECT_NAME);
         return Err(io::Error::other("missing required kernel features"));
     }
 
@@ -270,14 +255,13 @@ pub fn check_requirements_detailed() -> i32 {
     let is_root = unsafe { libc::getuid() == 0 };
 
     check_append(&mut out, format_args!(
-        "\n{}Checking system requirements...{}\n\n",
-        constants::C_BOLD, constants::C_RESET
+        "\nChecking system requirements...\n\n"
     ));
 
     // ── MUST HAVE ──
     check_append(&mut out, format_args!(
-        "{}[MUST HAVE]{}\nThese features are required for {} to work:\n\n",
-        constants::C_BOLD, constants::C_RESET, constants::PROJECT_NAME
+        "[MUST HAVE]\nThese features are required for {} to work:\n\n",
+        constants::PROJECT_NAME
     ));
 
     if !is_root {
@@ -333,8 +317,7 @@ pub fn check_requirements_detailed() -> i32 {
 
     // ── RECOMMENDED ──
     check_append(&mut out, format_args!(
-        "\n{}[RECOMMENDED]{}\nThese features improve functionality but are not strictly required:\n\n",
-        constants::C_BOLD, constants::C_RESET
+        "\n[RECOMMENDED]\nThese features improve functionality but are not strictly required:\n\n"
     ));
 
     print_check(&mut out, "epoll support", "Efficient I/O event notification",
@@ -370,8 +353,7 @@ pub fn check_requirements_detailed() -> i32 {
 
     // ── OPTIONAL ──
     check_append(&mut out, format_args!(
-        "\n{}[OPTIONAL]{}\nThese features are optional and only used for specific functionality:\n\n",
-        constants::C_BOLD, constants::C_RESET
+        "\n[OPTIONAL]\nThese features are optional and only used for specific functionality:\n\n"
     ));
 
     let has_fuse = std::fs::metadata("/dev/fuse").is_ok()
@@ -389,9 +371,9 @@ pub fn check_requirements_detailed() -> i32 {
 
     // ── HARDENING ──
     check_append(&mut out, format_args!(
-        "\n{}[HARDENING]{}\nThese checks are not required for {} to work, \
+        "\n[HARDENING]\nThese checks are not required for {} to work, \
          but are recommended for hardened kernels:\n\n",
-        constants::C_BOLD, constants::C_RESET, constants::PROJECT_NAME
+        constants::PROJECT_NAME
     ));
 
     let has_user_ns = std::fs::metadata("/proc/self/ns/user").is_ok();
@@ -404,29 +386,23 @@ pub fn check_requirements_detailed() -> i32 {
 
     // ── FINAL SUMMARY ──
     check_append(&mut out, format_args!(
-        "\n{}Summary:{}\n\n",
-        constants::C_BOLD, constants::C_RESET
+        "\nSummary:\n\n"
     ));
 
     if missing_must > 0 {
         check_append(&mut out, format_args!(
-            "  [{}{}✗{}{}] {} required feature(s) missing - {} will not work\n",
-            constants::C_RESET, constants::C_RED,
-            constants::C_RESET, constants::C_RESET,
+            "  [✗] {} required feature(s) missing - {} will not work\n",
             missing_must, constants::PROJECT_NAME
         ));
     } else {
         check_append(&mut out, format_args!(
-            "  [{}{}✓{}{}] All required features found!\n",
-            constants::C_RESET, constants::C_GREEN,
-            constants::C_RESET, constants::C_RESET
+            "  [✓] All required features found!\n"
         ));
     }
 
     if !is_root {
         check_append(&mut out, format_args!(
-            "{}{}\n[!] Warning: You are not root. Some checks may be inaccurate.\n{}\n",
-            constants::C_BOLD, constants::C_YELLOW, constants::C_RESET
+            "\n[!] Warning: You are not root. Some checks may be inaccurate.\n"
         ));
     }
     check_append(&mut out, format_args!("\n"));
