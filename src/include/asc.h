@@ -63,7 +63,6 @@
 #include <ftw.h>
 
 #include "version.h"
-#include "asc_types.h"
 #include "utils/log.h"
 
 /* ---------------------------------------------------------------------------

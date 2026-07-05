@@ -31,7 +31,6 @@ add_executable(asc
 	src/core/config.c
 	src/core/container.c
 	src/core/monitor.c
-	src/hardware.c
 	src/core/daemon.c
 	src/core/check.c
 	src/utils/string.c
