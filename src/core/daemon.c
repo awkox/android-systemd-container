@@ -43,7 +43,7 @@
 #define REQ_FLAG_PTY (1u << 0)
 #define EXIT_PENDING (-1)
 
-static FILE *g_daemon_log_fp = NULL;
+static FILE *g_daemon_log_fp = nullptr;
 static char g_daemon_log_path[PATH_MAX] = "";
 
 /* Rotate ds-forkd.log mid-run when it exceeds the size limit.
@@ -82,8 +82,7 @@ static void rotate_daemon_log_if_needed(void) {
  * Tee helper: writes a plain (no ANSI) line to g_daemon_log_fp.
  * Used only in foreground mode; background mode relies on dup2.
  */
-static void daemon_log_tee(const char *prefix, const char *fmt, ...)
-    __attribute__((format(printf, 2, 3)));
+[[gnu::format(printf, 2, 3)]]
 static void daemon_log_tee(const char *prefix, const char *fmt, ...) {
   if (!g_daemon_log_fp)
     return;
@@ -99,21 +98,21 @@ static void daemon_log_tee(const char *prefix, const char *fmt, ...) {
 #undef log_info
 #define log_info(fmt, ...)                                                     \
   do {                                                                         \
-    log_internal("+", C_GREEN, 0, fmt __VA_OPT__(,) __VA_ARGS__);              \
+    log_internal("+", C_GREEN, false, fmt __VA_OPT__(,) __VA_ARGS__);              \
     daemon_log_tee("+", fmt __VA_OPT__(,) __VA_ARGS__);                        \
   } while (0)
 
 #undef log_warn
 #define log_warn(fmt, ...)                                                     \
   do {                                                                         \
-    log_internal("!", C_YELLOW, 1, fmt __VA_OPT__(,) __VA_ARGS__);             \
+    log_internal("!", C_YELLOW, true, fmt __VA_OPT__(,) __VA_ARGS__);             \
     daemon_log_tee("!", fmt __VA_OPT__(,) __VA_ARGS__);                        \
   } while (0)
 
 #undef log_error
 #define log_error(fmt, ...)                                                    \
   do {                                                                         \
-    log_internal("-", C_RED, 1, fmt __VA_OPT__(,) __VA_ARGS__);                \
+    log_internal("-", C_RED, true, fmt __VA_OPT__(,) __VA_ARGS__);                \
     daemon_log_tee("-", fmt __VA_OPT__(,) __VA_ARGS__);                        \
   } while (0)
 
@@ -192,7 +191,7 @@ static void free_req(req_t *r) {
   for (int i = 0; i < r->argc; i++) {
     if (r->argv[i]) {
       free(r->argv[i]);
-      r->argv[i] = NULL;
+      r->argv[i] = nullptr;
     }
   }
 }
@@ -222,7 +221,7 @@ static int recv_req(int fd, req_t *r) {
     r->argv[i][al] = '\0';
     r->argc++; /* safely increment once we actually have the string */
   }
-  r->argv[r->argc] = NULL;
+  r->argv[r->argc] = nullptr;
 
   if (r->flags & REQ_FLAG_PTY) {
     uint16_t ws[2];
@@ -255,11 +254,11 @@ static void reexec(char **argv) {
 static char **make_exec_argv(req_t *r) {
   char **av = (char **)malloc((size_t)(r->argc + 2) * sizeof(char *));
   if (!av)
-    return NULL;
+    return nullptr;
   av[0] = (char *)PROJECT_NAME;
   for (int i = 0; i < r->argc; i++)
     av[i + 1] = r->argv[i];
-  av[r->argc + 1] = NULL;
+  av[r->argc + 1] = nullptr;
   return av;
 }
 
@@ -285,7 +284,7 @@ static void handle_session(int conn, req_t *r) {
   char buf[IOBUF];
 
   if (is_pty) {
-    if (openpty(&master, &slave, NULL) < 0) {
+    if (openpty(&master, &slave, nullptr) < 0) {
       send_frame(conn, MSG_ERR, "daemon: openpty failed\n", 23);
       send_exit(conn, 1);
       return;
@@ -321,7 +320,7 @@ static void handle_session(int conn, req_t *r) {
     }
   }
 
-  _cleanup_free_ char **av = make_exec_argv(r);
+  auto_free char **av = make_exec_argv(r);
   if (!av) {
     if (is_pty) {
       close(master);
@@ -400,7 +399,7 @@ static void handle_session(int conn, req_t *r) {
       close(err[1]);
     }
     kill(child, SIGTERM);
-    waitpid(child, NULL, 0);
+    waitpid(child, nullptr, 0);
     send_exit(conn, 1);
     return;
   }
@@ -409,7 +408,7 @@ static void handle_session(int conn, req_t *r) {
   sigset_t ss;
   sigemptyset(&ss);
   sigaddset(&ss, SIGCHLD);
-  sigprocmask(SIG_BLOCK, &ss, NULL);
+  sigprocmask(SIG_BLOCK, &ss, nullptr);
   int sfd = signalfd(-1, &ss, SFD_NONBLOCK | SFD_CLOEXEC);
 
   struct epoll_event ev, events[8];
@@ -460,10 +459,10 @@ static void handle_session(int conn, req_t *r) {
    * Prevents blocking the event loop when the PTY kernel buffer is full
    * (e.g. large paste). Excess bytes are queued here and flushed via
    * EPOLLOUT on master. */
-  _cleanup_free_ uint8_t *pty_wbuf = NULL;
+  auto_free uint8_t *pty_wbuf = nullptr;
   size_t pty_wbuf_len = 0;
   size_t pty_wbuf_cap = 0;
-  int conn_suspended = 0; /* 1 = conn EPOLLIN removed (wbuf high-water) */
+  bool conn_suspended = false; /* 1 = conn EPOLLIN removed (wbuf high-water) */
 
   for (;;) {
     int nfds = epoll_wait(epfd, events, 8, -1);
@@ -489,7 +488,7 @@ static void handle_session(int conn, req_t *r) {
         if (events[i].events & (EPOLLHUP | EPOLLERR)) {
           /* client died unexpectedly, kill the child */
           kill(child, is_pty ? SIGHUP : SIGTERM);
-          waitpid(child, NULL, 0);
+          waitpid(child, nullptr, 0);
           goto session_end;
         }
         if (is_pty && (events[i].events & EPOLLIN)) {
@@ -497,7 +496,7 @@ static void handle_session(int conn, req_t *r) {
           uint32_t mlen;
           if (recv_frame_hdr(conn, &type, &mlen) < 0) {
             kill(child, SIGHUP);
-            waitpid(child, NULL, 0);
+            waitpid(child, nullptr, 0);
             goto session_end;
           }
           if (type == MSG_OUT && mlen > 0 && mlen <= (uint32_t)sizeof(buf)) {
@@ -551,7 +550,7 @@ static void handle_session(int conn, req_t *r) {
                       ev.events = EPOLLHUP | EPOLLERR; /* no EPOLLIN */
                       ev.data.fd = conn;
                       epoll_ctl(epfd, EPOLL_CTL_MOD, conn, &ev);
-                      conn_suspended = 1;
+                      conn_suspended = true;
                     }
                   }
                 }
@@ -602,7 +601,7 @@ static void handle_session(int conn, req_t *r) {
           ev.events = EPOLLIN | EPOLLHUP | EPOLLERR;
           ev.data.fd = conn;
           epoll_ctl(epfd, EPOLL_CTL_MOD, conn, &ev);
-          conn_suspended = 0;
+          conn_suspended = false;
         }
         /* Also service any pending output from master in this iteration. */
         if (events[i].events & EPOLLIN) {
@@ -611,7 +610,7 @@ static void handle_session(int conn, req_t *r) {
             if (n > 0) {
               if (send_frame(conn, MSG_OUT, buf, (uint32_t)n) < 0) {
                 kill(child, SIGHUP);
-                waitpid(child, NULL, 0);
+                waitpid(child, nullptr, 0);
                 goto session_end;
               }
             } else {
@@ -624,31 +623,31 @@ static void handle_session(int conn, req_t *r) {
       } else {
         /* this is a read fd from the child */
         if (events[i].events & (EPOLLIN | EPOLLHUP)) {
-          int drained = 0;
+          bool drained = false;
           for (;;) {
             ssize_t n = read(fd, buf, sizeof(buf));
             if (n > 0) {
               uint8_t t = (fd == err[0]) ? MSG_ERR : MSG_OUT;
               if (send_frame(conn, t, buf, (uint32_t)n) < 0) {
                 kill(child, is_pty ? SIGHUP : SIGTERM);
-                waitpid(child, NULL, 0);
+                waitpid(child, nullptr, 0);
                 goto session_end;
               }
             } else if (n == 0) {
-              drained = 1;
+              drained = true;
               break;
             } else {
               if (errno == EINTR)
                 continue;
               if (errno == EAGAIN)
                 break;
-              drained = 1;
+              drained = true;
               break;
             }
           }
 
           if (drained) {
-            epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+            epoll_ctl(epfd, EPOLL_CTL_DEL, fd, nullptr);
             close(fd);
             if (fd == master)
               master = -1;
@@ -686,10 +685,10 @@ static void handle_session(int conn, req_t *r) {
 
 session_end:
   if (sfd >= 0) {
-    epoll_ctl(epfd, EPOLL_CTL_DEL, sfd, NULL);
+    epoll_ctl(epfd, EPOLL_CTL_DEL, sfd, nullptr);
     close(sfd);
   }
-  sigprocmask(SIG_UNBLOCK, &ss, NULL);
+  sigprocmask(SIG_UNBLOCK, &ss, nullptr);
   close(epfd);
   if (master >= 0)
     close(master);
@@ -758,7 +757,7 @@ static void handle_conn(int conn) {
 /* main daemon loop */
 
 /* daemonize the process: detach from terminal and protect from OOM killer */
-static void daemonize(int foreground) {
+static void daemonize(bool foreground) {
   if (!foreground) {
     pid_t pid = fork();
     if (pid < 0)
@@ -821,12 +820,11 @@ static void daemonize(int foreground) {
   oom_protect();
 }
 
-static void sigusr2_handler(int sig) {
-  (void)sig;
+static void sigusr2_handler([[maybe_unused]] int sig) {
   g_sigusr2_received = 1;
 }
 
-int daemon_run(int foreground) {
+int daemon_run(bool foreground) {
   ensure_runtime();
 
   if (daemon_probe()) {
@@ -855,7 +853,7 @@ int daemon_run(int foreground) {
   /* SIGUSR2: app sends this after a live binary swap as an acknowledgment */
   signal(SIGUSR2, sigusr2_handler);
 
-  _cleanup_close_ int srv = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  auto_close int srv = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (srv < 0) {
     log_error("daemon: socket: %s", strerror(errno));
     return 1;
@@ -893,7 +891,7 @@ int daemon_run(int foreground) {
           "binary automatically.");
     }
 
-    int conn = accept4(srv, NULL, NULL, SOCK_CLOEXEC);
+    int conn = accept4(srv, nullptr, nullptr, SOCK_CLOEXEC);
     if (conn < 0) {
       if (errno == EINTR || errno == EAGAIN)
         continue;
@@ -947,41 +945,42 @@ int daemon_run(int foreground) {
  * poll() buys us nothing here.  A blocking connect() that finds no listener
  * returns ECONNREFUSED immediately.
  */
-int daemon_probe(void) {
+bool daemon_probe(void) {
   struct sockaddr_un addr;
   socklen_t alen = make_addr(&addr);
-  int s = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  auto_close int s = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (s < 0)
     return 0;
-  int alive = (connect(s, (struct sockaddr *)&addr, alen) == 0);
-  close(s);
-  return alive;
+  return connect(s, (struct sockaddr *)&addr, alen) == 0;
 }
 
 /* connect to the daemon and relay our command */
-
 int client_run(int argc, char **argv) {
+  auto_close int winch_sfd = -1;
+  auto_close int epfd = -1;
+  auto_close int sock = -1;
+
   if (argc < 1)
     return -2;
 
-  int interactive = 0;
+  bool interactive = false;
   for (int i = 0; i < argc; i++) {
     if (strcmp(argv[i], "start") == 0 || strcmp(argv[i], "restart") == 0) {
-      interactive = 1;
+      interactive = true;
       break;
     }
   }
 
-  int has_tty = isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
+  bool has_tty = isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
 
   if (interactive && !has_tty) {
-    int forces_tty = 0;
+    bool forces_tty = false;
     for (int i = 0; i < argc; i++) {
       if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--foreground") == 0) {
         for (int j = 0; j < argc; j++) {
           if (strcmp(argv[j], "start") == 0 ||
               strcmp(argv[j], "restart") == 0) {
-            forces_tty = 1;
+            forces_tty = true;
             break;
           }
         }
@@ -997,34 +996,31 @@ int client_run(int argc, char **argv) {
             strcmp(argv[i], "--foreground") == 0) {
           for (int j = i; j < argc - 1; j++)
             argv[j] = argv[j + 1];
-          argv[--argc] = NULL;
+          argv[--argc] = nullptr;
           break;
         }
       }
     }
-    interactive = 0;
+    interactive = false;
   }
 
   /* try to connect - single pass for execution path, retry loop only for 1st
    * connect */
-  int sock = -1;
   struct sockaddr_un addr;
   socklen_t alen = make_addr(&addr);
 
-  int s = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-  if (s < 0) {
+  sock = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  if (sock < 0) {
     fprintf(stderr, "client: socket: %s\n", strerror(errno));
     return 1;
   }
-  if (connect(s, (struct sockaddr *)&addr, alen) < 0) {
+  if (connect(sock, (struct sockaddr *)&addr, alen) < 0) {
     int err = errno;
-    close(s);
     if (err == ECONNREFUSED || err == ENOENT)
       return -2; /* Daemon not listening */
     fprintf(stderr, "[-] Connection to daemon failed: %s\n", strerror(err));
     return 1;
   }
-  sock = s;
 
   /* send the request */
   uint32_t flags = interactive ? REQ_FLAG_PTY : 0u;
@@ -1049,11 +1045,10 @@ int client_run(int argc, char **argv) {
 
   /* run the relay loop */
   struct termios orig;
-  int raw_tty_active = 0;
-  _cleanup_close_ int winch_sfd = -1;
+  bool raw_tty_active = false;
 
   if (interactive && has_tty && tcgetattr(STDIN_FILENO, &orig) == 0) {
-    raw_tty_active = 1;
+    raw_tty_active = true;
     struct termios raw = orig;
     cfmakeraw(&raw);
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
@@ -1062,11 +1057,11 @@ int client_run(int argc, char **argv) {
     sigset_t ws;
     sigemptyset(&ws);
     sigaddset(&ws, SIGWINCH);
-    sigprocmask(SIG_BLOCK, &ws, NULL);
+    sigprocmask(SIG_BLOCK, &ws, nullptr);
     winch_sfd = signalfd(-1, &ws, SFD_NONBLOCK | SFD_CLOEXEC);
   }
 
-  _cleanup_close_ int epfd = epoll_create1(EPOLL_CLOEXEC);
+  epfd = epoll_create1(EPOLL_CLOEXEC);
   struct epoll_event ev, events[4];
 
   if (raw_tty_active) {
@@ -1091,7 +1086,7 @@ int client_run(int argc, char **argv) {
     if (nfds < 0 && errno != EINTR)
       break;
 
-    int done = 0;
+    bool done = false;
     for (int i = 0; i < nfds && !done; i++) {
       int fd = events[i].data.fd;
 
@@ -1107,9 +1102,9 @@ int client_run(int argc, char **argv) {
         ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
         if (n > 0) {
           if (send_frame(sock, MSG_OUT, buf, (uint32_t)n) < 0)
-            done = 1;
+            done = true;
         } else {
-          done = 1;
+          done = true;
         }
       } else if (fd == sock) {
         if (events[i].events & EPOLLIN) {
@@ -1118,7 +1113,7 @@ int client_run(int argc, char **argv) {
             uint8_t type;
             uint32_t mlen;
             if (recv_frame_hdr(sock, &type, &mlen) < 0) {
-              done = 1;
+              done = true;
               break;
             }
 
@@ -1127,7 +1122,7 @@ int client_run(int argc, char **argv) {
               if (mlen >= 4)
                 read_exact(sock, &nc, 4);
               exit_code = (int)ntohl(nc);
-              done = 1;
+              done = true;
               break;
             }
 
@@ -1137,7 +1132,7 @@ int client_run(int argc, char **argv) {
               uint32_t c =
                   (rem < (uint32_t)sizeof(buf)) ? rem : (uint32_t)sizeof(buf);
               if (read_exact(sock, buf, c) < 0) {
-                done = 1;
+                done = true;
                 break;
               }
               fwrite(buf, 1, c, dest);
@@ -1155,7 +1150,7 @@ int client_run(int argc, char **argv) {
         }
 
         if (!done && (events[i].events & (EPOLLHUP | EPOLLERR))) {
-          done = 1;
+          done = true;
           break;
         }
       }
@@ -1170,14 +1165,12 @@ int client_run(int argc, char **argv) {
       sigset_t ws;
       sigemptyset(&ws);
       sigaddset(&ws, SIGWINCH);
-      sigprocmask(SIG_UNBLOCK, &ws, NULL);
+      sigprocmask(SIG_UNBLOCK, &ws, nullptr);
     }
   }
-  close(sock);
   return exit_code;
 
 send_err:
   fprintf(stderr, "client: send failed: %s\n", strerror(errno));
-  close(sock);
   return 1;
 }

@@ -11,7 +11,7 @@
  * Static status variables
  * ---------------------------------------------------------------------------*/
 
-static int is_root = 0;
+static bool is_root = 0;
 
 /* ---------------------------------------------------------------------------
  * Output buffering (for one-shot terminal output)
@@ -41,23 +41,23 @@ static void check_append(const char *fmt, ...) {
  * Requirement checks
  * ---------------------------------------------------------------------------*/
 
-static int check_root(void) {
+static bool check_root(void) {
   is_root = (getuid() == 0);
   return is_root;
 }
 
-int check_ns(int flag, const char *name) {
+bool check_ns(int flag, const char *name) {
   /* 1. Fast check for kernel support via /proc */
   char path[PATH_MAX];
   snprintf(path, sizeof(path), "/proc/self/ns/%s", name);
   if (access(path, F_OK) != 0)
-    return 0;
+    return false;
 
   /* 2. Functional check: Try to actually unshare.
    * We fork because unshare() affects the current process. */
   pid_t p = fork();
   if (p < 0)
-    return 0;
+    return false;
 
   if (p == 0) {
     if (unshare(flag) < 0) {
@@ -68,42 +68,42 @@ int check_ns(int flag, const char *name) {
 
   int status;
   waitpid(p, &status, 0);
-  return (WIFEXITED(status) && WEXITSTATUS(status) == 0);
+  return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
-static int check_pivot_root(void) {
+static bool check_pivot_root(void) {
   /* Probe for pivot_root syscall presence without actually executing it
    * with dangerous arguments. We check if the syscall is implemented
    * by passing invalid pointers (-1) or NULLs; if it returns ENOSYS,
    * it's missing. If it returns EFAULT or EINVAL, it exists. */
-  if (syscall(__NR_pivot_root, NULL, NULL) < 0 && errno == ENOSYS)
-    return 0;
-  return 1;
+  if (syscall(__NR_pivot_root, nullptr, nullptr) < 0 && errno == ENOSYS)
+    return false;
+  return true;
 }
 
-static int check_loop(void) { return access("/dev/loop-control", F_OK) == 0; }
+static bool check_loop(void) { return access("/dev/loop-control", F_OK) == 0; }
 
-static int check_seccomp(void) {
+static bool check_seccomp(void) {
   /* Probe for SECCOMP_MODE_FILTER support */
   return (prctl(PR_GET_SECCOMP, 0, 0, 0, 0) >= 0 || errno == EINVAL);
 }
 
-static int check_kernel_version_supported(void) {
+static bool check_kernel_version_supported(void) {
   int major = 0, minor = 0;
   if (get_kernel_version(&major, &minor) < 0)
-    return 0;
+    return false;
   if (major < MIN_KERNEL_MAJOR)
-    return 0;
+    return false;
   if (major == MIN_KERNEL_MAJOR && minor < MIN_KERNEL_MINOR)
-    return 0;
-  return 1;
+    return false;
+  return true;
 }
 
 /* ---------------------------------------------------------------------------
  * Minimal check for 'start' (used internaly)
  * ---------------------------------------------------------------------------*/
 
-int check_requirements_hw(int hw_access) {
+int check_requirements_hw(bool hw_access) {
   int missing = 0;
 
   if (!check_root()) {
@@ -171,15 +171,15 @@ int check_requirements_hw(int hw_access) {
  * ---------------------------------------------------------------------------*/
 
 /* Helper to check and close an FD-based feature probe */
-static int check_fd_feature(int fd) {
+static bool check_fd_feature(int fd) {
   if (fd >= 0) {
     close(fd);
-    return 1;
+    return true;
   }
-  return 0;
+  return false;
 }
 
-void print_check(const char *name, const char *desc, int status,
+void print_check(const char *name, const char *desc, bool status,
                  const char *level) {
   const char *c_sym =
       status ? C_GREEN : (strcmp(level, "MUST") == 0 ? C_RED : C_YELLOW);
@@ -222,54 +222,54 @@ int check_requirements_detailed(void) {
   snprintf(kver_desc, sizeof(kver_desc),
            "Linux kernel version %d.%d.0 or later", MIN_KERNEL_MAJOR,
            MIN_KERNEL_MINOR);
-  int kver_ok = check_kernel_version_supported();
+  bool kver_ok = check_kernel_version_supported();
   if (!kver_ok)
     missing_must++;
   print_check("Linux version", kver_desc, kver_ok, "MUST");
 
-  int has_pid_ns = check_ns(CLONE_NEWPID, "pid");
+  bool has_pid_ns = check_ns(CLONE_NEWPID, "pid");
   if (!has_pid_ns)
     missing_must++;
   print_check("PID namespace", "Process ID namespace isolation", has_pid_ns,
               "MUST");
 
-  int has_mnt_ns = check_ns(CLONE_NEWNS, "mnt");
+  bool has_mnt_ns = check_ns(CLONE_NEWNS, "mnt");
   if (!has_mnt_ns)
     missing_must++;
   print_check("Mount namespace", "Filesystem namespace isolation", has_mnt_ns,
               "MUST");
 
-  int has_uts_ns = check_ns(CLONE_NEWUTS, "uts");
+  bool has_uts_ns = check_ns(CLONE_NEWUTS, "uts");
   if (!has_uts_ns)
     missing_must++;
   print_check("UTS namespace", "Hostname/domainname isolation", has_uts_ns,
               "MUST");
 
-  int has_ipc_ns = check_ns(CLONE_NEWIPC, "ipc");
+  bool has_ipc_ns = check_ns(CLONE_NEWIPC, "ipc");
   if (!has_ipc_ns)
     missing_must++;
   print_check("IPC namespace", "Inter-process communication isolation",
               has_ipc_ns, "MUST");
 
-  int has_pivot = check_pivot_root();
+  bool has_pivot = check_pivot_root();
   if (!has_pivot)
     missing_must++;
   print_check("pivot_root syscall", "Kernel support for the pivot_root syscall",
               has_pivot, "MUST");
 
-  int has_proc_fs = access("/proc/self", F_OK) == 0;
+  bool has_proc_fs = access("/proc/self", F_OK) == 0;
   if (!has_proc_fs)
     missing_must++;
   print_check("/proc filesystem", "Proc filesystem mount support", has_proc_fs,
               "MUST");
 
-  int has_sys_fs = access("/sys/kernel", F_OK) == 0;
+  bool has_sys_fs = access("/sys/kernel", F_OK) == 0;
   if (!has_sys_fs)
     missing_must++;
   print_check("/sys filesystem", "Sys filesystem mount support", has_sys_fs,
               "MUST");
 
-  int has_seccomp = check_seccomp();
+  bool has_seccomp = check_seccomp();
   if (!has_seccomp)
     missing_must++;
   print_check("Seccomp support", "Kernel support for Seccomp (Bypass Mode)",
@@ -306,7 +306,7 @@ int check_requirements_detailed(void) {
   print_check("Cgroup namespace", "Control Group namespace isolation",
               check_ns(CLONE_NEWCGROUP, "cgroup"), "OPT");
 
-  int has_devtmpfs = grep_file("/proc/filesystems", "devtmpfs");
+  bool has_devtmpfs = grep_file("/proc/filesystems", "devtmpfs");
   print_check(
       "devtmpfs support",
       "Required for hardware access mode; tmpfs fallback used otherwise",
@@ -333,7 +333,7 @@ int check_requirements_detailed(void) {
                "\nThese checks are not required for " PROJECT_NAME " to work, "
                "but are recommended for hardened kernels:\n\n");
 
-  int has_user_ns = access("/proc/self/ns/user", F_OK) == 0;
+  bool has_user_ns = access("/proc/self/ns/user", F_OK) == 0;
   print_check("CONFIG_USER_NS disabled",
               "Kernel exposes user namespace support, which " PROJECT_NAME " "
               "does not require and hardened kernels should disable",

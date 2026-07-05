@@ -15,7 +15,7 @@
  * pipe; the monitor (or its intermediate child) writes the container init PID
  * through it on the first boot cycle, then closes it.
  * ---------------------------------------------------------------------------*/
-void monitor_run(struct config *cfg, int sync_pipe_write) {
+void monitor_run(cfg_t *cfg, int sync_pipe_write) {
   int sync_pipe[2];
   sync_pipe[0] = -1;
   sync_pipe[1] = sync_pipe_write;
@@ -55,7 +55,7 @@ void monitor_run(struct config *cfg, int sync_pipe_write) {
    * CGROUP SELECTION: Only enable cgroupns when V2 is active.
    * If --force-cgroupv1 is set, we skip cgroupns so setup_cgroups()
    * has full rights to create named V1 hierarchies from the host context. */
-  int cg_ns_ok = (access("/proc/self/ns/cgroup", F_OK) == 0) &&
+  bool cg_ns_ok = (access("/proc/self/ns/cgroup", F_OK) == 0) &&
                  (cgroup_host_is_v2() && !cfg->force_cgroupv1);
   if (cg_ns_ok) {
     /* To get isolation from a cgroup namespace, we must be in a sub-cgroup
@@ -144,7 +144,7 @@ void monitor_run(struct config *cfg, int sync_pipe_write) {
   if (unshare(ns_flags) < 0)
     log_die("unshare failed: %s", strerror(errno));
 
-  int stdio_redirected = 0;
+  bool stdio_redirected = false;
 
   /* Reboot-aware boot loop
    * Each iteration forks an intermediate child that creates a fresh PID
@@ -187,7 +187,7 @@ reboot_loop:;
    * the intermediate inherits the user's stdout/stderr (e.g. a pipe)
    * and holds it open indefinitely, causing CLI hangs in direct mode. */
   if (!cfg->foreground && !stdio_redirected) {
-    _cleanup_close_ int devnull = open("/dev/null", O_RDWR);
+    auto_close int devnull = open("/dev/null", O_RDWR);
     if (devnull >= 0) {
       dup2(devnull, 0);
       /* Note: we don't redirect 1 and 2 here yet because we want to see
@@ -235,7 +235,7 @@ reboot_loop:;
      * retains the original terminal fds until it redirects to /dev/console
      * at its own step 24. */
     if (!cfg->foreground) {
-      _cleanup_close_ int devnull = open("/dev/null", O_RDWR);
+      auto_close int devnull = open("/dev/null", O_RDWR);
       if (devnull >= 0) {
         dup2(devnull, 0);
         dup2(devnull, 1);
@@ -289,13 +289,13 @@ reboot_loop:;
 
   /* Stdio handling for monitor in background mode (first boot only) */
   if (!cfg->foreground && !stdio_redirected) {
-    _cleanup_close_ int devnull = open("/dev/null", O_RDWR);
+    auto_close int devnull = open("/dev/null", O_RDWR);
     if (devnull >= 0) {
       dup2(devnull, 0);
       dup2(devnull, 1);
       dup2(devnull, 2);
     }
-    stdio_redirected = 1;
+    stdio_redirected = true;
   }
 
   /* MONITOR waits for intermediate to complete */
@@ -317,8 +317,8 @@ reboot_loop:;
     sigset_t mask;
     sigemptyset(&mask);
     sigaddset(&mask, SIGCHLD);
-    sigprocmask(SIG_BLOCK, &mask, NULL);
-    _cleanup_close_ int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+    sigprocmask(SIG_BLOCK, &mask, nullptr);
+    auto_close int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
 
     while (1) {
       pid_t r = waitpid(mid_pid, &status, WNOHANG);
@@ -356,7 +356,7 @@ reboot_loop:;
       }
     }
 
-    sigprocmask(SIG_UNBLOCK, &mask, NULL);
+    sigprocmask(SIG_UNBLOCK, &mask, nullptr);
   }
 
   /* Log what monitor saw */
@@ -406,7 +406,7 @@ reboot_loop:;
       snprintf(run_dir, sizeof(run_dir), "/proc/%d/root/run",
                cfg->container_pid);
       mkdir(run_dir, 0755);
-      _cleanup_close_ int fd = safe_openat_proc(cfg->container_pid, "run/.boot-uuid",
+      auto_close int fd = safe_openat_proc(cfg->container_pid, "run/.boot-uuid",
                                 O_WRONLY | O_CREAT | O_TRUNC, 0644);
       if (fd >= 0) {
         size_t ulen = strlen(cfg->uuid);
@@ -417,9 +417,9 @@ reboot_loop:;
     /* Reload from workspace (canonical path the user edits) */
     {
       free_config_binds(cfg);
-      int old_force_cgv1 = cfg->force_cgroupv1;
+      bool old_force_cgv1 = cfg->force_cgroupv1;
 
-      struct config reboot_cfg = *cfg;
+      cfg_t reboot_cfg = *cfg;
       if (config_load_by_name(cfg->container_name, &reboot_cfg) == 0) {
         /* Cgroup namespace is locked at monitor startup - can't change */
         if (reboot_cfg.force_cgroupv1 != old_force_cgv1) {
@@ -434,7 +434,7 @@ reboot_loop:;
       }
     }
 
-    cfg->reboot_cycle = 1;
+    cfg->reboot_cycle = true;
     clock_gettime(CLOCK_BOOTTIME, &cfg->start_time);
 
     /* Refresh ns_inode: new container has a new PID namespace inode.
@@ -468,7 +468,7 @@ reboot_loop:;
    * Writing our PID to the root cgroup.procs atomically migrates us out.
    * This is safe: the monitor is about to _exit() anyway. */
   {
-    _cleanup_close_ int root_fd = open("/sys/fs/cgroup/cgroup.procs", O_WRONLY | O_CLOEXEC);
+    auto_close int root_fd = open("/sys/fs/cgroup/cgroup.procs", O_WRONLY | O_CLOEXEC);
     if (root_fd >= 0) {
       char pid_s[32];
       int len = snprintf(pid_s, sizeof(pid_s), "%d", (int)getpid());
@@ -477,7 +477,7 @@ reboot_loop:;
     }
   }
 
-  cleanup_container_resources(cfg, 0, 0);
+  cleanup_container_resources(cfg, false, false);
 
 monitor_cleanup_and_exit:
   /* Free dynamically allocated configuration members before exit */

@@ -12,6 +12,9 @@ set(CMAKE_C_EXTENSIONS ON)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
+# set(CMAKE_C_CLANG_TIDY clang-tidy)
+# set(CMAKE_CXX_CLANG_TIDY clang-tidy)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/src/include/version.h.in"
@@ -22,21 +25,30 @@ configure_file(
 add_executable(asc
 	src/main.c
 	src/utils.c
-	src/seccomp.c
-	src/mount.c
-	src/cgroup.c
-	src/terminal.c
-	src/console.c
-	src/pid.c
-	src/boot.c
-	src/config.c
-	src/container.c
-	src/monitor.c
+	src/fs_mount.c
+	src/core/state.c
+	src/core/init.c
+	src/core/config.c
+	src/core/container.c
+	src/core/monitor.c
 	src/hardware.c
-	src/netlink.c
-	src/daemon.c
-	src/check.c
-	src/virtualize.c
+	src/core/daemon.c
+	src/core/check.c
+	src/utils/string.c
+	src/utils/fileio.c
+	src/utils/logger.c
+	src/utils/workspace.c
+	src/utils/process.c
+	src/oci/jail.c
+	src/oci/seccomp.c
+	src/oci/cgroup.c
+	src/oci/caps.c
+	src/platform/blockdev.c
+	src/platform/devices.c
+	src/platform/pty.c
+	src/platform/console.c
+	src/platform/netlink.c
+	src/platform/virtual.c
 )
 target_include_directories(asc PRIVATE 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/include"
@@ -48,6 +60,7 @@ target_link_libraries(asc PRIVATE
 target_compile_options(asc PRIVATE
 	-ffunction-sections
 	-fdata-sections
+	-O3
 	-Wall
 	-Wextra
 	-Wshadow
@@ -55,6 +68,7 @@ target_compile_options(asc PRIVATE
 )
 target_link_options(asc PRIVATE
 	-Wl,--gc-sections
+	-Wl,-s
 	-static
 )
 

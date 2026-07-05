@@ -14,26 +14,25 @@
  * 3. Otherwise (Legacy), bind-mount the container's subset from the host.
  */
 
-/* Scan mountinfo for any host cgroup2 mount (e.g. /dev/cg2_bpf on Android).
- * Returns 1 and fills 'buf' if found. */
-static int find_host_cgroup2_mount(char *buf, size_t size) {
-  _cleanup_fclose_ FILE *f = fopen("/proc/self/mountinfo", "re");
+/* Scans mountinfo to find any cgroup2 mount - covers /dev/cg2_bpf (Android)
+ * and /sys/fs/cgroup placed by cgroup_host_bootstrap(). */
+bool cgroup_host_is_v2(void) {
+  auto_fclose FILE *f = fopen("/proc/self/mountinfo", "re");
   if (!f)
     return 0;
 
   char line[2048];
-  int found = 0;
   while (fgets(line, sizeof(line), f)) {
     char *dash = strstr(line, " - ");
     if (!dash)
       continue;
+
     char fstype[16];
     if (sscanf(dash + 3, "%15s", fstype) != 1)
       continue;
     if (strcmp(fstype, "cgroup2") != 0)
       continue;
 
-    /* Extract mountpoint (field 5) */
     char *p = line;
     for (int i = 0; i < 4; i++) {
       p = strchr(p, ' ');
@@ -43,29 +42,23 @@ static int find_host_cgroup2_mount(char *buf, size_t size) {
     }
     if (!p)
       continue;
+
     char *mp_end = strchr(p, ' ');
     if (!mp_end)
       continue;
     *mp_end = '\0';
 
-    /* Skip ds-fork-internal mounts to avoid false positives on restart */
     if (strstr(p, "/" PROJECT_NAME "/"))
       continue;
 
-    if (buf)
-      safe_strncpy(buf, p, size);
-    found = 1;
-    break;
+    return true;
   }
-  return found;
+
+  return false;
 }
 
-/* Scans mountinfo to find any cgroup2 mount - covers /dev/cg2_bpf (Android)
- * and /sys/fs/cgroup placed by cgroup_host_bootstrap(). */
-int cgroup_host_is_v2(void) { return find_host_cgroup2_mount(NULL, 0); }
-
 /* Returns 1 if the kernel supports cgroup2 (check /proc/filesystems). */
-int cgroup_kernel_supports_v2(void) {
+bool cgroup_kernel_supports_v2(void) {
   return (grep_file("/proc/filesystems", "cgroup2") > 0);
 }
 
@@ -73,14 +66,14 @@ int cgroup_kernel_supports_v2(void) {
  * Android recovery kernels support cgroup2 but only mount it at /dev/cg2_bpf;
  * systemd needs it at /sys/fs/cgroup. Sequence: mkdir -> tmpfs anchor ->
  * cgroup2. */
-void cgroup_host_bootstrap(int force_cgroupv1) {
+void cgroup_host_bootstrap(bool force_cgroupv1) {
+  struct statfs sfs;
   if (force_cgroupv1)
     return;
 
   /* Already done */
-  struct statfs sfs;
   if (statfs("/sys/fs/cgroup", &sfs) == 0 &&
-      (unsigned long)sfs.f_type == (unsigned long)CGROUP2_SUPER_MAGIC)
+      sfs.f_type == CGROUP2_SUPER_MAGIC)
     return;
 
   /* No probe_cgroup2_mount(): mkdtemp fails on ramfs roots (no /tmp).
@@ -100,8 +93,8 @@ void cgroup_host_bootstrap(int force_cgroupv1) {
 
   /* tmpfs anchor needed: cgroup2 can't layer directly on ramfs */
   if (statfs("/sys/fs/cgroup", &sfs) == 0 &&
-      (unsigned long)sfs.f_type != (unsigned long)TMPFS_MAGIC &&
-      (unsigned long)sfs.f_type != (unsigned long)CGROUP2_SUPER_MAGIC) {
+      sfs.f_type != TMPFS_MAGIC &&
+      sfs.f_type != CGROUP2_SUPER_MAGIC) {
     if (mount("none", "/sys/fs/cgroup", "tmpfs",
               MS_NOSUID | MS_NODEV | MS_NOEXEC, "mode=755,size=16M") != 0) {
       log_error("[CGROUP] Failed to mount tmpfs on /sys/fs/cgroup: %s",
@@ -112,7 +105,7 @@ void cgroup_host_bootstrap(int force_cgroupv1) {
   }
 
   if (mount("none", "/sys/fs/cgroup", "cgroup2",
-            MS_NOSUID | MS_NODEV | MS_NOEXEC, NULL) != 0) {
+            MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) != 0) {
     log_error("Failed to mount cgroup2 on /sys/fs/cgroup: %s", strerror(errno));
     return;
   }
@@ -135,7 +128,7 @@ void cgroup_host_bootstrap(int force_cgroupv1) {
  * get symlinks for their secondary names, matching historical behaviour.
  */
 static void mount_v1_controllers(void) {
-  _cleanup_fclose_ FILE *f = fopen("/proc/cgroups", "re");
+  auto_fclose FILE *f = fopen("/proc/cgroups", "re");
   if (!f)
     return;
 
@@ -173,7 +166,7 @@ static void mount_v1_controllers(void) {
   }
 }
 
-int setup_cgroups(int force_cgroupv1) {
+int setup_cgroups(bool force_cgroupv1) {
   cgroup_host_bootstrap(force_cgroupv1);
 
   if (access("sys/fs/cgroup", F_OK) != 0) {
@@ -186,22 +179,22 @@ int setup_cgroups(int force_cgroupv1) {
               MS_NOSUID | MS_NODEV | MS_NOEXEC, "mode=755,size=16M") < 0)
     return -1;
 
-  int v2_active = cgroup_host_is_v2() && !force_cgroupv1;
-  int systemd_setup_done = 0;
+  bool v2_active = cgroup_host_is_v2() && !force_cgroupv1;
+  bool systemd_setup_done = false;
 
   if (v2_active) {
     /* Always mount a fresh cgroup2 hierarchy within the container's
      * cgroup namespace. Isolation is handled by the kernel namespace. */
     if (mount("cgroup2", "sys/fs/cgroup", "cgroup2",
-              MS_NOSUID | MS_NODEV | MS_NOEXEC, NULL) == 0) {
-      systemd_setup_done = 1;
+              MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) == 0) {
+      systemd_setup_done = true;
     } else {
       log_error("Failed to mount cgroup2: %s", strerror(errno));
     }
   } else {
     /* V1 PATH (force_cgroupv1): Synthesize fresh mounts for all controllers. */
     mount_v1_controllers();
-    systemd_setup_done = 1; /* handled via systemd named cgroup below */
+    systemd_setup_done = true; /* handled via systemd named cgroup below */
   }
 
   /* Ensure a systemd cgroup hierarchy exists for systemd containers.
@@ -215,7 +208,7 @@ int setup_cgroups(int force_cgroupv1) {
         return -1;
       }
     }
-    systemd_setup_done = 1;
+    systemd_setup_done = true;
   }
 
   if (!systemd_setup_done) {
@@ -256,14 +249,14 @@ int setup_cgroups(int force_cgroupv1) {
  *   2. Retry loop: for older kernels without cgroup.kill, retry rmdir
  *      with short sleeps to let the async cleanup complete. */
 static void rmdir_cgroup_tree(const char *path) {
-  _cleanup_closedir_ DIR *d = opendir(path);
+  auto_closedir DIR *d = opendir(path);
   if (!d) {
     rmdir(path);
     return;
   }
 
   struct dirent *de;
-  while ((de = readdir(d)) != NULL) {
+  while ((de = readdir(d)) != nullptr) {
     if (de->d_name[0] == '.')
       continue;
     if (de->d_type != DT_DIR)
@@ -275,8 +268,6 @@ static void rmdir_cgroup_tree(const char *path) {
     strncat(child, de->d_name, sizeof(child) - strlen(child) - 1);
     rmdir_cgroup_tree(child);
   }
-  closedir(d);
-  d = NULL;
 
   /* 1. cgroup.kill - available on kernel 5.14+.
    *    Writing "1" sends SIGKILL to every process in the subtree
@@ -285,7 +276,7 @@ static void rmdir_cgroup_tree(const char *path) {
   safe_strncpy(kill_path, path, sizeof(kill_path));
   strncat(kill_path, "/cgroup.kill", sizeof(kill_path) - strlen(kill_path) - 1);
   if (access(kill_path, W_OK) == 0) {
-    _cleanup_close_ int kfd = open(kill_path, O_WRONLY | O_CLOEXEC);
+    auto_close int kfd = open(kill_path, O_WRONLY | O_CLOEXEC);
     if (kfd >= 0) {
       if (write(kfd, "1", 1) < 0) {
       }
@@ -325,12 +316,12 @@ void cgroup_cleanup_container(const char *container_name) {
   char safe_name[256];
   sanitize_container_name(container_name, safe_name, sizeof(safe_name));
 
-  _cleanup_closedir_ DIR *d = opendir("/sys/fs/cgroup");
+  auto_closedir DIR *d = opendir("/sys/fs/cgroup");
   if (!d)
     return;
 
   struct dirent *de;
-  while ((de = readdir(d)) != NULL) {
+  while ((de = readdir(d)) != nullptr) {
     if (de->d_name[0] == '.')
       continue;
 
@@ -351,10 +342,8 @@ void cgroup_cleanup_container(const char *container_name) {
   }
 }
 
-static int host_supports_v2_cached = -1;
-
-void print_cgroup_status(struct config *cfg) {
-  int limits_set = (cfg->memory_limit || cfg->cpu_quota || cfg->pids_limit);
+void print_cgroup_status(cfg_t *cfg) {
+  bool limits_set = (cfg->memory_limit || cfg->cpu_quota || cfg->pids_limit);
 
   if (cfg->force_cgroupv1) {
     log_warn("Using legacy Cgroup V1 hierarchy (forced by --force-cgroupv1)");
@@ -365,10 +354,9 @@ void print_cgroup_status(struct config *cfg) {
     return;
   }
 
-  if (host_supports_v2_cached == -1)
-    host_supports_v2_cached = cgroup_kernel_supports_v2();
+  bool host_supports_v2 = cgroup_kernel_supports_v2();
 
-  if (!host_supports_v2_cached) {
+  if (!host_supports_v2) {
     log_warn("Host does not support Cgroup V2 (falling back to legacy V1)");
     if (limits_set) {
       log_warn(
@@ -379,7 +367,7 @@ void print_cgroup_status(struct config *cfg) {
 }
 
 /* Returns 1 if 'name' appears in a space/newline-separated controller list. */
-static int ctrl_in_list(const char *list, const char *name) {
+static bool ctrl_in_list(const char *list, const char *name) {
   const char *p = list;
   size_t nlen = strlen(name);
   while (*p) {
@@ -387,27 +375,27 @@ static int ctrl_in_list(const char *list, const char *name) {
       p++;
     if (strncmp(p, name, nlen) == 0 &&
         (p[nlen] == ' ' || p[nlen] == '\n' || p[nlen] == '\0'))
-      return 1;
+      return true;
     while (*p && *p != ' ' && *p != '\n')
       p++;
   }
-  return 0;
+  return false;
 }
 
 /* Public wrapper for cross-TU use (e.g. container.c). */
-int cg_word_in_list(const char *list, const char *name) {
+bool cg_word_in_list(const char *list, const char *name) {
   return ctrl_in_list(list, name);
 }
 
 /* Check controller availability before touching any cgroup files. */
-static int ctrl_supported_v2(const char *cg_path, const char *name) {
+static bool ctrl_supported_v2(const char *cg_path, const char *name) {
   if (strlen(cg_path) > PATH_MAX - 32)
-    return 0;
+    return false;
   char buf[256];
   char path[PATH_MAX + 64];
   snprintf(path, sizeof(path), "%s/cgroup.controllers", cg_path);
   if (read_file(path, buf, sizeof(buf)) <= 0)
-    return 0;
+    return false;
   return ctrl_in_list(buf, name);
 }
 
@@ -424,7 +412,7 @@ static long long parse_cgroup_ll(const char *buf) {
   return v;
 }
 
-int cgroup_apply_limits(struct config *cfg) {
+int cgroup_apply_limits(cfg_t *cfg) {
   if (!cfg->memory_limit && !cfg->cpu_quota && !cfg->pids_limit)
     return 0;
 
@@ -498,7 +486,7 @@ int cgroup_apply_limits(struct config *cfg) {
   return err ? -1 : 0;
 }
 
-int cgroup_get_usage(struct config *cfg, long long *mem, long long *cpu_us,
+int cgroup_get_usage(cfg_t *cfg, long long *mem, long long *cpu_us,
                      long long *pids) {
   if (mem)
     *mem = -1;
@@ -510,7 +498,7 @@ int cgroup_get_usage(struct config *cfg, long long *mem, long long *cpu_us,
   char safe_name[256];
   sanitize_container_name(cfg->container_name, safe_name, sizeof(safe_name));
 
-  int v2 = cgroup_host_is_v2();
+  bool v2 = cgroup_host_is_v2();
   /* Keep cg strictly within PATH_MAX-64 so the suffix appended
    * into path never overflows the PATH_MAX+64 path buffer. */
   char cg[PATH_MAX - 64];

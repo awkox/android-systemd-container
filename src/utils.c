@@ -11,328 +11,11 @@
  * String helpers
  * ---------------------------------------------------------------------------*/
 
-void safe_strncpy(char *dst, const char *src, size_t size) {
-  if (!dst || size == 0)
-    return;
-  if (!src) {
-    dst[0] = '\0';
-    return;
-  }
-  size_t len = strlen(src);
-  if (len >= size) {
-    log_warn("String truncation: src='%s' (len=%zu) to size=%zu", src, len,
-             size);
-  }
-  snprintf(dst, size, "%s", src);
-}
-
-/* Mirrors ContainerManager.sanitizeContainerName() in the Android app.
- * Replaces spaces with dashes so directory names are consistent. */
-void sanitize_container_name(const char *name, char *out, size_t size) {
-  size_t i;
-  for (i = 0; i < size - 1 && name[i] != '\0'; i++)
-    out[i] = (name[i] == ' ') ? '-' : name[i];
-  out[i] = '\0';
-}
-
-/* ---------------------------------------------------------------------------
- * Relative-path resolution
- *
- * The daemon calls chdir("/") inside daemonize(), so any relative path
- * captured from the user's CWD must be made absolute BEFORE we reach the
- * daemonize()/reexec() boundary.  resolve_argv_paths() is called once
- * in main() while CWD is still the user's directory.
- *
- * Strategy:
- *   1. Try realpath(3) - handles .., symlinks, and canonicalises the path.
- *      This works for paths that already exist on disk.
- *   2. For paths that do not exist yet (e.g. a new rootfs image being
- *      created), fall back to a plain cwd-join.  We still strip leading ./
- *      sequences so the result is always absolute.
- * ---------------------------------------------------------------------------*/
-
-char *resolve_path_arg(const char *path) {
-  if (!path || !*path)
-    return strdup("");
-
-  const char *p = path;
-  _cleanup_free_ char *to_free = NULL;
-
-  /* Handle ~/ expansion */
-  if (p[0] == '~' && (p[1] == '/' || p[1] == '\0')) {
-    const char *home = getenv("HOME");
-    if (home) {
-      size_t hlen = strlen(home);
-      size_t plen = strlen(p + 1);
-      to_free = malloc(hlen + plen + 1);
-      if (to_free) {
-        memcpy(to_free, home, hlen);
-        memcpy(to_free + hlen, p + 1, plen + 1);
-        p = to_free;
-      }
-    }
-  }
-
-  if (p[0] == '/') {
-    char *res = strdup(p);
-    if (res) {
-      size_t len = strlen(res);
-      while (len > 1 && res[len - 1] == '/') {
-        res[len - 1] = '\0';
-        len--;
-      }
-    }
-    return res;
-  }
-
-  /* Fast path: realpath handles .., symlinks, and validates existence. */
-  char resolved[PATH_MAX];
-  if (realpath(p, resolved))
-    return strdup(resolved);
-
-  /* Path does not exist yet - build an absolute path from the current CWD.
-   * Strip leading ./ noise before joining so the result stays clean. */
-  const char *suffix = p;
-  while (suffix[0] == '.' && suffix[1] == '/')
-    suffix += 2;
-  if (!*suffix) {
-    /* Input was pure "./" - resolve to CWD itself. */
-    char cwd[PATH_MAX];
-    return strdup(getcwd(cwd, sizeof(cwd)) ? cwd : ".");
-  }
-
-  char cwd[PATH_MAX];
-  if (!getcwd(cwd, sizeof(cwd)))
-    return strdup(p);
-
-  size_t clen = strlen(cwd), plen = strlen(suffix);
-  if (clen + 1 + plen >= PATH_MAX)
-    return strdup(p);
-
-  char *out = malloc(clen + 1 + plen + 1);
-  if (!out)
-    return strdup(p);
-  memcpy(out, cwd, clen);
-  out[clen] = '/';
-  memcpy(out + clen + 1, suffix, plen + 1); /* copies the NUL terminator */
-  return out;
-}
-
-/*
- * Table of options whose next argument (or = suffix) is a filesystem path.
- * Keeps resolve_argv_paths() free of hard-coded option names.
- */
-static const struct {
-  const char *opt;
-} path_opts[] = {
-    {"--config"}, {"-C"}, {NULL},
-};
-
-void resolve_argv_paths(int argc, char **argv) {
-  for (int i = 0; i < argc; i++) {
-    const char *arg = argv[i];
-    if (!arg || arg[0] != '-') /* fast skip: non-option args are not paths */
-      continue;
-
-    for (int j = 0; path_opts[j].opt; j++) {
-      const char *opt = path_opts[j].opt;
-      size_t olen = strlen(opt);
-
-      /* "--opt=VALUE" form */
-      if (strncmp(arg, opt, olen) == 0 && arg[olen] == '=') {
-        const char *val = arg + olen + 1;
-        if (!*val || val[0] == '/')
-          break; /* absolute paths don't need resolution */
-        char *resolved = resolve_path_arg(val);
-        if (resolved) {
-          char *new_arg = malloc(olen + 1 + strlen(resolved) + 1);
-          if (new_arg) {
-            memcpy(new_arg, opt, olen);
-            new_arg[olen] = '=';
-            strcpy(new_arg + olen + 1, resolved);
-            argv[i] = new_arg; /* argv[i] was a kernel-provided pointer; safe to
-                                  replace */
-          }
-          free(resolved);
-        }
-        break;
-      }
-
-      /* "--opt VALUE" form (value is the next element) */
-      if (strcmp(arg, opt) == 0 && i + 1 < argc) {
-        const char *val = argv[i + 1];
-        if (!val || !*val ||val[0] == '/')
-          continue;
-        char *resolved = resolve_path_arg(val);
-        if (resolved)
-          argv[i + 1] = resolved; /* kernel-provided string; safe to replace */
-        break;
-      }
-    }
-  }
-}
-
-int is_ramfs(const char *path) {
+bool is_ramfs(const char *path) {
   struct statfs sfs;
   if (statfs(path, &sfs) < 0)
-    return 0;
-  return (sfs.f_type == RAMFS_MAGIC || sfs.f_type == TMPFS_MAGIC);
-}
-
-int is_subpath(const char *parent, const char *child) {
-  _cleanup_free_ char *real_parent = resolve_path_arg(parent);
-  _cleanup_free_ char *real_child = resolve_path_arg(child);
-
-  if (!real_parent || !real_child || !real_parent[0] || !real_child[0])
-    return 0;
-
-  size_t len = strlen(real_parent);
-
-  /* Special case for the root directory */
-  if (len == 1 && real_parent[0] == '/')
-    return 1;
-
-  if (strncmp(real_parent, real_child, len) == 0)
-    if (real_child[len] == '\0' || real_child[len] == '/')
-      return 1;
-
-  return 0;
-}
-
-int mkdir_p(const char *path, mode_t mode) {
-  char tmp[PATH_MAX];
-  char *p = NULL;
-  size_t len;
-
-  int r = snprintf(tmp, sizeof(tmp), "%s", path);
-  if (r < 0 || (size_t)r >= sizeof(tmp)) {
-    errno = ENAMETOOLONG;
-    return -1;
-  }
-
-  len = strlen(tmp);
-  if (len == 0)
-    return 0;
-  if (tmp[len - 1] == '/')
-    tmp[len - 1] = '\0';
-
-  for (p = tmp + 1; *p; p++) {
-    if (*p == '/') {
-      *p = '\0';
-      if (mkdir(tmp, mode) < 0 && errno != EEXIST)
-        return -1;
-      *p = '/';
-    }
-  }
-  if (mkdir(tmp, mode) < 0 && errno != EEXIST)
-    return -1;
-  return 0;
-}
-
-/* Check if any path component (prefix) is a symbolic link.
- * lstat() does not follow the final component, so walking each prefix
- * with lstat() detects symlinks at ANY level — not just the final one.
- * Returns 1 if a symlink is found, 0 otherwise. */
-int path_has_symlink(const char *path) {
-  char tmp[PATH_MAX];
-  safe_strncpy(tmp, path, sizeof(tmp));
-  size_t len = strlen(tmp);
-  if (len == 0)
-    return 0;
-
-  /* Walk each '/' boundary and lstat the prefix */
-  for (char *p = tmp + 1; *p; p++) {
-    if (*p == '/') {
-      *p = '\0';
-      struct stat st;
-      if (lstat(tmp, &st) == 0 && S_ISLNK(st.st_mode)) {
-        return 1;
-      }
-      *p = '/';
-    }
-  }
-  /* Check the full path */
-  struct stat st;
-  if (lstat(tmp, &st) == 0 && S_ISLNK(st.st_mode))
-    return 1;
-  return 0;
-}
-
-static int remove_recursive_handler(const char *fpath, const struct stat *sb,
-                                    int tflag, struct FTW *ftwbuf) {
-  (void)sb;
-  (void)tflag;
-  (void)ftwbuf;
-  int r = remove(fpath);
-  if (r)
-    perror(fpath);
-  return r;
-}
-
-int remove_recursive(const char *path) {
-  return nftw(path, remove_recursive_handler, 64, FTW_DEPTH | FTW_PHYS);
-}
-
-/* ---------------------------------------------------------------------------
- * File I/O
- * ---------------------------------------------------------------------------*/
-
-int write_file(const char *path, const char *content) {
-  _cleanup_close_ int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
-  if (fd < 0)
-    return -1;
-
-  size_t len = strlen(content);
-  ssize_t w = write_all(fd, content, len);
-  int close_ret = close(fd);
-  fd = -1;
-
-  return (w == (ssize_t)len && close_ret == 0) ? 0 : -1;
-}
-
-ssize_t write_all(int fd, const void *buf, size_t count) {
-  const char *p = buf;
-  size_t remaining = count;
-  while (remaining > 0) {
-    ssize_t w = write(fd, p, remaining);
-    if (w < 0) {
-      if (errno == EINTR)
-        continue;
-      return -1;
-    }
-    p += w;
-    remaining -= (size_t)w;
-  }
-  return (ssize_t)count;
-}
-
-int read_file(const char *path, char *buf, size_t size) {
-  if (size == 0)
-    return -1;
-
-  _cleanup_close_ int fd = open(path, O_RDONLY | O_CLOEXEC);
-  if (fd < 0)
-    return -1;
-
-  ssize_t total_read = 0;
-  ssize_t r = 1;
-  while ((size_t)total_read < size - 1 &&
-         (r = read(fd, buf + total_read, size - 1 - (size_t)total_read)) > 0) {
-    total_read += r;
-  }
-
-  if (r < 0)
-    return -1;
-
-  buf[total_read] = '\0';
-
-  /* strip trailing newline and carriage return */
-  while (total_read > 0 &&
-         (buf[total_read - 1] == '\n' || buf[total_read - 1] == '\r')) {
-    buf[--total_read] = '\0';
-  }
-
-  return (int)total_read;
+    return false;
+  return sfs.f_type == RAMFS_MAGIC || sfs.f_type == TMPFS_MAGIC;
 }
 
 /* ---------------------------------------------------------------------------
@@ -346,7 +29,7 @@ int generate_uuid(char *buf, size_t size) {
   unsigned char raw[UUID_LEN / 2];
 
   /* Primary path: /dev/urandom */
-  _cleanup_close_ int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+  auto_close int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
   if (fd >= 0) {
     ssize_t r = read(fd, raw, sizeof(raw));
 
@@ -360,7 +43,7 @@ int generate_uuid(char *buf, size_t size) {
   }
 
   /* Fallback path: seeded rand() */
-  static int seeded = 0;
+  static bool seeded = false;
   if (!seeded) {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
@@ -369,7 +52,7 @@ int generate_uuid(char *buf, size_t size) {
         (unsigned int)(ts.tv_nsec ^ ts.tv_sec ^ getpid() ^ getppid());
 
     srand(seed);
-    seeded = 1;
+    seeded = true;
   }
 
   for (int i = 0; i < UUID_LEN / 2; i++)
@@ -383,72 +66,8 @@ int generate_uuid(char *buf, size_t size) {
 }
 
 /* ---------------------------------------------------------------------------
- * PID collection - read numeric entries from /proc
- * ---------------------------------------------------------------------------*/
-
-int collect_pids(pid_t **pids_out, size_t *count_out) {
-  if (!pids_out || !count_out)
-    return -1;
-
-  *pids_out = NULL;
-  *count_out = 0;
-
-  _cleanup_closedir_ DIR *d = opendir("/proc");
-  if (!d)
-    return -1;
-
-  size_t cap = 256;
-  size_t count = 0;
-
-  pid_t *pids = malloc(cap * sizeof(pid_t));
-  if (!pids)
-    return -1;
-
-  struct dirent *ent;
-  while ((ent = readdir(d)) != NULL) {
-
-    /* Do NOT trust ent->d_type.
-       Some filesystems (including Android /proc) return DT_UNKNOWN. */
-
-    char *end;
-    errno = 0;
-    long val = strtol(ent->d_name, &end, 10);
-
-    /* Must be a pure positive number */
-    if (errno != 0 || *end != '\0' || val <= 0)
-      continue;
-
-    if (count >= cap) {
-      cap *= 2;
-      pid_t *tmp = realloc(pids, cap * sizeof(pid_t));
-      if (!tmp) {
-        free(pids);
-        return -1;
-      }
-      pids = tmp;
-    }
-
-    pids[count++] = (pid_t)val;
-  }
-
-  *pids_out = pids;
-  *count_out = count;
-  return 0;
-}
-
-/* ---------------------------------------------------------------------------
  * /proc path helpers
  * ---------------------------------------------------------------------------*/
-
-int build_proc_root_path(pid_t pid, const char *suffix, char *buf,
-                         size_t size) {
-  int r;
-  if (suffix && suffix[0])
-    r = snprintf(buf, size, PROC_ROOT_FMT "%s", pid, suffix);
-  else
-    r = snprintf(buf, size, PROC_ROOT_FMT, pid);
-  return (r > 0 && (size_t)r < size) ? 0 : -1;
-}
 
 int parse_os_release(const char *rootfs_path, char *id_out, char *ver_out,
                      size_t out_size) {
@@ -503,17 +122,6 @@ int parse_os_release(const char *rootfs_path, char *id_out, char *ver_out,
 }
 
 /* ---------------------------------------------------------------------------
- * Grep file for a pattern (simple substring search)
- * ---------------------------------------------------------------------------*/
-
-int grep_file(const char *path, const char *pattern) {
-  char buf[16384];
-  if (read_file(path, buf, sizeof(buf)) < 0)
-    return -1;
-  return strstr(buf, pattern) ? 1 : 0;
-}
-
-/* ---------------------------------------------------------------------------
  * /proc/<pid>/environ reader
  * ---------------------------------------------------------------------------*/
 
@@ -524,7 +132,7 @@ int read_proc_environ(pid_t pid, const char *key, char *value, size_t size) {
   char path[PATH_MAX];
   snprintf(path, sizeof(path), "/proc/%d/environ", pid);
 
-  _cleanup_fclose_ FILE *f = fopen(path, "re");
+  auto_fclose FILE *f = fopen(path, "re");
   if (!f)
     return -1;
 
@@ -542,11 +150,11 @@ int read_proc_environ(pid_t pid, const char *key, char *value, size_t size) {
         break;
       fseek(f, pos - 1, SEEK_SET);
 
-      int matched = 1;
+      bool matched = true;
       for (int i = 0; i < keylen; i++) {
         int kc = fgetc(f);
         if (kc != (unsigned char)key[i]) {
-          matched = 0;
+          matched = false;
           break;
         }
       }
@@ -588,7 +196,7 @@ int safe_openat_proc(pid_t pid, const char *subpath, int flags, mode_t mode) {
    * MUST be followed (O_NOFOLLOW would fail on it). */
   char root[64];
   snprintf(root, sizeof(root), "/proc/%d/root", pid);
-  int dirfd = open(root, O_PATH | O_DIRECTORY | O_CLOEXEC);
+  auto_close int dirfd = open(root, O_PATH | O_DIRECTORY | O_CLOEXEC);
   if (dirfd < 0)
     return -1;
 
@@ -597,9 +205,9 @@ int safe_openat_proc(pid_t pid, const char *subpath, int flags, mode_t mode) {
   char tmp[PATH_MAX];
   safe_strncpy(tmp, subpath, sizeof(tmp));
 
-  char *save = NULL;
+  char *save = nullptr;
   char *comp = strtok_r(tmp, "/", &save);
-  char *next = strtok_r(NULL, "/", &save);
+  char *next = strtok_r(nullptr, "/", &save);
 
   while (comp && next) {
     int nextfd =
@@ -609,7 +217,7 @@ int safe_openat_proc(pid_t pid, const char *subpath, int flags, mode_t mode) {
       return -1;
     dirfd = nextfd;
     comp = next;
-    next = strtok_r(NULL, "/", &save);
+    next = strtok_r(nullptr, "/", &save);
   }
 
   /* Open the final component with the caller's flags + O_NOFOLLOW */
@@ -617,7 +225,6 @@ int safe_openat_proc(pid_t pid, const char *subpath, int flags, mode_t mode) {
   if (comp)
     fd = openat(dirfd, comp, flags | O_NOFOLLOW | O_CLOEXEC, mode);
 
-  close(dirfd);
   return fd;
 }
 
@@ -650,7 +257,7 @@ static int fw_remove_token(const char *buf, const char *token, char *out,
                            size_t out_size) {
   size_t token_len = strlen(token);
   const char *p = buf;
-  int first = 1;
+  bool first = true;
   out[0] = '\0';
 
   while (*p) {
@@ -665,7 +272,7 @@ static int fw_remove_token(const char *buf, const char *token, char *out,
               (seg_len < out_size - strlen(out) - 1)
                   ? seg_len
                   : out_size - strlen(out) - 1);
-      first = 0;
+      first = false;
     }
 
     if (!comma)
@@ -748,14 +355,14 @@ void firmware_path_remove(const char *fw_path) {
  * Safe Command Execution (fork + execvp)
  * ---------------------------------------------------------------------------*/
 
-static int internal_run(char *const argv[], int quiet) {
+static int internal_run(char *const argv[], bool quiet) {
   pid_t pid = fork();
   if (pid < 0)
     return -1;
 
   if (pid == 0) {
     if (quiet) {
-      _cleanup_close_ int devnull = open("/dev/null", O_RDWR);
+      auto_close int devnull = open("/dev/null", O_RDWR);
       if (devnull >= 0) {
         dup2(devnull, 1);
         dup2(devnull, 2);
@@ -774,7 +381,7 @@ static int internal_run(char *const argv[], int quiet) {
   return -1;
 }
 
-int run_command_quiet(char *const argv[]) { return internal_run(argv, 1); }
+int run_command_quiet(char *const argv[]) { return internal_run(argv, true); }
 
 /* ---------------------------------------------------------------------------
  * System helpers
@@ -789,180 +396,6 @@ int get_kernel_version(int *major, int *minor) {
     return -1;
 
   return 0;
-}
-
-void rotate_log(const char *path, size_t max_size) {
-  struct stat st;
-  if (stat(path, &st) == 0 && (size_t)st.st_size >= max_size) {
-    char old_path[PATH_MAX + 8];
-    snprintf(old_path, sizeof(old_path), "%s.old", path);
-    rename(path, old_path);
-  }
-}
-
-static void write_to_log_file(const char *name, const char *component,
-                              const char *raw_msg, int pre_opened_fd) {
-  if (!name || !name[0])
-    return;
-
-  struct timespec ts;
-  clock_gettime(CLOCK_REALTIME, &ts);
-  struct tm tm;
-  localtime_r(&ts.tv_sec, &tm);
-
-  /* Pre-opened FD path: survives pivot_root / mount namespace changes.
-   * dprintf() writes directly to the fd - no dup/fdopen/fclose overhead.
-   * O_APPEND (set at open time) makes each write atomic for small messages. */
-  if (pre_opened_fd >= 0) {
-    /* In-place rotation: truncate when over 2MB.
-     * rename() is not possible since the FD follows the inode, not the path. */
-    struct stat st;
-    if (fstat(pre_opened_fd, &st) == 0 &&
-        (size_t)st.st_size >= 2 * 1024 * 1024) {
-      if (ftruncate(pre_opened_fd, 0) < 0) {
-        /* best-effort, ignore */
-      }
-      if (lseek(pre_opened_fd, 0, SEEK_SET) == (off_t)-1) {
-        /* best-effort, ignore */
-      }
-    }
-    dprintf(pre_opened_fd, "[%04d-%02d-%02d %02d:%02d:%02d.%03ld] [%s] %s\n",
-            tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
-            tm.tm_sec, ts.tv_nsec / 1000000, component, raw_msg);
-    return;
-  }
-
-  /* Fallback: open by path (pre-pivot, monitor process, etc.) */
-  char log_dir[PATH_MAX];
-  char safe_log_name[256];
-  sanitize_container_name(name, safe_log_name, sizeof(safe_log_name));
-  snprintf(log_dir, sizeof(log_dir), "%.2048s/" RUNTIME_LOGS_SUBDIR "/%.256s",
-           get_runtime_dir(), safe_log_name);
-  mkdir_p(log_dir, 0755);
-
-  char log_path[PATH_MAX];
-  snprintf(log_path, sizeof(log_path), "%.4090s/log", log_dir);
-
-  rotate_log(log_path, 2 * 1024 * 1024);
-
-  _cleanup_fclose_ FILE *f = fopen(log_path, "ae"); /* append + close-on-exec */
-  if (!f)
-    return;
-
-  fprintf(f, "[%04d-%02d-%02d %02d:%02d:%02d.%03ld] [%s] %s\n",
-          tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
-          tm.tm_sec, ts.tv_nsec / 1000000, component, raw_msg);
-}
-__attribute__((format(printf, 4, 5))) void log_internal(const char *prefix,
-                                                        const char *color,
-                                                        int is_err,
-                                                        const char *fmt, ...) {
-  char raw_msg[8192];
-  va_list ap;
-  va_start(ap, fmt);
-  vsnprintf(raw_msg, sizeof(raw_msg), fmt, ap);
-  va_end(ap);
-
-  /* Always log to file if container name is known */
-  if (log_container_name[0]) {
-    write_to_log_file(log_container_name, "main", raw_msg, log_container_fd);
-  }
-
-  /* Decide if we should print to terminal */
-  if (log_silent && !is_err)
-    return;
-
-  /* Filter out [DEBUG] and [IPT] prefixes from terminal output */
-  if (!is_err) {
-    if (strncmp(raw_msg, "[DEBUG]", 7) == 0 ||
-        strncmp(raw_msg, "[CGROUP]", 8) == 0 ||
-        strncmp(raw_msg, "[VIRT]", 6) == 0 ||
-        strncmp(raw_msg, "[IPT]", 5) == 0 ||
-        strncmp(raw_msg, "[NET]", 5) == 0 ||
-        strncmp(raw_msg, "[SEC]", 5) == 0 ||
-        strncmp(raw_msg, "[GPU]", 5) == 0 || strncmp(raw_msg, "[FW]", 4) == 0 ||
-        strncmp(raw_msg, "[DHCP]", 6) == 0 ||
-        strncmp(raw_msg, "[VirGL]", 7) == 0 ||
-        strncmp(raw_msg, "[PulseAudio]", 12) == 0 ||
-        strncmp(raw_msg, "[X11]", 5) == 0) {
-      return;
-    }
-  }
-
-  FILE *out = is_err ? stderr : stdout;
-  fprintf(out,
-          "["
-          "%s"
-          "%s" C_RESET "] %s\r\n",
-          color, prefix, raw_msg);
-  fflush(out);
-}
-
-__attribute__((format(printf, 1, 2))) void die_internal(const char *fmt, ...) {
-  char raw_msg[8192];
-  va_list ap;
-  va_start(ap, fmt);
-  vsnprintf(raw_msg, sizeof(raw_msg), fmt, ap);
-  va_end(ap);
-
-  if (log_container_name[0]) {
-    write_to_log_file(log_container_name, "fatal", raw_msg, log_container_fd);
-  }
-
-  fprintf(stderr, "[" C_RED "-" C_RESET "] %s\r\n", raw_msg);
-  fflush(stderr);
-  exit(EXIT_FAILURE);
-}
-
-void write_monitor_debug_log(const char *name, const char *fmt, ...) {
-  if (!name || !name[0] || !fmt)
-    return;
-
-  char raw_msg[8192];
-  va_list ap;
-  va_start(ap, fmt);
-  vsnprintf(raw_msg, sizeof(raw_msg), fmt, ap);
-  va_end(ap);
-
-  write_to_log_file(name, "monitor", raw_msg, -1);
-}
-
-void open_container_log(struct config *cfg) {
-  if (!cfg || !cfg->container_name[0])
-    return;
-
-  char log_dir[PATH_MAX];
-  char safe_log_name[256];
-  sanitize_container_name(cfg->container_name, safe_log_name,
-                          sizeof(safe_log_name));
-  snprintf(log_dir, sizeof(log_dir), "%.2048s/" RUNTIME_LOGS_SUBDIR "/%.256s",
-           get_runtime_dir(), safe_log_name);
-  mkdir_p(log_dir, 0755);
-
-  char log_path[PATH_MAX];
-  snprintf(log_path, sizeof(log_path), "%.4090s/log", log_dir);
-
-  rotate_log(log_path, 2 * 1024 * 1024);
-
-  int fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
-  if (fd >= 0)
-    log_container_fd = fd;
-}
-
-void close_container_log(void) {
-  if (log_container_fd >= 0) {
-    close(log_container_fd);
-    log_container_fd = -1;
-  }
-}
-
-void print_privileged_warning(int privileged_mask) {
-  if (privileged_mask <= 0)
-    return;
-
-  printf(C_BOLD C_RED "WARNING: PRIVILEGED MODE ACTIVE - DEVICE SECURITY "
-                      "COMPROMISED" C_RESET "\r\n\r\n");
-  fflush(stdout);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1004,7 +437,7 @@ long get_container_uptime(pid_t pid) {
 
   unsigned long long start_ticks = 0;
   {
-    _cleanup_fclose_ FILE *f = fopen(stat_path, "r");
+    auto_fclose FILE *f = fopen(stat_path, "r");
     if (!f)
       return -1;
     /* starttime is the 22nd field */
@@ -1019,7 +452,7 @@ long get_container_uptime(pid_t pid) {
     return -1;
 
   {
-    _cleanup_fclose_ FILE *f = fopen("/proc/uptime", "r");
+    auto_fclose FILE *f = fopen("/proc/uptime", "r");
     if (!f)
       return -1;
     double host_uptime_sec = 0.0;
@@ -1055,7 +488,7 @@ void format_uptime(long uptime_sec, char *buf, size_t size) {
   safe_strncpy(buf, tmp, size);
 }
 
-int show_container_usage(struct config *cfg) {
+int show_container_usage(cfg_t *cfg) {
   pid_t pid = 0;
 
   if (!is_container_running(cfg, &pid) || pid <= 0) {
@@ -1092,13 +525,13 @@ int show_container_usage(struct config *cfg) {
   long long cpu_t1 = 0;
   long long cpu_host_t1 = 0;
 
-  _cleanup_closedir_ DIR *proc_dir = opendir("/proc");
+  auto_closedir DIR *proc_dir = opendir("/proc");
   if (!proc_dir) {
     log_error("Failed to open /proc: %s", strerror(errno));
     return -1;
   }
   struct dirent *de;
-  while ((de = readdir(proc_dir)) != NULL) {
+  while ((de = readdir(proc_dir)) != nullptr) {
     if (de->d_name[0] < '1' || de->d_name[0] > '9')
       continue;
 
@@ -1116,7 +549,7 @@ int show_container_usage(struct config *cfg) {
     /* RAM: VmRSS from /proc/<pid>/status */
     char status_path[PATH_MAX];
     snprintf(status_path, sizeof(status_path), "/proc/%s/status", de->d_name);
-    _cleanup_fclose_ FILE *sf = fopen(status_path, "r");
+    auto_fclose FILE *sf = fopen(status_path, "r");
     if (sf) {
       char line[128];
       while (fgets(line, sizeof(line), sf)) {
@@ -1132,7 +565,7 @@ int show_container_usage(struct config *cfg) {
     /* CPU sample 1: utime+stime from /proc/<pid>/stat fields 14+15 */
     char pstat_path[PATH_MAX];
     snprintf(pstat_path, sizeof(pstat_path), "/proc/%s/stat", de->d_name);
-    _cleanup_fclose_ FILE *pf = fopen(pstat_path, "r");
+    auto_fclose FILE *pf = fopen(pstat_path, "r");
     if (pf) {
       long long utime = 0, stime = 0;
       for (int i = 1; i <= 13; i++)
@@ -1145,7 +578,7 @@ int show_container_usage(struct config *cfg) {
 
   /* host CPU total sample 1 */
   {
-    _cleanup_fclose_ FILE *f = fopen("/proc/stat", "r");
+    auto_fclose FILE *f = fopen("/proc/stat", "r");
     if (f) {
       long long u, n, s, i, iow, irq, sirq;
       if (fscanf(f, "cpu %lld %lld %lld %lld %lld %lld %lld", &u, &n, &s, &i,
@@ -1157,7 +590,7 @@ int show_container_usage(struct config *cfg) {
   /* total device RAM from /proc/meminfo */
   long ram_total_kb = 0;
   {
-    _cleanup_fclose_ FILE *f = fopen("/proc/meminfo", "r");
+    auto_fclose FILE *f = fopen("/proc/meminfo", "r");
     if (f) {
       char line[128];
       while (fgets(line, sizeof(line), f)) {
@@ -1173,7 +606,7 @@ int show_container_usage(struct config *cfg) {
    * long enough for a meaningful CPU delta (1 jiffie = 10ms at HZ=100,
    * so 250ms gives 25-jiffie resolution = ~0.4% minimum granularity). */
   struct timespec ts = {0, 250000000L};
-  nanosleep(&ts, NULL);
+  nanosleep(&ts, nullptr);
 
   /* -----------------------------------------------------------------------
    * WALK 2: CPU sample 2 only
@@ -1182,9 +615,9 @@ int show_container_usage(struct config *cfg) {
   long long cpu_host_t2 = 0;
 
   {
-    _cleanup_closedir_ DIR *proc_dir2 = opendir("/proc");
+    auto_closedir DIR *proc_dir2 = opendir("/proc");
     if (proc_dir2) {
-      while ((de = readdir(proc_dir2)) != NULL) {
+      while ((de = readdir(proc_dir2)) != nullptr) {
         if (de->d_name[0] < '1' || de->d_name[0] > '9')
           continue;
         char ns_path[PATH_MAX];
@@ -1199,7 +632,7 @@ int show_container_usage(struct config *cfg) {
 
         char pstat_path[PATH_MAX];
         snprintf(pstat_path, sizeof(pstat_path), "/proc/%s/stat", de->d_name);
-        _cleanup_fclose_ FILE *pf2 = fopen(pstat_path, "r");
+        auto_fclose FILE *pf2 = fopen(pstat_path, "r");
         if (pf2) {
           long long utime = 0, stime = 0;
           for (int i = 1; i <= 13; i++)
@@ -1213,7 +646,7 @@ int show_container_usage(struct config *cfg) {
   }
 
   {
-    _cleanup_fclose_ FILE *f = fopen("/proc/stat", "r");
+    auto_fclose FILE *f = fopen("/proc/stat", "r");
     if (f) {
       long long u, n, s, i, iow, irq, sirq;
       if (fscanf(f, "cpu %lld %lld %lld %lld %lld %lld %lld", &u, &n, &s, &i,
@@ -1253,7 +686,7 @@ static int compare_bind_mounts(const void *a, const void *b) {
   return strcmp(ma->dest, mb->dest);
 }
 
-void sort_bind_mounts(struct config *cfg) {
+void sort_bind_mounts(cfg_t *cfg) {
   if (!cfg || cfg->bind_count <= 1 || !cfg->binds)
     return;
 
@@ -1320,87 +753,13 @@ int validate_bind_destination(const char *dest) {
   return 1;
 }
 
-/* Parse human-readable size: "512M", "1G", "2048" (bytes). Returns -1 on error.
- *
- * Use integer and fractional parts separately to avoid precision loss
- * for large values (e.g. 8192G overflows double's 53-bit mantissa):
- *   - Integer part: strtoll → exact long long arithmetic.
- *   - Fractional part (e.g. "1.5G"): limited double multiplication only for
- *     the sub-unit portion, keeping precision loss < 1 byte.
- */
-long long parse_size(const char *str) {
-  if (!str || !*str)
-    return -1;
-
-  errno = 0;
-  char *end;
-  /* Parse integer part exactly. */
-  long long int_part = strtoll(str, &end, 10);
-  if (errno || end == str || int_part < 0)
-    return -1;
-
-  /* Optional fractional part (e.g. ".5" in "1.5G"). */
-  double frac = 0.0;
-  if (*end == '.') {
-    char *frac_end;
-    frac = strtod(end, &frac_end);
-    if (frac_end == end || frac < 0)
-      return -1;
-    end = frac_end;
-  }
-
-  long long factor = 1;
-  switch (*end | 0x20) { /* tolower */
-  case 'k':
-    factor = 1024LL;
-    break;
-  case 'm':
-    factor = 1024LL * 1024;
-    break;
-  case 'g':
-    factor = 1024LL * 1024 * 1024;
-    break;
-  case 't':
-    factor = 1024LL * 1024 * 1024 * 1024;
-    break;
-  case '\0':
-    break;
-  default:
-    return -1;
-  }
-
-  /* Overflow check before multiplication. */
-  if (factor > 1 && int_part > (long long)(9223372036854775807LL / factor))
-    return -1;
-
-  long long result = int_part * factor;
-  if (frac != 0.0)
-    result += (long long)(frac * (double)factor);
-  return result;
-}
-
-void format_size(long long bytes, char *buf, size_t sz) {
-  if (bytes <= 0) {
-    snprintf(buf, sz, "N/A");
-    return;
-  }
-  static const char *units[] = {"B", "KB", "MB", "GB", "TB"};
-  int u = 0;
-  double d = (double)bytes;
-  while (d >= 1024 && u < 4) {
-    d /= 1024;
-    u++;
-  }
-  snprintf(buf, sz, "%.2f %s", d, units[u]);
-}
-
 /*
  * count_folders : function to count the number of folders in the passed path
  * and return the number of folder it can be used the get the total number of
  * containers from the get_runtime_dir directory
  */
 int count_folders(const char *path) {
-  _cleanup_closedir_ DIR *dir = opendir(path);
+  auto_closedir DIR *dir = opendir(path);
   struct dirent *entry;
   struct stat st;
   char fullpath[PATH_MAX];
@@ -1411,7 +770,7 @@ int count_folders(const char *path) {
 
   size_t base_len = strlen(path);
 
-  while ((entry = readdir(dir)) != NULL) {
+  while ((entry = readdir(dir)) != nullptr) {
 
     if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
       continue;
@@ -1430,22 +789,22 @@ int count_folders(const char *path) {
 }
 
 /* Validate each comma-separated name in optarg; store raw value in out_buf. */
-int parse_and_validate_names(const char *optarg, char *out_buf,
+int parse_and_validate_names(const char *arg, char *out_buf,
                              size_t out_size) {
   char tmp[4096];
-  snprintf(tmp, sizeof(tmp), "%s", optarg);
+  snprintf(tmp, sizeof(tmp), "%s", arg);
   char *sp, *tok = strtok_r(tmp, ",", &sp);
   while (tok) {
     if (reject_container_name(tok) < 0)
       return -1;
-    tok = strtok_r(NULL, ",", &sp);
+    tok = strtok_r(nullptr, ",", &sp);
   }
-  snprintf(out_buf, out_size, "%s", optarg);
+  snprintf(out_buf, out_size, "%s", arg);
   return 0;
 }
 
 /* Init an iter_cfg suitable for per-container dispatch. */
-static void init_iter_cfg(struct config *c, const char *prog_name) {
+static void init_iter_cfg(cfg_t *c, const char *prog_name) {
   memset(c, 0, sizeof(*c));
   if (prog_name)
     safe_strncpy(c->prog_name, prog_name, sizeof(c->prog_name));
@@ -1457,19 +816,19 @@ int multi_stop(const char *raw_names) {
   int ret = 0;
   char *sp, *tok = strtok_r(tmp, ",", &sp);
   while (tok) {
-    struct config c;
-    init_iter_cfg(&c, NULL);
+    cfg_t c;
+    init_iter_cfg(&c, nullptr);
     safe_strncpy(c.container_name, tok, sizeof(c.container_name));
     if (stop_rootfs(&c, 0) != 0)
       ret = 1;
-    tok = strtok_r(NULL, ",", &sp);
+    tok = strtok_r(nullptr, ",", &sp);
   }
   return ret;
 }
 
 /* Set oom_score_adj to -1000 (unkillable).  Best-effort, no error return. */
 void oom_protect(void) {
-  _cleanup_fclose_ FILE *f = fopen("/proc/self/oom_score_adj", "w");
+  auto_fclose FILE *f = fopen("/proc/self/oom_score_adj", "w");
   if (f)
     fprintf(f, "-1000\n");
 }

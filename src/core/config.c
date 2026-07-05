@@ -8,7 +8,7 @@
 #include "asc.h"
 
 /* Forward declarations */
-static void add_unknown_line(struct config *cfg, const char *line);
+static void add_unknown_line(cfg_t *cfg, const char *line);
 
 /* ---------------------------------------------------------------------------
  * Helpers
@@ -29,17 +29,17 @@ static char *trim_whitespace(char *str) {
 }
 
 /* Strict boolean parser: accepts 0/1, true/false, yes/no, on/off */
-static int parse_bool(const char *val) {
+static bool parse_bool(const char *val) {
   if (!val)
-    return 0;
+    return false;
 
   if (strcasecmp(val, "1") == 0)
-    return 1;
+    return true;
 
   if (strcasecmp(val, "0") == 0)
-    return 0;
+    return false;
 
-  return 0;
+  return false;
 }
 
 /* Safe positive integer parser: uses strtoll with full error checking.
@@ -55,7 +55,7 @@ static long long parse_ll_positive(const char *val) {
   return v;
 }
 
-void parse_privileged(const char *value, struct config *cfg) {
+void parse_privileged(const char *value, cfg_t *cfg) {
   if (!value)
     return;
 
@@ -79,15 +79,15 @@ void parse_privileged(const char *value, struct config *cfg) {
     else if (strcasecmp(t, "shared") == 0)
       cfg->privileged_mask |= PRIV_SHARED;
     else if (strcasecmp(t, "unfiltered-dev") == 0)
-      cfg->privileged_mask |= PRIV_UNFILTERED;
+      cfg->privileged_mask |= PRIV_UNFILT;
     else if (strcasecmp(t, "full") == 0)
       cfg->privileged_mask |= PRIV_FULL;
 
-    token = strtok_r(NULL, ",", &saveptr);
+    token = strtok_r(nullptr, ",", &saveptr);
   }
 }
 
-static void parse_bind_mounts(const char *value, struct config *cfg) {
+static void parse_bind_mounts(const char *value, cfg_t *cfg) {
   if (!value)
     return;
 
@@ -105,16 +105,16 @@ static void parse_bind_mounts(const char *value, struct config *cfg) {
       char *rest = sep + 1;
 
       /* Check for optional :ro suffix after dest */
-      int ro = 0;
+      bool ro = false;
       char *flag_sep = strchr(rest, ':');
       if (flag_sep) {
         *flag_sep = '\0';
-        ro = (strcmp(trim_whitespace(flag_sep + 1), "ro") == 0) ? 1 : 0;
+        ro = strcmp(trim_whitespace(flag_sep + 1), "ro") == 0;
       }
       const char *dest_raw = trim_whitespace(rest);
 
-      _cleanup_free_ char *src_exp = resolve_path_arg(src_raw);
-      _cleanup_free_ char *dest_exp = resolve_path_arg(dest_raw);
+      auto_free char *src_exp = resolve_path_arg(src_raw);
+      auto_free char *dest_exp = resolve_path_arg(dest_raw);
       const char *src = src_exp ? src_exp : src_raw;
       const char *dest = dest_exp ? dest_exp : dest_raw;
 
@@ -125,12 +125,12 @@ static void parse_bind_mounts(const char *value, struct config *cfg) {
         config_add_bind(cfg, src, dest, ro);
       }
     }
-    token = strtok_r(NULL, ",", &saveptr);
+    token = strtok_r(nullptr, ",", &saveptr);
   }
 }
 
-int config_add_bind(struct config *cfg, const char *src, const char *dest,
-                    int ro) {
+int config_add_bind(cfg_t *cfg, const char *src, const char *dest,
+                    bool ro) {
   if (!src || !dest || src[0] == '\0' || dest[0] == '\0')
     return 0;
   /* Defensive: callers must pre-validate; this is a last-resort assert */
@@ -194,12 +194,12 @@ int config_add_bind(struct config *cfg, const char *src, const char *dest,
  * Unknown lines are freed separately via free_config_unknown_lines().
  */
 
-void free_config_binds(struct config *cfg) {
+void free_config_binds(cfg_t *cfg) {
 
   if (!cfg->binds)
     return;
   free(cfg->binds);
-  cfg->binds = NULL;
+  cfg->binds = nullptr;
   cfg->bind_count = 0;
   cfg->bind_capacity = 0;
 }
@@ -208,11 +208,11 @@ void free_config_binds(struct config *cfg) {
  * Core Implementation
  * ---------------------------------------------------------------------------*/
 
-int config_load(const char *config_path, struct config *cfg) {
-  _cleanup_fclose_ FILE *f = fopen(config_path, "re");
+int config_load(const char *config_path, cfg_t *cfg) {
+  auto_fclose FILE *f = fopen(config_path, "re");
   if (!f) {
     if (errno == ENOENT) {
-      cfg->config_file_existed = 0;
+      cfg->config_file_existed = false;
       return 0; /* Optional config */
     }
     return -1;
@@ -221,7 +221,7 @@ int config_load(const char *config_path, struct config *cfg) {
   /* Clear existing unknown lines to avoid duplication on re-load */
   free_config_unknown_lines(cfg);
 
-  cfg->config_file_existed = 1;
+  cfg->config_file_existed = true;
 
   char line[2048];
 
@@ -312,12 +312,12 @@ int config_load(const char *config_path, struct config *cfg) {
 }
 
 /* Internal helper to add a raw line to the unknown list */
-static void add_unknown_line(struct config *cfg, const char *line) {
+static void add_unknown_line(cfg_t *cfg, const char *line) {
   struct config_line *node = malloc(sizeof(*node));
   if (!node)
     return;
   safe_strncpy(node->line, line, sizeof(node->line));
-  node->next = NULL;
+  node->next = nullptr;
   if (!cfg->unknown_head) {
     cfg->unknown_head = cfg->unknown_tail = node;
   } else {
@@ -326,22 +326,22 @@ static void add_unknown_line(struct config *cfg, const char *line) {
   }
 }
 
-void free_config_unknown_lines(struct config *cfg) {
+void free_config_unknown_lines(cfg_t *cfg) {
   struct config_line *curr = cfg->unknown_head;
   while (curr) {
     struct config_line *next = curr->next;
     free(curr);
     curr = next;
   }
-  cfg->unknown_head = cfg->unknown_tail = NULL;
+  cfg->unknown_head = cfg->unknown_tail = nullptr;
 }
 
-void config_free(struct config *cfg) {
+void config_free(cfg_t *cfg) {
   free_config_binds(cfg);
   free_config_unknown_lines(cfg);
 }
 
-static void config_serialize_known(FILE *f, struct config *cfg) {
+static void config_serialize_known(FILE *f, cfg_t *cfg) {
   fprintf(f, "# " PROJECT_NAME " Container Configuration\n");
   fprintf(f, "# Generated automatically - Changes may be overwritten\n\n");
 
@@ -350,7 +350,7 @@ static void config_serialize_known(FILE *f, struct config *cfg) {
     fprintf(f, "name=%s\n", cfg->container_name);
 
   if (cfg->rootfs_img_path[0]) {
-    _cleanup_free_ char *abs_path = resolve_path_arg(cfg->rootfs_img_path);
+    auto_free char *abs_path = resolve_path_arg(cfg->rootfs_img_path);
     fprintf(f, "rootfs_path=%s\n", abs_path ? abs_path : cfg->rootfs_img_path);
   }
 
@@ -373,29 +373,29 @@ static void config_serialize_known(FILE *f, struct config *cfg) {
 
   if (cfg->privileged_mask > 0) {
     fprintf(f, "privileged=");
-    int first = 1;
+    bool first = true;
     if (cfg->privileged_mask == PRIV_FULL) {
       fprintf(f, "full");
     } else {
       if (cfg->privileged_mask & PRIV_NOMASK) {
         fprintf(f, "%snomask", first ? "" : ",");
-        first = 0;
+        first = false;
       }
       if (cfg->privileged_mask & PRIV_NOCAPS) {
         fprintf(f, "%snocaps", first ? "" : ",");
-        first = 0;
+        first = false;
       }
       if (cfg->privileged_mask & PRIV_NOSEC) {
         fprintf(f, "%snoseccomp", first ? "" : ",");
-        first = 0;
+        first = false;
       }
       if (cfg->privileged_mask & PRIV_SHARED) {
         fprintf(f, "%sshared", first ? "" : ",");
-        first = 0;
+        first = false;
       }
-      if (cfg->privileged_mask & PRIV_UNFILTERED) {
+      if (cfg->privileged_mask & PRIV_UNFILT) {
         fprintf(f, "%sunfiltered-dev", first ? "" : ",");
-        first = 0;
+        first = false;
       }
     }
     fprintf(f, "\n");
@@ -407,15 +407,15 @@ static void config_serialize_known(FILE *f, struct config *cfg) {
     fprintf(f, "uuid=%s\n", cfg->uuid);
 
   if (cfg->custom_init[0]) {
-    _cleanup_free_ char *abs_path = resolve_path_arg(cfg->custom_init);
+    auto_free char *abs_path = resolve_path_arg(cfg->custom_init);
     fprintf(f, "custom_init=%s\n", abs_path ? abs_path : cfg->custom_init);
   }
 
   if (cfg->bind_count > 0) {
     fprintf(f, "bind_mounts=");
     for (int i = 0; i < cfg->bind_count; i++) {
-      _cleanup_free_ char *abs_src = resolve_path_arg(cfg->binds[i].src);
-      _cleanup_free_ char *abs_dest = resolve_path_arg(cfg->binds[i].dest);
+      auto_free char *abs_src = resolve_path_arg(cfg->binds[i].src);
+      auto_free char *abs_dest = resolve_path_arg(cfg->binds[i].dest);
       fprintf(f, "%s:%s%s%s", abs_src ? abs_src : cfg->binds[i].src,
               abs_dest ? abs_dest : cfg->binds[i].dest,
               cfg->binds[i].ro ? ":ro" : "",
@@ -425,40 +425,39 @@ static void config_serialize_known(FILE *f, struct config *cfg) {
   }
 }
 
-int config_save(const char *config_path, struct config *cfg) {
+int config_save(const char *config_path, cfg_t *cfg) {
   /* Sort bind mounts before saving so they are persisted in a sane order. */
   sort_bind_mounts(cfg);
 
   /* Compare new config with existing disk configuration to avoid redundant
    * writes */
-  struct config disk_cfg = {0};
+  cfg_t disk_cfg = {0};
   struct stat st;
-  int is_equal = 0;
   if (stat(config_path, &st) == 0) {
     if (config_load(config_path, &disk_cfg) == 0) {
       sort_bind_mounts(&disk_cfg);
 
-      _cleanup_free_ char *buf_cfg = NULL;
+      auto_free char *buf_cfg = nullptr;
       size_t size_cfg = 0;
-      _cleanup_free_ char *buf_disk = NULL;
+      auto_free char *buf_disk = nullptr;
       size_t size_disk = 0;
-      _cleanup_fclose_ FILE *f_cfg = open_memstream(&buf_cfg, &size_cfg);
-      _cleanup_fclose_ FILE *f_disk = open_memstream(&buf_disk, &size_disk);
+      auto_fclose FILE *f_cfg = open_memstream(&buf_cfg, &size_cfg);
+      auto_fclose FILE *f_disk = open_memstream(&buf_disk, &size_disk);
+      bool is_equal = false;
 
       if (f_cfg && f_disk) {
         config_serialize_known(f_cfg, cfg);
         config_serialize_known(f_disk, &disk_cfg);
         if (size_cfg == size_disk && memcmp(buf_cfg, buf_disk, size_cfg) == 0) {
-          is_equal = 1;
+          is_equal = true;
         }
-      } else {
       }
       free_config_binds(&disk_cfg);
       free_config_unknown_lines(&disk_cfg);
 
       if (is_equal) {
         if (!cfg->config_file_existed) {
-          cfg->config_file_existed = 1;
+          cfg->config_file_existed = true;
         }
         return 0;
       }
@@ -469,7 +468,7 @@ int config_save(const char *config_path, struct config *cfg) {
   snprintf(temp_path, sizeof(temp_path), "%s.tmp", config_path);
 
   /* Step 2: Write all configurations to temporary file */
-  _cleanup_fclose_ FILE *f_out = fopen(temp_path, "we");
+  auto_fclose FILE *f_out = fopen(temp_path, "we");
   if (!f_out)
     return -1;
 
@@ -491,14 +490,14 @@ int config_save(const char *config_path, struct config *cfg) {
   }
 
   if (!cfg->config_file_existed) {
-    cfg->config_file_existed = 1;
+    cfg->config_file_existed = true;
   }
   return 0;
 }
 
 char *config_auto_path(const char *rootfs_path) {
   if (!rootfs_path || rootfs_path[0] == '\0')
-    return NULL;
+    return nullptr;
 
   char temp[PATH_MAX];
   safe_strncpy(temp, rootfs_path, sizeof(temp));
@@ -515,7 +514,7 @@ char *config_auto_path(const char *rootfs_path) {
   return final_path;
 }
 
-int config_load_by_name(const char *name, struct config *cfg) {
+int config_load_by_name(const char *name, cfg_t *cfg) {
   if (!name || name[0] == '\0')
     return -1;
   if (!validate_container_name(name))
@@ -532,7 +531,7 @@ int config_load_by_name(const char *name, struct config *cfg) {
   return config_load(config_path, cfg);
 }
 
-int config_save_by_name(const char *name, struct config *cfg) {
+int config_save_by_name(const char *name, cfg_t *cfg) {
   if (!name || name[0] == '\0')
     return -1;
   if (!validate_container_name(name))

@@ -227,7 +227,7 @@ int seccomp_apply_minimal(int privileged_mask) {
  * 2. Deadlock Shield (EPERM): Blocks namespace creation (unshare/clone).
  *    Applied ONLY if block_nested_ns is true (manual override).
  */
-int android_seccomp_setup(int block_nested_ns, int privileged_mask) {
+int android_seccomp_setup(bool block_nested_ns, int privileged_mask) {
   if (privileged_mask & PRIV_NOSEC)
     return 0;
   int major = 0, minor = 0;
@@ -282,7 +282,7 @@ int android_seccomp_setup(int block_nested_ns, int privileged_mask) {
     filter_len += sizeof(filter_ns) / sizeof(struct sock_filter);
   filter_len += sizeof(filter_allow) / sizeof(struct sock_filter);
 
-  _cleanup_free_ struct sock_filter *final_filter =
+  auto_free struct sock_filter *final_filter =
       malloc(filter_len * sizeof(struct sock_filter));
   if (!final_filter)
     return -1;

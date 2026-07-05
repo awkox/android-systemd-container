@@ -7,7 +7,7 @@
 
 #include "asc.h"
 
-int log_silent = 0;
+bool log_silent = false;
 char log_container_name[256] = "";
 int log_container_fd = -1;
 
@@ -69,7 +69,7 @@ static int validate_kernel_version(void) {
  * CLI-level configuration validation with professional error reporting.
  * Deters configuration errors early before entering the runtime.
  */
-static int validate_configuration_cli(struct config *cfg) {
+static int validate_configuration_cli(cfg_t *cfg) {
   int errors = 0;
 
   if (!cfg->container_name[0]) {
@@ -110,7 +110,7 @@ static int validate_configuration_cli(struct config *cfg) {
   return (errors > 0) ? -1 : 0;
 }
 
-static int auto_resolve_container_name(struct config *cfg) {
+static int auto_resolve_container_name(cfg_t *cfg) {
   if (cfg->container_name[0] != '\0')
     return 0;
 
@@ -120,9 +120,9 @@ static int auto_resolve_container_name(struct config *cfg) {
   /* If 0 containers found, try a scan once if we aren't already silent
    * (prevents infinite scan loops) */
   if (count == 0 && !log_silent) {
-    log_silent = 1;
+    log_silent = true;
     scan_containers();
-    log_silent = 0;
+    log_silent = false;
     count = count_running_containers(first_name, sizeof(first_name));
   }
 
@@ -147,7 +147,7 @@ static int auto_resolve_container_name(struct config *cfg) {
  * Command Dispatch
  * ---------------------------------------------------------------------------*/
 
-static void check_network_namespace(struct config *cfg) {
+static void check_network_namespace(cfg_t *cfg) {
   if (cfg->isolation_network) {
     if (!check_ns(CLONE_NEWNET, "net")) {
       printf("\n" C_RED C_BOLD
@@ -162,10 +162,9 @@ static void check_network_namespace(struct config *cfg) {
 
 int main(int argc, char **argv) {
   int ret = 0;
-  struct config cfg;
-  char raw_names[4096] = "";
   /* CRITICAL: Zero all fields to avoid garbage pointer in dynamic arrays */
-  memset(&cfg, 0, sizeof(cfg));
+  cfg_t cfg = {};
+  char raw_names[4096] = "";
 
   safe_strncpy(cfg.prog_name, argv[0], sizeof(cfg.prog_name));
 
@@ -177,7 +176,6 @@ int main(int argc, char **argv) {
       {"help", no_argument, 0, 270},
       {0, 0, 0, 0}};
 
-  extern int opterr;
   opterr = 0;
 
   /* Resolve relative path arguments to absolute before any parsing.
@@ -194,21 +192,21 @@ int main(int argc, char **argv) {
    * 2. Load config.
    * 3. Override Pass: Apply CLI overrides on top of loaded config.
    */
-  const char *discovered_cmd = NULL;
+  const char *discovered_cmd = nullptr;
   char temp_i[PATH_MAX] = {0};
   int opt;
 
   /* 1. Discovery Pass: Capture identity and command without permuting argv.
    * Using '-' at the start of optstring returns non-options as '1'. */
   while ((opt = getopt_long(argc, argv, "-n:fC:", long_options,
-                            NULL)) != -1) {
+                            nullptr)) != -1) {
     if (opt == 1) { /* Non-option argument */
       if (!discovered_cmd) {
         discovered_cmd = optarg;
       }
     } else if (opt == 'C') {
       safe_strncpy(cfg.config_file, optarg, sizeof(cfg.config_file));
-      cfg.config_file_specified = 1;
+      cfg.config_file_specified = true;
     } else if (opt == 'n') {
       if (parse_and_validate_names(optarg, raw_names, sizeof(raw_names)) < 0) {
         ret = 1;
@@ -224,18 +222,18 @@ int main(int argc, char **argv) {
    * Optimistically attempt to proxy commands to the background daemon.
    * If the daemon is not reachable, fall back to direct execution.
    */
-  int is_daemon_cmd = (discovered_cmd && strcmp(discovered_cmd, "daemon") == 0);
+  bool is_daemon_cmd = (discovered_cmd && strcmp(discovered_cmd, "daemon") == 0);
 
   /*
    * Commands that do not require root access (help, version) or
    * must be run locally to avoid recursive loops (mode) are never proxied.
    */
-  int is_no_root_cmd =
+  bool is_no_root_cmd =
       (discovered_cmd && (strcmp(discovered_cmd, "help") == 0 ||
                           strcmp(discovered_cmd, "mode") == 0 ||
                           strcmp(discovered_cmd, "check") == 0));
 
-  if (!is_daemon_cmd && !is_no_root_cmd && getenv("NO_PROXY") == NULL) {
+  if (!is_daemon_cmd && !is_no_root_cmd && getenv("NO_PROXY") == nullptr) {
     int proxy_ret = client_run(argc - 1, argv + 1);
     if (proxy_ret != -2) {
       ret = proxy_ret;
@@ -260,14 +258,14 @@ int main(int argc, char **argv) {
    *    <workspace dir>/Containers/<name>/container.config if config hasn't
    *    been loaded yet.
    */
-  int is_stateful =
+  bool is_stateful =
       (discovered_cmd && (strcmp(discovered_cmd, "stop") == 0 ||
                           strcmp(discovered_cmd, "restart") == 0 ||
                           strcmp(discovered_cmd, "pid") == 0 ||
                           strcmp(discovered_cmd, "info") == 0 ||
                           strcmp(discovered_cmd, "usage") == 0));
 
-  int loaded = 0;
+  bool loaded = false;
   if (cfg.config_file_specified) {
     if (config_load(cfg.config_file, &cfg) < 0) {
       log_error("Failed to load configuration from '%s': %s", cfg.config_file,
@@ -275,13 +273,13 @@ int main(int argc, char **argv) {
       ret = 1;
       goto cleanup;
     }
-    loaded = 1;
+    loaded = true;
   } else {
-    _cleanup_free_ char *auto_p = config_auto_path(temp_i);
+    auto_free char *auto_p = config_auto_path(temp_i);
     if (auto_p) {
       safe_strncpy(cfg.config_file, auto_p, sizeof(cfg.config_file));
       if (config_load(cfg.config_file, &cfg) == 0) {
-        loaded = 1;
+        loaded = true;
       } else if (errno != ENOENT) {
         log_warn("Failed to load auto-detected config from '%s': %s",
                  cfg.config_file, strerror(errno));
@@ -306,8 +304,8 @@ int main(int argc, char **argv) {
        * container was moved or renamed. Perform a recovery scan of running
        * systems as a last resort. */
       if (is_stateful) {
-        int prev = log_silent;
-        log_silent = 1;
+        bool prev = log_silent;
+        log_silent = true;
         scan_containers();
         log_silent = prev;
 
@@ -326,7 +324,7 @@ int main(int argc, char **argv) {
 
   const char *optstring = "n:fC:";
 
-  while ((opt = getopt_long(argc, argv, optstring, long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, optstring, long_options, nullptr)) != -1) {
     switch (opt) {
     case 'n':
       if (parse_and_validate_names(optarg, raw_names, sizeof(raw_names)) < 0) {
@@ -340,11 +338,11 @@ int main(int argc, char **argv) {
       break;
     case 'C':
       safe_strncpy(cfg.config_file, optarg, sizeof(cfg.config_file));
-      cfg.config_file_specified = 1;
+      cfg.config_file_specified = true;
       break;
     case 265:
       /* --format: machine-parseable output */
-      cfg.format_output = 1;
+      cfg.format_output = true;
       break;
     case 270: /* --help */
       print_usage();
@@ -434,7 +432,7 @@ int main(int argc, char **argv) {
   }
 
   if (strcmp(cmd, "stop") == 0) {
-    ret = strchr(raw_names, ',') ? multi_stop(raw_names) : stop_rootfs(&cfg, 0);
+    ret = strchr(raw_names, ',') ? multi_stop(raw_names) : stop_rootfs(&cfg, false);
     goto cleanup;
   }
 

@@ -22,7 +22,7 @@ int openpty(int *master, int *slave, char *name) {
   /* best-effort: vendor 4.9 kernels may return EINVAL/EIO on newinstance
    * devpts mounts; kernel auto-unlocks if needed */
   int unlock = 0;
-  (void)ioctl(m, TIOCSPTLCK, &unlock);
+  ioctl(m, TIOCSPTLCK, &unlock);
 
   /* try kernel 4.13+ path-free method first */
   int s = ioctl(m, TIOCGPTPEER, O_RDWR | O_NOCTTY | O_CLOEXEC);
@@ -85,7 +85,7 @@ int terminal_make_controlling(int fd) {
   setsid();
 
   /* Make fd the new controlling terminal */
-  if (ioctl(fd, TIOCSCTTY, (char *)NULL) < 0) {
+  if (ioctl(fd, TIOCSCTTY, nullptr) < 0) {
     log_error("TIOCSCTTY failed: %s", strerror(errno));
     return -1;
   }

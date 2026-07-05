@@ -7,84 +7,7 @@
 
 #include "asc.h"
 
-/*
- * apply_capability_hardening()
- *
- * Drops dangerous capabilities from the bounding set to reduce the container's
- * attack surface.
- *
- * In Standard Mode (hw_access=0), we drop several sensitive capabilities.
- * In Hardware Mode (hw_access=1), we preserve most to ensure full
- * low-level hardware access (USB, Serial, Bluetooth, Flashing).
- */
-void apply_capability_hardening(int hw_access, int privileged_mask) {
-  if (privileged_mask & PRIV_NOCAPS) {
-    log_info("[SEC] --privileged=nocaps: skipping capability drops.");
-    return;
-  }
-  /* Universal drops - even in hardware mode, there's no legitimate use
-   * for CAP_SYS_MODULE inside a container (kernel module loading).
-   * CAP_SYS_BOOT is intentionally preserved - it is required for in-container
-   * reboot(2) to work inside a PID namespace without rebooting the host.
-   * CAP_MKNOD is intentionally PRESERVED: nested container runtimes
-   * (Docker-in-Docker, LXC-in-LXC) need mknod to create /dev nodes for
-   * their own containers.  /proc/partitions is nullified in the jail mask
-   * to prevent host block-device enumeration. */
-  int universal_drops[] = {CAP_SYS_MODULE, -1};
-  int total_dropped = 0;
-
-  for (int i = 0; universal_drops[i] != -1; i++) {
-    if (prctl(PR_CAPBSET_DROP, universal_drops[i], 0, 0, 0) < 0) {
-      if (errno != EINVAL) {
-        log_warn("[SEC] Failed to drop universal cap %d: %s",
-                 universal_drops[i], strerror(errno));
-      }
-    } else {
-      total_dropped++;
-    }
-  }
-
-  if (hw_access) {
-    log_info(
-        "[SEC] Hardware Mode: preserved bounding set (dropped %d universal "
-        "caps).",
-        total_dropped);
-    return;
-  }
-
-  /* Standard Hardening Tier: drop capabilities that affect host stability
-   * or allow escaping the container's isolation. */
-  int caps_to_drop[] = {
-      CAP_SYS_RAWIO,       /* Raw hardware access (I/O ports, memory) */
-      CAP_SYS_PTRACE,      /* Process tracing/injection across namespaces */
-      CAP_SYS_PACCT,       /* Process accounting */
-      CAP_SYSLOG,          /* log */
-      CAP_MAC_ADMIN,       /* Mandatory Access Control policy modification */
-      CAP_MAC_OVERRIDE,    /* Bypass MAC policies */
-      CAP_WAKE_ALARM,      /* Affect host power management / wakeups */
-      CAP_BLOCK_SUSPEND,   /* Affect host power management / sleep */
-      CAP_AUDIT_READ,      /* Read kernel audit logs */
-      CAP_DAC_READ_SEARCH, /* Bypass file read/directory search permissions -
-                            * the other half of the Shocker escape: combined
-                            * with open_by_handle_at it allows reading any
-                            * file on the host outside the mount namespace. */
-      -1};
-
-  for (int i = 0; caps_to_drop[i] != -1; i++) {
-    if (prctl(PR_CAPBSET_DROP, caps_to_drop[i], 0, 0, 0) < 0) {
-      if (errno != EINVAL) {
-        log_warn("[SEC] Failed to drop cap %d: %s", caps_to_drop[i],
-                 strerror(errno));
-      }
-    } else {
-      total_dropped++;
-    }
-  }
-
-  log_info("[SEC] Bounding set hardened (dropped %d caps).", total_dropped);
-}
-
-int internal_boot(struct config *cfg) {
+int internal_boot(cfg_t *cfg) {
   /* Defensive check: ensure configuration is valid */
   if (!cfg) {
     log_error("internal_boot received NULL configuration.");
@@ -98,10 +21,10 @@ int internal_boot(struct config *cfg) {
 
   /* NET_NONE: bring up loopback in the isolated network namespace */
   if (cfg->isolation_network) {
-    nl_ctx_t *nlctx = nl_open();
+    auto_free nl_ctx_t *nlctx = nl_open();
     if (nlctx) {
       nl_link_up(nlctx, "lo");
-      nl_close(nlctx);
+      close(nlctx->fd);
       log_info("[NET] Isolated network namespace: loopback up");
     }
   }
@@ -136,7 +59,7 @@ int internal_boot(struct config *cfg) {
    * We ALWAYS start with MS_PRIVATE because MS_SHARED breaks pivot_root/MS_MOVE
    * fallbacks on some kernels (e.g. Android rootfs). We will switch to
    * MS_SHARED after the rootfs relocation if requested. */
-  if (mount(NULL, "/", NULL, MS_REC | MS_PRIVATE, NULL) < 0) {
+  if (mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) < 0) {
     log_error("Failed to make / private: %s", strerror(errno));
     goto boot_fail;
   }
@@ -152,8 +75,8 @@ int internal_boot(struct config *cfg) {
   }
 
   /* 4. Bind mount rootfs to itself (required for pivot_root) */
-  if (mount(cfg->img_mount_point, cfg->img_mount_point, NULL,
-            MS_BIND | MS_REC, NULL) < 0) {
+  if (mount(cfg->img_mount_point, cfg->img_mount_point, nullptr,
+            MS_BIND | MS_REC, nullptr) < 0) {
     log_error("Failed to bind mount rootfs: %s", strerror(errno));
     goto boot_fail;
   }
@@ -173,15 +96,14 @@ int internal_boot(struct config *cfg) {
 
   /* 7. Pre-create standard directories in one loop to reduce syscalls */
   const char *dirs_to_create[] = {".old_root", "proc", "sys", "run", "tmp"};
-  int dir_creation_failed = 0;
-  for (size_t i = 0; i < sizeof(dirs_to_create) / sizeof(dirs_to_create[0]);
-       i++) {
+  bool dir_creation_failed = false;
+  for (size_t i = 0; i < ARRAY_SIZE(dirs_to_create); i++) {
     if (mkdir(dirs_to_create[i], 0755) < 0 && errno != EEXIST) {
       log_error("Failed to create '%s': %s", dirs_to_create[i],
                 strerror(errno));
       /* .old_root is critical for pivot_root, track if it fails */
       if (strcmp(dirs_to_create[i], ".old_root") == 0) {
-        dir_creation_failed = 1;
+        dir_creation_failed = true;
       }
     }
   }
@@ -207,14 +129,14 @@ int internal_boot(struct config *cfg) {
   }
 
   /* 10. Mount virtual filesystems (proc, sys) */
-  if (domount("proc", "proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, NULL) <
+  if (domount("proc", "proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) <
       0) {
     log_error("Failed to mount procfs: %s", strerror(errno));
     goto boot_fail;
   }
 
   /* Mount /sys */
-  if (domount("sysfs", "sys", "sysfs", MS_NOSUID | MS_NODEV | MS_NOEXEC, NULL) <
+  if (domount("sysfs", "sys", "sysfs", MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) <
       0) {
     log_error("Failed to mount sysfs: %s", strerror(errno));
     goto boot_fail;
@@ -229,10 +151,10 @@ int internal_boot(struct config *cfg) {
      * everything in /sys and 'pin' subdirectories as independent RW mounts.
      * This ensures 100% hardware visibility (devices, bus, class, block, etc)
      * even after we remount the top-level /sys as RO for systemd's benefit. */
-    _cleanup_closedir_ DIR *d = opendir("sys");
+    auto_closedir DIR *d = opendir("sys");
     if (d) {
       struct dirent *de;
-      while ((de = readdir(d)) != NULL) {
+      while ((de = readdir(d)) != nullptr) {
         if (de->d_name[0] == '.')
           continue;
 
@@ -241,7 +163,7 @@ int internal_boot(struct config *cfg) {
 
         struct stat st;
         if (stat(subpath, &st) == 0 && S_ISDIR(st.st_mode)) {
-          if (mount(subpath, subpath, NULL, MS_BIND | MS_REC, NULL) < 0) {
+          if (mount(subpath, subpath, nullptr, MS_BIND | MS_REC, nullptr) < 0) {
             /* Ignore errors for files or pseudo-dirs that can't be mounted */
           }
         }
@@ -266,8 +188,8 @@ int internal_boot(struct config *cfg) {
      * This keeps the symlink at /sys/class/net/eth0 valid while pinning the
      * path as an independent mount point that can survive isolation and
      * provide RW access if needed. */
-    if (mount("sys/devices/virtual/net", "sys/devices/virtual/net", NULL,
-              MS_BIND | MS_REC, NULL) < 0) {
+    if (mount("sys/devices/virtual/net", "sys/devices/virtual/net", nullptr,
+              MS_BIND | MS_REC, nullptr) < 0) {
       log_warn("Failed to bind-mount network devices in isolated /sys "
                "(networking may be limited)");
     }
@@ -278,7 +200,7 @@ int internal_boot(struct config *cfg) {
    * hw_access is disabled entirely. In background mode or non-systemd
    * hw_access mode, we leave /sys RW. */
   if (!cfg->hw_access || (cfg->foreground)) {
-    if (mount(NULL, "sys", NULL, MS_REMOUNT | MS_BIND | MS_RDONLY, NULL) < 0) {
+    if (mount(nullptr, "sys", nullptr, MS_REMOUNT | MS_BIND | MS_RDONLY, nullptr) < 0) {
       log_warn("Failed to remount /sys as read-only: %s", strerror(errno));
     }
   }
@@ -303,7 +225,7 @@ int internal_boot(struct config *cfg) {
     log_warn("Failed to mount tmpfs at /tmp: %s", strerror(errno));
 
   /* 14. Bind-mount console BEFORE pivot_root (host pts still visible). */
-  if (mount(cfg->console.name, "dev/console", NULL, MS_BIND, NULL) < 0)
+  if (mount(cfg->console.name, "dev/console", nullptr, MS_BIND, nullptr) < 0)
     log_warn("Failed to bind mount console '%s': %s", cfg->console.name,
              strerror(errno));
 
@@ -316,12 +238,12 @@ int internal_boot(struct config *cfg) {
    * the current root (ramfs has no backing device, self-bind doesn't help).
    * MS_MOVE atomically relocates the new root onto / and chroot(2) locks us
    * in - exactly what switch_root(8) does internally. */
-  int used_ms_move = 0;
+  bool used_ms_move = false;
   if (is_ramfs("/")) {
     log_info("Detected rootfs/ramfs root - automatically falling back to "
              "MS_MOVE+chroot");
-    used_ms_move = 1;
-    if (mount(".", "/", NULL, MS_MOVE, NULL) < 0) {
+    used_ms_move = true;
+    if (mount(".", "/", nullptr, MS_MOVE, nullptr) < 0) {
       log_error("MS_MOVE fallback failed: %s", strerror(errno));
       goto boot_fail;
     }
@@ -342,7 +264,7 @@ int internal_boot(struct config *cfg) {
   /* 16b. Apply deferred mount propagation settings.
    * Switch to MS_SHARED only after relocation is complete. */
   if (cfg->privileged_mask & PRIV_SHARED) {
-    if (mount(NULL, "/", NULL, MS_REC | MS_SHARED, NULL) < 0) {
+    if (mount(nullptr, "/", nullptr, MS_REC | MS_SHARED, nullptr) < 0) {
       log_warn("[SEC] Failed to apply MS_SHARED propagation: %s",
                strerror(errno));
     } else {
@@ -452,8 +374,9 @@ int internal_boot(struct config *cfg) {
        * properly aligned. Without this, programs like sudo that query
        * the terminal size get {0,0} and produce misaligned output. */
       struct winsize ws;
-      if (ioctl(console_fd, TIOCGWINSZ, &ws) == 0 && ws.ws_col == 0 &&
-          ws.ws_row == 0) {
+      if (ioctl(console_fd, TIOCGWINSZ, &ws) == 0
+            && ws.ws_col == 0
+            && ws.ws_row == 0) {
         ws.ws_row = 24;
         ws.ws_col = 80;
         ioctl(console_fd, TIOCSWINSZ, &ws);
@@ -486,7 +409,7 @@ int internal_boot(struct config *cfg) {
    * This is exactly what LXC does via lxc.init.cmd. */
   struct statfs _cgsfs;
   if (statfs("/sys/fs/cgroup", &_cgsfs) == 0) {
-    if ((unsigned long)_cgsfs.f_type == (unsigned long)CGROUP2_SUPER_MAGIC) {
+    if (_cgsfs.f_type == CGROUP2_SUPER_MAGIC) {
       init_args[argc++] = (char *)"systemd.unified_cgroup_hierarchy=1";
     } else {
       /* tmpfs root → legacy or hybrid layout mounted by setup_cgroups */
@@ -496,7 +419,7 @@ int internal_boot(struct config *cfg) {
   }
   /* statfs failure → leave systemd to probe on its own */
 
-  init_args[argc] = NULL;
+  init_args[argc] = nullptr;
 
   if (execve(init_bin, init_args, environ) < 0) {
     log_error("Failed to execute %s: %s", init_bin, strerror(errno));

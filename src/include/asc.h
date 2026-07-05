@@ -63,31 +63,34 @@
 #include <ftw.h>
 
 #include "version.h"
+#include "asc_types.h"
+#include "utils/log.h"
 
 /* ---------------------------------------------------------------------------
  * Constants
  * ---------------------------------------------------------------------------*/
 
-#define MIN_KERNEL_MAJOR 4
-#define MIN_KERNEL_MINOR 9
-#define UUID_LEN 32
-#define MAX_CONTAINERS 1024
-#define STOP_TIMEOUT 15 /* seconds */
-#define PID_SCAN_RETRIES 20
+constexpr int MIN_KERNEL_MAJOR = 4;
+constexpr int MIN_KERNEL_MINOR = 9;
+constexpr int UUID_LEN = 32;
+constexpr int MAX_CONTAINERS = 1024;
+constexpr int STOP_TIMEOUT = 15; /* seconds */
+constexpr int PID_SCAN_RETRIES = 20;
 #define PID_SCAN_DELAY_US 200000 /* 200ms */
 #define RETRY_DELAY_US 200000    /* 200ms */
-#define REBOOT_EXIT 249          /* exit code: in-container reboot */
+constexpr int REBOOT_EXIT = 249; /* exit code: in-container reboot */
+constexpr int NL_BUFSIZE = 8192;
 
 /* Runtime paths - all under /tmp/<project> (tmpfs, gone on reboot) */
-#define RUNTIME_DIR "/tmp/" PROJECT_NAME
+#define RUNTIME_DIR "/tmp/asc"
 #define RUNTIME_LOCK_SUBDIR "lock"
 #define RUNTIME_CONFIG_SUBDIR "config"
 #define RUNTIME_LOGS_SUBDIR "logs"
 #define RUNTIME_VOLATILE_SUBDIR "volatile"
 #define RUNTIME_MNT_SUBDIR "mnt"
-#define IMG_MOUNT_ROOT "/mnt/" PROJECT_NAME
-#define MAX_MOUNT_TRIES 1024
-#define BIND_INITIAL_CAP 4
+#define IMG_MOUNT_ROOT "/mnt/asc"
+constexpr int MAX_MOUNT_TRIES = 1024;
+constexpr int BIND_INITIAL_CAP = 4;
 #define DEFAULT_INIT "/sbin/init"
 #define ANDROID_TMPFS_CONTEXT "u:object_r:tmpfs:s0"
 
@@ -98,11 +101,12 @@
 #define PROC_MOUNTINFO "/proc/self/mountinfo"
 #define OS_RELEASE "/etc/os-release"
 #define FW_PATH_FILE "/sys/module/firmware_class/parameters/path"
-#define FORK_MARKER "/run/" PROJECT_NAME
+#define FORK_MARKER "/run/asc"
+#define VPROC_PATH "/run/asc/vproc"
 
 /* Hardening constants */
-#define DEFAULT_TTY_GID 5
-#define MAX_TRACKED_ENTRIES 512
+constexpr int DEFAULT_TTY_GID = 5;
+constexpr int MAX_TRACKED_ENTRIES = 512;
 
 /* File Extensions */
 #define EXT_LOCK ".lock"
@@ -122,60 +126,46 @@
  * Cleanup attribute helpers (RAII-style automatic resource management)
  *
  * Usage:
- *   _cleanup_free_ char *buf = malloc(1024);    // auto-free on scope exit
- *   _cleanup_fclose_ FILE *f = fopen(...);      // auto-fclose on scope exit
- *   _cleanup_close_ int fd = open(...);          // auto-close on scope exit
- *   _cleanup_closedir_ DIR *d = opendir(...);    // auto-closedir on scope exit
+ *   auto_free char *buf = malloc(1024);    // auto-free on scope exit
+ *   auto_fclose FILE *f = fopen(...);      // auto-fclose on scope exit
+ *   auto_close int fd = open(...);          // auto-close on scope exit
+ *   auto_closedir DIR *d = opendir(...);    // auto-closedir on scope exit
  * ---------------------------------------------------------------------------*/
-#define _cleanup_(x) __attribute__((cleanup(x)))
-
-__attribute__((unused)) static inline void _cfree_(void *p) {
+[[maybe_unused]] static inline void _cfree_(void *p) {
   void **pp = (void **)p;
   if (*pp) {
     free(*pp);
-    *pp = NULL;
+    *pp = nullptr;
   }
 }
 
-__attribute__((unused)) static inline void _cfclose_(FILE **f) {
+[[maybe_unused]] static inline void _cfclose_(FILE **f) {
   if (*f) fclose(*f);
 }
 
-__attribute__((unused)) static inline void _cclose_(int *fd) {
+[[maybe_unused]] static inline void _cclose_(int *fd) {
   if (*fd >= 0) close(*fd);
 }
 
-__attribute__((unused)) static inline void _cclosedir_(DIR **d) {
+[[maybe_unused]] static inline void _cclosedir_(DIR **d) {
   if (*d) closedir(*d);
 }
 
-#define _cleanup_free_ _cleanup_(_cfree_)
-#define _cleanup_fclose_ _cleanup_(_cfclose_)
-#define _cleanup_close_ _cleanup_(_cclose_)
-#define _cleanup_closedir_ _cleanup_(_cclosedir_)
-
-/* ---------------------------------------------------------------------------
- * Logging macros & Centralized Engine
- * ---------------------------------------------------------------------------*/
-
-extern int log_silent;
-extern char log_container_name[256];
-extern int log_container_fd;
-
-void log_internal(const char *prefix, const char *color, int is_err,
-                  const char *fmt, ...) __attribute__((format(printf, 4, 5)));
-void die_internal(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-void rotate_log(const char *path, size_t max_size);
-int check_ns(int flag, const char *name);
-
-#define log_info(fmt, ...) log_internal("+", C_GREEN, 0, fmt __VA_OPT__(,) __VA_ARGS__)
-#define log_warn(fmt, ...) log_internal("!", C_YELLOW, 1, fmt __VA_OPT__(,) __VA_ARGS__)
-#define log_error(fmt, ...) log_internal("-", C_RED, 1, fmt __VA_OPT__(,) __VA_ARGS__)
-#define log_die(fmt, ...) die_internal(fmt __VA_OPT__(,) __VA_ARGS__)
+#define _cleanup_(x)  [[gnu::cleanup(x)]]
+#define auto_free     _cleanup_(_cfree_)
+#define auto_fclose   _cleanup_(_cfclose_)
+#define auto_close    _cleanup_(_cclose_)
+#define auto_closedir _cleanup_(_cclosedir_)
 
 /* ---------------------------------------------------------------------------
  * Data structures
  * ---------------------------------------------------------------------------*/
+
+struct nl_ctx {
+  int fd;       /* AF_NETLINK / NETLINK_ROUTE socket */
+  uint32_t seq; /* monotonically increasing sequence number */
+  pid_t pid;    /* our PID used as nl_portid */
+};
 
 /* Opaque RTNETLINK context - defined in netlink.c */
 typedef struct nl_ctx nl_ctx_t;
@@ -184,7 +174,7 @@ typedef struct nl_ctx nl_ctx_t;
 struct bind_mount {
   char src[PATH_MAX];
   char dest[PATH_MAX];
-  int ro; /* 1 = remount read-only after bind */
+  bool ro; /* 1 = remount read-only after bind */
 };
 
 struct config_line {
@@ -209,33 +199,33 @@ struct container_info {
 /* ---------------------------------------------------------------------------
  * Privileged Mode Flags
  * ---------------------------------------------------------------------------*/
-#define PRIV_NOMASK (1 << 0)     /* No jail masks (/proc, /sys) */
-#define PRIV_NOCAPS (1 << 1)     /* No capability drops */
-#define PRIV_NOSEC (1 << 2)      /* Minimal seccomp only */
-#define PRIV_SHARED (1 << 3)     /* MS_SHARED root propagation */
-#define PRIV_UNFILTERED (1 << 4) /* No device node blocking (except PTYs) */
-#define PRIV_FULL (0xFF)         /* All above */
+constexpr int PRIV_NOMASK = (1 << 0); /* No jail masks (/proc, /sys) */
+constexpr int PRIV_NOCAPS = (1 << 1); /* No capability drops */
+constexpr int PRIV_NOSEC  = (1 << 2); /* Minimal seccomp only */
+constexpr int PRIV_SHARED = (1 << 3); /* MS_SHARED root propagation */
+constexpr int PRIV_UNFILT = (1 << 4); /* No device node blocking (except PTYs) */
+constexpr int PRIV_FULL   = (0xFF);   /* All above */
 
 struct config {
   /* Paths */
   char rootfs_img_path[PATH_MAX]; /* --rootfs-img= */
   char container_name[256];       /* --name= (mandatory) */
-  int isolation_network;          /* --isolation_network */
+  bool isolation_network;          /* --isolation_network */
 
   /* UUID for PID discovery */
   char uuid[UUID_LEN + 1];
 
   /* Flags */
-  int foreground;      /* --foreground */
-  int hw_access;       /* --hw-access */
-  int gpu_mode;        /* --gpu: mirror GPU nodes into isolated tmpfs /dev */
-  int volatile_mode;   /* --volatile */
-  int reboot_cycle;    /* 1 if we are in a reboot loop */
-  int force_cgroupv1;  /* --force-cgroupv1: use v1 even if v2 is available */
-  int block_nested_ns; /* --block-nested-namespaces: fix VFS deadlock by
+  bool foreground;      /* --foreground */
+  bool hw_access;       /* --hw-access */
+  bool gpu_mode;        /* --gpu: mirror GPU nodes into isolated tmpfs /dev */
+  bool volatile_mode;   /* --volatile */
+  bool reboot_cycle;    /* 1 if we are in a reboot loop */
+  bool force_cgroupv1;  /* --force-cgroupv1: use v1 even if v2 is available */
+  bool block_nested_ns; /* --block-nested-namespaces: fix VFS deadlock by
                             blocking nested namespace creation */
   int privileged_mask; /* --privileged bitmask */
-  int format_output;   /* --format: machine-parseable output (KEY=VALUE) */
+  bool format_output;   /* --format: machine-parseable output (KEY=VALUE) */
   char prog_name[64];  /* argv[0] for logging */
 
   /* Runtime state */
@@ -252,8 +242,8 @@ struct config {
 
   /* Configuration persistence */
   char config_file[PATH_MAX];
-  int config_file_specified;
-  int config_file_existed;
+  bool config_file_specified;
+  bool config_file_existed;
 
   /* Terminal (console + ttys) */
   struct tty_info console;
@@ -273,17 +263,21 @@ struct config {
   unsigned long ns_inode;     /* PID namespace inode for PID-recycling guard */
 };
 
+typedef struct config cfg_t;
+
 /* ---------------------------------------------------------------------------
  * utils.c
  * ---------------------------------------------------------------------------*/
+
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 void safe_strncpy(char *dst, const char *src, size_t size);
 char *resolve_path_arg(const char *path);
 void resolve_argv_paths(int argc, char **argv);
 long get_container_uptime(pid_t pid);
 void format_uptime(long uptime_sec, char *buf, size_t size);
-int is_ramfs(const char *path);
-int is_subpath(const char *parent, const char *child);
+bool is_ramfs(const char *path);
+bool is_subpath(const char *parent, const char *child);
 int write_file(const char *path, const char *content);
 int read_file(const char *path, char *buf, size_t size);
 ssize_t write_all(int fd, const void *buf, size_t count);
@@ -298,24 +292,24 @@ int parse_os_release(const char *rootfs_path, char *id_out, char *ver_out,
 int grep_file(const char *path, const char *pattern);
 int read_proc_environ(pid_t pid, const char *key, char *value, size_t size);
 int safe_openat_proc(pid_t pid, const char *subpath, int flags, mode_t mode);
-int path_has_symlink(const char *path);
+bool path_has_symlink(const char *path);
 void firmware_path_add(const char *fw_path);
 void firmware_path_remove(const char *fw_path);
 int run_command_quiet(char *const argv[]);
 void print_privileged_warning(int privileged_mask);
 
 void write_monitor_debug_log(const char *name, const char *fmt, ...);
-void monitor_run(struct config *cfg, int sync_pipe_write);
-int is_external_lock_active(const char *name);
-void cleanup_container_resources(struct config *cfg,
-                                 int skip_unmount, int force_cleanup);
-void open_container_log(struct config *cfg);
+void monitor_run(cfg_t *cfg, int sync_pipe_write);
+bool is_external_lock_active(const char *name);
+void cleanup_container_resources(cfg_t *cfg,
+                                 bool skip_unmount, bool force_cleanup);
+void open_container_log(cfg_t *cfg);
 void close_container_log(void);
-void sort_bind_mounts(struct config *cfg);
+void sort_bind_mounts(cfg_t *cfg);
 void sanitize_container_name(const char *name, char *out, size_t size);
 int validate_container_name(const char *name);
 int reject_container_name(const char *name);
-int parse_and_validate_names(const char *optarg, char *out_buf,
+int parse_and_validate_names(const char *arg, char *out_buf,
                              size_t out_size);
 int multi_stop(const char *raw_names);
 int validate_bind_destination(const char *dest);
@@ -324,28 +318,29 @@ int count_folders(const char *path);
 /* Daemon lifecycle helpers */
 typedef void (*child_fn)(int ready_fd, void *user_data);
 void oom_protect(void);
+bool check_ns(int flag, const char *name);
 
 /* ---------------------------------------------------------------------------
  * config.c
  * ---------------------------------------------------------------------------*/
 
-int config_load(const char *config_path, struct config *cfg);
-int config_load_by_name(const char *name, struct config *cfg);
-int config_save(const char *config_path, struct config *cfg);
-int config_save_by_name(const char *name, struct config *cfg);
-int config_add_bind(struct config *cfg, const char *src, const char *dest,
-                    int ro);
-void free_config_binds(struct config *cfg);
-void free_config_unknown_lines(struct config *cfg);
-void config_free(struct config *cfg);
+int config_load(const char *config_path, cfg_t *cfg);
+int config_load_by_name(const char *name, cfg_t *cfg);
+int config_save(const char *config_path, cfg_t *cfg);
+int config_save_by_name(const char *name, cfg_t *cfg);
+int config_add_bind(cfg_t *cfg, const char *src, const char *dest,
+                    bool ro);
+void free_config_binds(cfg_t *cfg);
+void free_config_unknown_lines(cfg_t *cfg);
+void config_free(cfg_t *cfg);
 char *config_auto_path(const char *rootfs_path);
-void parse_privileged(const char *value, struct config *cfg);
+void parse_privileged(const char *value, cfg_t *cfg);
 
 /* ---------------------------------------------------------------------------
  * android.c
  * ---------------------------------------------------------------------------*/
 
-int android_seccomp_setup(int block_nested_ns, int privileged_mask);
+int android_seccomp_setup(bool block_nested_ns, int privileged_mask);
 int seccomp_apply_minimal(int privileged_mask);
 
 /* ---------------------------------------------------------------------------
@@ -355,47 +350,47 @@ int seccomp_apply_minimal(int privileged_mask);
 int domount(const char *src, const char *tgt, const char *fstype,
             unsigned long flags, const char *data);
 int bind_mount(const char *src, const char *tgt);
-int apply_jail_mask(int hw_access, int privileged_mask);
-int setup_dev(const char *rootfs, int hw_access, int gpu_mode,
+int apply_jail_mask(bool hw_access, int privileged_mask);
+int setup_dev(const char *rootfs, bool hw_access, bool gpu_mode,
               int privileged_mask);
 int create_devices(const char *rootfs);
-int setup_devpts(int hw_access);
+int setup_devpts(bool hw_access);
 int fix_host_ptys(void);
-int setup_volatile_overlay(struct config *cfg);
-int cleanup_volatile_overlay(struct config *cfg);
-int check_volatile_mode(struct config *cfg);
-int setup_custom_binds(struct config *cfg, const char *rootfs);
+int setup_volatile_overlay(cfg_t *cfg);
+int cleanup_volatile_overlay(cfg_t *cfg);
+int check_volatile_mode(cfg_t *cfg);
+int setup_custom_binds(cfg_t *cfg, const char *rootfs);
 int mount_rootfs_img(const char *img_path, char *mount_point, size_t mp_size,
                      const char *name);
-int unmount_rootfs_img(const char *mount_point, int silent);
-int is_mountpoint(const char *path);
+int unmount_rootfs_img(const char *mount_point, bool silent);
+bool is_mountpoint(const char *path);
 
 /* ---------------------------------------------------------------------------
  * cgroup.c
  * ---------------------------------------------------------------------------*/
 
-int cgroup_kernel_supports_v2(void);
-int cgroup_host_is_v2(void);
-int setup_cgroups(int force_cgroupv1);
-void cgroup_host_bootstrap(int force_cgroupv1);
+bool cgroup_kernel_supports_v2(void);
+bool cgroup_host_is_v2(void);
+int setup_cgroups(bool force_cgroupv1);
+void cgroup_host_bootstrap(bool force_cgroupv1);
 /* Remove the entire /sys/fs/cgroup/ds-fork/<name>/ subtree on stop. */
 void cgroup_cleanup_container(const char *container_name);
-void print_cgroup_status(struct config *cfg);
-int cgroup_apply_limits(struct config *cfg);
-int cgroup_get_usage(struct config *cfg, long long *mem, long long *cpu_us,
+void print_cgroup_status(cfg_t *cfg);
+int cgroup_apply_limits(cfg_t *cfg);
+int cgroup_get_usage(cfg_t *cfg, long long *mem, long long *cpu_us,
                      long long *pids);
 long long parse_size(const char *str);
 void format_size(long long bytes, char *buf, size_t sz);
 /* Word-boundary controller name check (used by container.c for subtree_control
  * building; wraps the static ctrl_in_list in cgroup.c). */
-int cg_word_in_list(const char *list, const char *name);
+bool cg_word_in_list(const char *list, const char *name);
 
 /* ---------------------------------------------------------------------------
  * virtualize.c
  * ---------------------------------------------------------------------------*/
 
-int virtualize_init(struct config *cfg);
-void virtualize_update(struct config *cfg);
+int virtualize_init(cfg_t *cfg);
+void virtualize_update(cfg_t *cfg);
 unsigned long get_pid_ns_inode(pid_t pid);
 
 /* ---------------------------------------------------------------------------
@@ -409,7 +404,6 @@ void mirror_gpu_nodes(const char *dev_path);
  * ---------------------------------------------------------------------------*/
 
 nl_ctx_t *nl_open(void);
-void nl_close(nl_ctx_t *ctx);
 int nl_get_ifindex(const char *ifname);
 int nl_link_up(nl_ctx_t *ctx, const char *ifname);
 
@@ -428,7 +422,7 @@ int setup_tios(int fd, struct termios *old);
  * ---------------------------------------------------------------------------*/
 
 int console_monitor_loop(int console_master_fd, pid_t monitor_pid,
-                         struct config *cfg);
+                         cfg_t *cfg);
 
 /* ---------------------------------------------------------------------------
  * pid.c
@@ -439,50 +433,57 @@ const char *get_lock_dir(void);
 const char *get_logs_dir(void);
 int ensure_runtime(void);
 int generate_container_name(const char *rootfs_path, char *name, size_t size);
-int is_container_running(struct config *cfg, pid_t *pid_out);
-int is_container_init(pid_t pid);
+bool is_container_running(cfg_t *cfg, pid_t *pid_out);
+bool is_container_init(pid_t pid);
 int metadata_sync(pid_t pid);
 int count_running_containers(char *first_name, size_t size);
 pid_t find_container_init_pid(const char *uuid);
 int collect_active_uuids(char uuids[][UUID_LEN + 1], int max_uuids);
-int show_containers(struct config *cfg);
+int show_containers(cfg_t *cfg);
 int scan_containers(void);
 
 /* ---------------------------------------------------------------------------
  * boot.c
  * ---------------------------------------------------------------------------*/
 
-void apply_capability_hardening(int hw_access, int privileged_mask);
-int internal_boot(struct config *cfg);
+void apply_capability_hardening(bool hw_access, int privileged_mask);
+int internal_boot(cfg_t *cfg);
 
 /* ---------------------------------------------------------------------------
  * container.c
  * ---------------------------------------------------------------------------*/
 
-int is_valid_container_pid(pid_t pid);
-int start_rootfs(struct config *cfg);
-int stop_rootfs(struct config *cfg, int skip_unmount);
-int stop_rootfs_with_timeout(struct config *cfg, int skip_unmount,
+bool is_valid_container_pid(pid_t pid);
+int start_rootfs(cfg_t *cfg);
+int stop_rootfs(cfg_t *cfg, bool skip_unmount);
+int stop_rootfs_with_timeout(cfg_t *cfg, bool skip_unmount,
                              int timeout_seconds);
-int show_info(struct config *cfg, int trust_cfg_pid);
-int show_container_usage(struct config *cfg);
-int restart_rootfs(struct config *cfg);
-int restart_rootfs_with_timeout(struct config *cfg, int timeout_seconds);
+int show_info(cfg_t *cfg, int trust_cfg_pid);
+int show_container_usage(cfg_t *cfg);
+int restart_rootfs(cfg_t *cfg);
+int restart_rootfs_with_timeout(cfg_t *cfg, int timeout_seconds);
 
 /* ---------------------------------------------------------------------------
  * check.c
  * ---------------------------------------------------------------------------*/
 
-int is_dangerous_node(const char *name);
-int check_requirements_hw(int hw_access);
+bool is_dangerous_node(const char *name);
+int check_requirements_hw(bool hw_access);
 int check_requirements_detailed(void);
 
 /* ---------------------------------------------------------------------------
  * daemon.c - daemon, client, and probe entry points
  * ---------------------------------------------------------------------------*/
 
-int daemon_run(int foreground);
+int daemon_run(bool foreground);
 int client_run(int argc, char **argv);
-int daemon_probe(void);
+bool daemon_probe(void);
+
+
+void loop_detach(const char *loop_dev);
+int loop_attach(const char *img_path, char *loop_path_out, size_t path_size);
+int get_backing_dev(const char *mnt, char *dev_out, size_t dev_size);
+const char *detect_fs_type(const char *img_path);
+int force_unlink(const char *path);
 
 #endif /* ASC_H */

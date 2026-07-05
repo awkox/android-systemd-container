@@ -51,10 +51,10 @@ static int acquire_external_lock(const char *name) {
   if (fd < 0)
     return -1;
 
-  struct flock fl;
-  memset(&fl, 0, sizeof(fl));
-  fl.l_type = F_WRLCK;    /* 排他写锁 */
-  fl.l_whence = SEEK_SET;
+  struct flock fl = {
+    .l_type = F_WRLCK,
+    .l_whence = SEEK_SET,
+  };
 
   /* 尝试非阻塞 POSIX 记录锁 */
   if (fcntl(fd, F_SETLK, &fl) == 0) {
@@ -107,24 +107,24 @@ static void release_external_lock(void) {
 
 /* Check if external command lock exists - called by monitor (READ ONLY).
  * Returns: 1 if lock exists and holder is alive, 0 otherwise. */
-int is_external_lock_active(const char *name) {
+bool is_external_lock_active(const char *name) {
   char lock_path[PATH_MAX];
   if (get_lock_path(name, lock_path, sizeof(lock_path)) < 0)
-    return 0;
+    return false;
 
-  _cleanup_close_ int fd = open(lock_path, O_RDONLY | O_CLOEXEC);
+  auto_close int fd = open(lock_path, O_RDONLY | O_CLOEXEC);
   if (fd < 0)
-    return 0; /* 文件不存在 -> 没有锁 */
+    return false; /* 文件不存在 -> 没有锁 */
 
-  struct flock fl;
-  memset(&fl, 0, sizeof(fl));
-  fl.l_type = F_WRLCK;
-  fl.l_whence = SEEK_SET;
+  struct flock fl = {
+    .l_type = F_WRLCK,
+    .l_whence = SEEK_SET,
+  };
 
   /* 使用 F_GETLK 向内核确认是否有进程正持有写锁 */
   if (fcntl(fd, F_GETLK, &fl) == 0) {
     if (fl.l_type != F_UNLCK) {
-      return 1; /* Valid lock held */
+      return true; /* Valid lock held */
     }
   }
 
@@ -134,15 +134,15 @@ int is_external_lock_active(const char *name) {
    */
   write_monitor_debug_log(name, "Removing stale lock file");
   unlink(lock_path);
-  return 0;
+  return true;
 }
 
 /* ---------------------------------------------------------------------------
  * Cleanup
  * ---------------------------------------------------------------------------*/
 
-void cleanup_container_resources(struct config *cfg,
-                                 int skip_unmount, int force_cleanup) {
+void cleanup_container_resources(cfg_t *cfg,
+                                 bool skip_unmount, bool force_cleanup) {
   /* Flush filesystem buffers (skip if force cleanup - sync can hang on
    * zombie-held fs) */
   if (!force_cleanup)
@@ -225,7 +225,7 @@ void cleanup_container_resources(struct config *cfg,
  * Introspection
  * ---------------------------------------------------------------------------*/
 
-int is_valid_container_pid(pid_t pid) {
+bool is_valid_container_pid(pid_t pid) {
   char path[PATH_MAX];
 
   /* Primary marker: /run/ds-fork must exist inside the container.
@@ -233,26 +233,26 @@ int is_valid_container_pid(pid_t pid) {
    * We do NOT require /run/systemd/container - Alpine/runit/openrc never
    * write that file, causing scan to be blind to non-systemd distros. */
   if (build_proc_root_path(pid, FORK_MARKER, path, sizeof(path)) < 0)
-    return 0;
+    return false;
   if (access(path, F_OK) != 0)
-    return 0;
+    return false;
 
   /* Secondary check: process must be the init (PID 1) of its namespace.
    * This is more robust than checking cmdline for "init" which distros
    * like Void Linux (runit) or Alpine may not provide. */
   if (!is_container_init(pid))
-    return 0;
+    return false;
 
-  return 1;
+  return true;
 }
 
 /* ---------------------------------------------------------------------------
  * Start
  * ---------------------------------------------------------------------------*/
 
-int start_rootfs(struct config *cfg) {
-  int has_side_effects = 0;
-  int lock_acquired = 0;
+int start_rootfs(cfg_t *cfg) {
+  bool has_side_effects = false;
+  bool lock_acquired = false;
 
   /* 0. Early restart detection: check for external lock from previous stop
    *    command to detect a preserved mount for reuse. */
@@ -262,14 +262,14 @@ int start_rootfs(struct config *cfg) {
         access(lock_path, F_OK) == 0) {
       /* This looks like a restart handoff - take ownership of the lock */
       if (acquire_external_lock(cfg->container_name) == 0) {
-        lock_acquired = 1;
+        lock_acquired = true;
 
         /* Try to reuse existing mount from config */
         if (cfg->img_mount_point[0] && is_mountpoint(cfg->img_mount_point)) {
         } else {
           /* Mount not active - remove invalid lock */
           release_external_lock();
-          lock_acquired = 0;
+          lock_acquired = false;
         }
       }
     }
@@ -294,7 +294,7 @@ int start_rootfs(struct config *cfg) {
    *     This prevents symlink-based attacks and ensures that all subsequent
    *     operations use the intended location. */
   if (cfg->rootfs_img_path[0]) {
-    _cleanup_free_ char *abs_path = resolve_path_arg(cfg->rootfs_img_path);
+    auto_free char *abs_path = resolve_path_arg(cfg->rootfs_img_path);
     if (!abs_path || access(abs_path, F_OK) != 0) {
       log_error("Failed to resolve rootfs image path '%s': %s",
                 abs_path ? abs_path : cfg->rootfs_img_path, strerror(errno));
@@ -314,7 +314,7 @@ int start_rootfs(struct config *cfg) {
 
   print_cgroup_status(cfg);
 
-  has_side_effects = 1;
+  has_side_effects = true;
 
   /* 2. Mount rootfs image (using the resolved name) */
   if (cfg->rootfs_img_path[0] && !lock_acquired) {
@@ -322,7 +322,7 @@ int start_rootfs(struct config *cfg) {
     /* VFS 防删保护：通过自我绑定挂载防止宿主机意外删除或重命名镜像文件 */
     struct stat img_st;
     if (stat(cfg->rootfs_img_path, &img_st) == 0 && S_ISREG(img_st.st_mode)) {
-      if (mount(cfg->rootfs_img_path, cfg->rootfs_img_path, NULL, MS_BIND, NULL) == 0) {
+      if (mount(cfg->rootfs_img_path, cfg->rootfs_img_path, nullptr, MS_BIND, nullptr) == 0) {
         log_info("Image file locked against deletion (VFS self-bind)");
       } else if (errno != EBUSY) {
         log_warn("Failed to lock image file: %s", strerror(errno));
@@ -381,11 +381,11 @@ int start_rootfs(struct config *cfg) {
   {
     char active_uuids[MAX_CONTAINERS][UUID_LEN + 1];
     int uuid_count = collect_active_uuids(active_uuids, MAX_CONTAINERS);
-    int need_new = (cfg->uuid[0] == '\0');
+    bool need_new = cfg->uuid[0] == '\0';
     if (!need_new) {
       for (int _i = 0; _i < uuid_count; _i++) {
         if (strcmp(cfg->uuid, active_uuids[_i]) == 0) {
-          need_new = 1;
+          need_new = true;
           break;
         }
       }
@@ -399,7 +399,7 @@ int start_rootfs(struct config *cfg) {
    * are already in cfg at this point since start_rootfs() is called after
    * argument parsing. */
   if (cfg->config_file[0]) {
-    int was_new = !cfg->config_file_existed;
+    bool was_new = !cfg->config_file_existed;
     if (config_save(cfg->config_file, cfg) < 0) {
       log_error("Failed to persist configuration to '%s': %s", cfg->config_file,
                 strerror(errno));
@@ -510,16 +510,15 @@ int start_rootfs(struct config *cfg) {
   /* 9. Done - container is running, metadata is in /proc/<pid>/environ */
   if (cfg->img_mount_point[0]) {
     /* Ensure mount point is persisted in config for restart recovery */
-    struct config save_cfg = *cfg;
+    cfg_t save_cfg = *cfg;
     config_save_by_name(cfg->container_name, &save_cfg);
   }
 
   /* 10. Foreground or background finish */
   if (cfg->foreground) {
-
     if (lock_acquired) {
       release_external_lock();
-      lock_acquired = 0;
+      lock_acquired = false;
     }
 
     int ret = console_monitor_loop(cfg->console.master, monitor_pid, cfg);
@@ -531,10 +530,10 @@ int start_rootfs(struct config *cfg) {
     char marker[PATH_MAX];
     snprintf(marker, sizeof(marker), "/proc/%d/root/run/" PROJECT_NAME,
              cfg->container_pid);
-    int booted = 0;
+    bool booted = false;
     for (int i = 0; i < 50; i++) { /* 5 seconds max */
       if (access(marker, F_OK) == 0) {
-        booted = 1;
+        booted = true;
         break;
       }
       /* If the container PID is already dead, stop polling */
@@ -568,7 +567,7 @@ cleanup:
    * errors. Only execute if we successfully crossed the point of creating
    * effects. */
   if (has_side_effects) {
-    cleanup_container_resources(cfg, 0, 1 /* force */);
+    cleanup_container_resources(cfg, false, true /* force */);
   }
   if (lock_acquired)
     release_external_lock();
@@ -586,7 +585,7 @@ cleanup:
   return -1;
 }
 
-int stop_rootfs_with_timeout(struct config *cfg, int skip_unmount,
+int stop_rootfs_with_timeout(cfg_t *cfg, bool skip_unmount,
                              int timeout_seconds) {
   if (timeout_seconds < 0)
     timeout_seconds = STOP_TIMEOUT;
@@ -625,11 +624,11 @@ int stop_rootfs_with_timeout(struct config *cfg, int skip_unmount,
       timeout_seconds);
 
   /* 2. Wait for exit */
-  int stopped = 0;
+  bool stopped = false;
   for (int i = 0; i < timeout_seconds * 5; i++) {
     if (kill(pid, 0) < 0) {
       if (errno == ESRCH) {
-        stopped = 1;
+        stopped = true;
         break;
       }
     }
@@ -637,7 +636,7 @@ int stop_rootfs_with_timeout(struct config *cfg, int skip_unmount,
   }
 
   /* 3. Force kill if still running */
-  int unkillable = 0;
+  bool unkillable = false;
   if (!stopped) {
     log_warn("Graceful stop timed out, sending SIGKILL...");
     kill(pid, SIGKILL);
@@ -647,17 +646,17 @@ int stop_rootfs_with_timeout(struct config *cfg, int skip_unmount,
      * We don't use blocking waitpid() because we aren't the parent,
      * and we want a timeout to prevent hanging on unkillable PIDs.
      */
-    int killed = 0;
+    bool killed = false;
     for (int j = 0; j < 25; j++) { /* 5 seconds total */
       if (kill(pid, 0) < 0 && errno == ESRCH) {
-        killed = 1;
+        killed = true;
         break;
       }
       usleep(200000); /* 200ms */
     }
 
     if (!killed) {
-      unkillable = 1;
+      unkillable = true;
       log_error("Container PID %d is in an unkillable state!", pid);
       log_warn("This often happens on old Android kernels due to zombie "
                "processes.\nPlease restart your device to clear it.");
@@ -688,7 +687,7 @@ int stop_rootfs_with_timeout(struct config *cfg, int skip_unmount,
   return 0;
 }
 
-int stop_rootfs(struct config *cfg, int skip_unmount) {
+int stop_rootfs(cfg_t *cfg, bool skip_unmount) {
   return stop_rootfs_with_timeout(cfg, skip_unmount, STOP_TIMEOUT);
 }
 
@@ -728,14 +727,14 @@ static void get_os_pretty(const char *osrelease_path, char *buf, size_t size) {
     return;
   buf[0] = '\0';
 
-  _cleanup_fclose_ FILE *fp = fopen(osrelease_path, "r");
+  auto_fclose FILE *fp = fopen(osrelease_path, "r");
   if (!fp)
     return;
 
   parse_pretty_name(fp, buf, size);
 }
 
-int show_info(struct config *cfg, int trust_cfg_pid) {
+int show_info(cfg_t *cfg, int trust_cfg_pid) {
   /* Case 1: No container name specified - try auto-resolution or listing */
   if (cfg->container_name[0] == '\0') {
     char first_name[256];
@@ -832,26 +831,26 @@ int show_info(struct config *cfg, int trust_cfg_pid) {
       if (cfg->privileged_mask == PRIV_FULL) {
         printf("full");
       } else {
-        int first = 1;
+        bool first = true;
         if (cfg->privileged_mask & PRIV_NOMASK) {
           printf("%snomask", first ? "" : ",");
-          first = 0;
+          first = false;
         }
         if (cfg->privileged_mask & PRIV_NOCAPS) {
           printf("%snocaps", first ? "" : ",");
-          first = 0;
+          first = false;
         }
         if (cfg->privileged_mask & PRIV_NOSEC) {
           printf("%snoseccomp", first ? "" : ",");
-          first = 0;
+          first = false;
         }
         if (cfg->privileged_mask & PRIV_SHARED) {
           printf("%sshared", first ? "" : ",");
-          first = 0;
+          first = false;
         }
-        if (cfg->privileged_mask & PRIV_UNFILTERED) {
+        if (cfg->privileged_mask & PRIV_UNFILT) {
           printf("%sunfiltered-dev", first ? "" : ",");
-          first = 0;
+          first = false;
         }
       }
       printf("\n");
@@ -929,26 +928,26 @@ int show_info(struct config *cfg, int trust_cfg_pid) {
       if (cfg->privileged_mask == PRIV_FULL) {
         printf("full");
       } else {
-        int first = 1;
+        bool first = true;
         if (cfg->privileged_mask & PRIV_NOMASK) {
           printf("%snomask", first ? "" : ", ");
-          first = 0;
+          first = false;
         }
         if (cfg->privileged_mask & PRIV_NOCAPS) {
           printf("%snocaps", first ? "" : ", ");
-          first = 0;
+          first = false;
         }
         if (cfg->privileged_mask & PRIV_NOSEC) {
           printf("%snoseccomp", first ? "" : ", ");
-          first = 0;
+          first = false;
         }
         if (cfg->privileged_mask & PRIV_SHARED) {
           printf("%sshared", first ? "" : ", ");
-          first = 0;
+          first = false;
         }
-        if (cfg->privileged_mask & PRIV_UNFILTERED) {
+        if (cfg->privileged_mask & PRIV_UNFILT) {
           printf("%sunfiltered-dev", first ? "" : ", ");
-          first = 0;
+          first = false;
         }
       }
       printf("\n");
@@ -1019,20 +1018,20 @@ int show_info(struct config *cfg, int trust_cfg_pid) {
   return 0;
 }
 
-int restart_rootfs_with_timeout(struct config *cfg, int timeout_seconds) {
+int restart_rootfs_with_timeout(cfg_t *cfg, int timeout_seconds) {
   pid_t pid = 0;
   if (!is_container_running(cfg, &pid) || pid <= 0) {
     log_error("Container '%s' is not running or invalid.", cfg->container_name);
     return -1;
   }
   log_info("Restarting container %s...", cfg->container_name);
-  if (stop_rootfs_with_timeout(cfg, 1, timeout_seconds) < 0) {
+  if (stop_rootfs_with_timeout(cfg, true, timeout_seconds) < 0) {
     return -1;
   }
   putchar('\n');
   return start_rootfs(cfg);
 }
 
-int restart_rootfs(struct config *cfg) {
+int restart_rootfs(cfg_t *cfg) {
   return restart_rootfs_with_timeout(cfg, STOP_TIMEOUT);
 }

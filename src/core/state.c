@@ -8,148 +8,32 @@
 #include "asc.h"
 
 /* ---------------------------------------------------------------------------
- * Workspace / Paths
- * ---------------------------------------------------------------------------*/
-
-const char *get_runtime_dir(void) { return RUNTIME_DIR; }
-
-const char *get_lock_dir(void) {
-  static char lock_path[PATH_MAX];
-  snprintf(lock_path, sizeof(lock_path), "%s/%s", get_runtime_dir(),
-           RUNTIME_LOCK_SUBDIR);
-  return lock_path;
-}
-
-const char *get_logs_dir(void) {
-  static char logs_path[PATH_MAX];
-  snprintf(logs_path, sizeof(logs_path), "%s/%s", get_runtime_dir(),
-           RUNTIME_LOGS_SUBDIR);
-  return logs_path;
-}
-
-int ensure_runtime(void) {
-  mkdir_p(get_runtime_dir(), 0755);
-  mkdir_p(get_lock_dir(), 0755);
-  mkdir_p(get_logs_dir(), 0755);
-
-  return 0;
-}
-
-/* ---------------------------------------------------------------------------
- * Container Naming
- * ---------------------------------------------------------------------------*/
-
-int generate_container_name(const char *rootfs_path, char *name, size_t size) {
-  char id[64], version[64];
-
-  if (parse_os_release(rootfs_path, id, version, sizeof(id)) < 0) {
-    /* Fallback if os-release is missing */
-    safe_strncpy(name, "linux-container", size);
-    return 0;
-  }
-
-  if (version[0])
-    snprintf(name, size, "%s-%s", id, version);
-  else
-    safe_strncpy(name, id, size);
-
-  return 0;
-}
-
-/* ---------------------------------------------------------------------------
  * PID Discovery (UUID Scan)
  * ---------------------------------------------------------------------------*/
 
-int is_container_running(struct config *cfg, pid_t *pid_out) {
+bool is_container_running(cfg_t *cfg, pid_t *pid_out) {
   if (cfg->uuid[0] == '\0')
-    return 0;
+    return false;
 
   pid_t deep_pid = find_container_init_pid(cfg->uuid);
   if (deep_pid > 0) {
     if (pid_out)
       *pid_out = deep_pid;
-    return 1;
+    return true;
   }
 
-  return 0;
-}
-
-int count_running_containers(char *first_name, size_t size) {
-  _cleanup_free_ pid_t *pids = NULL;
-  size_t pcount = 0;
-  char path[PATH_MAX];
-  int running = 0;
-
-  if (collect_pids(&pids, &pcount) < 0)
-    return 0;
-
-  for (size_t i = 0; i < pcount; i++) {
-    if (build_proc_root_path(pids[i], FORK_MARKER, path, sizeof(path)) < 0)
-      continue;
-    if (access(path, F_OK) != 0)
-      continue;
-
-    if (!is_valid_container_pid(pids[i]))
-      continue;
-
-    char cname[256] = {0};
-    if (build_proc_root_path(pids[i], FORK_MARKER "/name", path,
-                             sizeof(path)) >= 0 &&
-        read_file(path, cname, sizeof(cname)) > 0) {
-      cname[strcspn(cname, "\n")] = '\0';
-      if (running == 0 && first_name && size > 0)
-        safe_strncpy(first_name, cname, size);
-      running++;
-    }
-  }
-
-  return running;
+  return false;
 }
 
 /* ---------------------------------------------------------------------------
  * UUID Scan
  * ---------------------------------------------------------------------------*/
 
-pid_t find_container_init_pid(const char *uuid) {
-  if (!uuid || uuid[0] == '\0')
-    return 0;
-
-  char marker[PATH_MAX];
-  snprintf(marker, sizeof(marker), FORK_MARKER "/%s", uuid);
-
-  _cleanup_free_ pid_t *pids = NULL;
-  size_t count = 0;
-  char path[PATH_MAX];
-
-  if (collect_pids(&pids, &count) < 0)
-    return 0;
-
-  for (size_t i = 0; i < count; i++) {
-    /* Fast check: does FORK_MARKER exist?
-     * This avoids expensive deep path checks for host processes. */
-    if (build_proc_root_path(pids[i], FORK_MARKER, path, sizeof(path)) < 0)
-      continue;
-
-    if (access(path, F_OK) == 0) {
-      /* Now check for the specific UUID marker */
-      build_proc_root_path(pids[i], marker, path, sizeof(path));
-      if (access(path, F_OK) == 0) {
-        if (is_valid_container_pid(pids[i])) {
-          pid_t found = pids[i];
-          return found;
-        }
-      }
-    }
-  }
-
-  return 0;
-}
-
 int collect_active_uuids(char uuids[][UUID_LEN + 1], int max_uuids) {
   if (!uuids || max_uuids <= 0)
     return 0;
 
-  _cleanup_free_ pid_t *pids = NULL;
+  auto_free pid_t *pids = nullptr;
   size_t count = 0;
   char path[PATH_MAX];
   int found = 0;
@@ -163,20 +47,20 @@ int collect_active_uuids(char uuids[][UUID_LEN + 1], int max_uuids) {
     if (access(path, F_OK) != 0)
       continue;
 
-    _cleanup_closedir_ DIR *d = opendir(path);
+    auto_closedir DIR *d = opendir(path);
     if (!d)
       continue;
 
     struct dirent *ent;
-    while ((ent = readdir(d)) != NULL && found < max_uuids) {
+    while ((ent = readdir(d)) != nullptr && found < max_uuids) {
       if (strlen(ent->d_name) != UUID_LEN)
         continue;
       /* Verify it's all hex chars -- UUID marker files are 32 hex chars */
-      int is_uuid = 1;
+      bool is_uuid = true;
       for (int j = 0; j < UUID_LEN; j++) {
         char c = ent->d_name[j];
         if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
-          is_uuid = 0;
+          is_uuid = false;
           break;
         }
       }
@@ -195,8 +79,8 @@ int collect_active_uuids(char uuids[][UUID_LEN + 1], int max_uuids) {
  * Status reporting
  * ---------------------------------------------------------------------------*/
 
-int show_containers(struct config *cfg) {
-  _cleanup_free_ struct container_info *containers = NULL;
+int show_containers(cfg_t *cfg) {
+  auto_free struct container_info *containers = nullptr;
 
   int count = 0;
   int cap = 32;
@@ -212,7 +96,7 @@ int show_containers(struct config *cfg) {
     return -1;
 
   /* Scan /proc for running containers */
-  _cleanup_free_ pid_t *pids = NULL;
+  auto_free pid_t *pids = nullptr;
   size_t pcount = 0;
   char path[PATH_MAX];
 
@@ -317,66 +201,6 @@ int show_containers(struct config *cfg) {
   return 0;
 }
 
-int is_container_init(pid_t pid) {
-  char path[PATH_MAX];
-  snprintf(path, sizeof(path), "/proc/%d/status", pid);
-  _cleanup_fclose_ FILE *f = fopen(path, "re");
-  if (!f)
-    return 0;
-
-  char line[1024];
-  int is_init = 0;
-  int nspid_found = 0;
-  while (fgets(line, sizeof(line), f)) {
-    if (strncmp(line, "NSpid:", 6) == 0) {
-      /* NSpid line format: "NSpid: <pid1> <pid2> ... <pidN>"
-       * The last value is the PID in the innermost namespace.
-       * We use a robust tokenizer to avoid issues with tabs/spaces.
-       * NOTE: NSpid was added in Linux 4.1. On older kernels (e.g. 3.10),
-       * this line is absent and we fall back to the ns/pid inode check. */
-      nspid_found = 1;
-      char *p = line + 6;
-      char *last_val = NULL;
-      char *saveptr;
-      char *token = strtok_r(p, " \t\n\r", &saveptr);
-      while (token) {
-        last_val = token;
-        token = strtok_r(NULL, " \t\n\r", &saveptr);
-      }
-      if (last_val && strcmp(last_val, "1") == 0) {
-        is_init = 1;
-      }
-      break;
-    }
-  }
-
-  if (nspid_found)
-    return is_init;
-
-  /*
-   * Fallback for kernels < 4.1 (e.g. 3.10) where NSpid is absent:
-   * Compare the inode of /proc/<pid>/ns/pid vs /proc/1/ns/pid.
-   * Available since Linux 3.8 (namespaces(7)).
-   * If inodes differ, the process lives in a different PID namespace.
-   * Combined with the FORK_MARKER marker check in
-   * is_valid_container_pid(), this is sufficient to identify a
-   * container init process.
-   */
-  struct stat st_pid, st_host;
-  char ns_path[PATH_MAX];
-
-  snprintf(ns_path, sizeof(ns_path), "/proc/%d/ns/pid", pid);
-  if (stat(ns_path, &st_pid) < 0)
-    return 0;
-
-  if (stat("/proc/1/ns/pid", &st_host) < 0)
-    return 0;
-
-  /* Different inode == different PID namespace == process is a container init
-   */
-  return (st_pid.st_ino != st_host.st_ino) ? 1 : 0;
-}
-
 /* Restore host-side metadata (config, pid, mount) from internal markers.
  * Returns 0 on success, -1 on failure. */
 int metadata_sync(pid_t pid) {
@@ -405,16 +229,16 @@ int metadata_sync(pid_t pid) {
   mkdir_p(container_dir, 0755);
 
   /* 3. Restore Configuration */
-  struct config recovery_cfg = {0};
+  cfg_t recovery_cfg = {0};
 
   build_proc_root_path(pid, FORK_MARKER "/container.config", path,
                        sizeof(path));
 
-  int config_restored = 0;
+  bool config_restored = false;
   if (config_load(path, &recovery_cfg) == 0) {
     snprintf(recovery_cfg.config_file, sizeof(recovery_cfg.config_file),
              "%.3800s/container.config", container_dir);
-    config_restored = 1;
+    config_restored = true;
   }
 
   /* 4. Read mount path from /proc/<pid>/environ */
@@ -445,16 +269,16 @@ int metadata_sync(pid_t pid) {
 }
 
 int scan_containers(void) {
-  log_info("Scanning system for untracked " PROJECT_NAME " containers...");
+  log_info("Scanning system for untracked containers...");
 
-  _cleanup_free_ pid_t *pids = NULL;
+  auto_free pid_t *pids = nullptr;
   size_t count;
   if (collect_pids(&pids, &count) < 0)
     return -1;
 
   /* 1. Tracked Mount Points (to detect orphaned mounts) */
   typedef char mount_path_t[PATH_MAX];
-  _cleanup_free_ mount_path_t *tracked_mounts =
+  auto_free mount_path_t *tracked_mounts =
       calloc(MAX_TRACKED_ENTRIES, sizeof(mount_path_t));
   if (!tracked_mounts) {
     return -1;
@@ -485,17 +309,17 @@ int scan_containers(void) {
     char cdir[PATH_MAX];
     snprintf(cdir, sizeof(cdir), "%s/%s", get_runtime_dir(),
              RUNTIME_CONFIG_SUBDIR);
-    _cleanup_closedir_ DIR *cd = opendir(cdir);
+    auto_closedir DIR *cd = opendir(cdir);
     if (cd) {
       struct dirent *ent;
-      while ((ent = readdir(cd)) != NULL &&
+      while ((ent = readdir(cd)) != nullptr &&
              tracked_mount_count < MAX_TRACKED_ENTRIES) {
         if (ent->d_name[0] == '.')
           continue;
         char cfgpath[PATH_MAX];
         snprintf(cfgpath, sizeof(cfgpath), "%s/%s/container.config", cdir,
                  ent->d_name);
-        struct config tmp_cfg = {0};
+        cfg_t tmp_cfg = {0};
         if (config_load(cfgpath, &tmp_cfg) == 0) {
           if (tmp_cfg.img_mount_point[0]) {
             safe_strncpy(tracked_mounts[tracked_mount_count],
@@ -510,10 +334,10 @@ int scan_containers(void) {
 
   /* 4. Scan for orphaned loop mounts in /tmp/ds-fork/mnt */
   int orphaned_found = 0;
-  _cleanup_closedir_ DIR *md = opendir(IMG_MOUNT_ROOT);
+  auto_closedir DIR *md = opendir(IMG_MOUNT_ROOT);
   if (md) {
     struct dirent *ent;
-    while ((ent = readdir(md)) != NULL) {
+    while ((ent = readdir(md)) != nullptr) {
       if (ent->d_name[0] == '.')
         continue;
 
@@ -521,17 +345,17 @@ int scan_containers(void) {
       snprintf(mpath, sizeof(mpath), "%s/%s", IMG_MOUNT_ROOT, ent->d_name);
 
       if (is_mountpoint(mpath)) {
-        int is_tracked = 0;
+        bool is_tracked = false;
         for (int i = 0; i < tracked_mount_count; i++) {
           if (strcmp(mpath, tracked_mounts[i]) == 0) {
-            is_tracked = 1;
+            is_tracked = true;
             break;
           }
         }
 
         if (!is_tracked) {
           log_warn("Found orphaned mount: %s, cleaning up...", mpath);
-          unmount_rootfs_img(mpath, 0);
+          unmount_rootfs_img(mpath, false);
           orphaned_found++;
         }
       } else {
