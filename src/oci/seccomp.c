@@ -102,17 +102,16 @@ int seccomp_apply_minimal(const int privileged_mask) {
     filter[curr++] = (struct sock_filter)BPF_STMT(
         BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
 
-    /*
-     * 9. CVE-2026-31431 ("Copy Fail") - mitigation layer 2.
-     *
-     * Block socket(AF_ALG, ...) - the mandatory first step of the exploit.
-     * AF_ALG == 38.  The filter must reload the syscall number after the
-     * argument-inspecting unshare/clone blocks above (those leave the acc
-     * pointing at args[0]).  Pattern mirrors the unshare handler above.
-     *
-     * Instruction budget: JEQ/socket(5) + JEQ/arg(4) = 6 insns.
-     * filter[] was sized to 72 to accommodate this.
-     */
+     /*
+      * 9. CVE-2026-31431 ("Copy Fail") - 缓解层 2。
+      *
+      * 拦截 socket(AF_ALG, ...) - 漏洞利用的强制性第一步。
+      * AF_ALG == 38。在上述检查参数的 unshare/clone 拦截（它们将 acc 指向 args[0]）之后，
+      * 过滤器必须重新加载系统调用号。其模式与上述 unshare 处理程序类似。
+      *
+      * 指令预算：JEQ/socket(5) + JEQ/arg(4) = 6 条指令。
+      * filter[] 的大小已调整为 78 以容纳这些指令。
+      */
     filter[curr++] = (struct sock_filter)BPF_STMT(
         BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
     filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,

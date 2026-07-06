@@ -57,6 +57,7 @@
 
 #include "version.h"
 #include "utils/log.h"
+#include "cleanup.h"
 
 constexpr int MIN_KERNEL_MAJOR = 4;
 constexpr int MIN_KERNEL_MINOR = 9;
@@ -100,41 +101,6 @@ constexpr int PRIV_NOSEC  = 1 << 2; /* Minimal seccomp only */
 constexpr int PRIV_SHARED = 1 << 3; /* MS_SHARED root propagation */
 constexpr int PRIV_UNFILT = 1 << 4; /* No device node blocking (except PTYs) */
 constexpr int PRIV_FULL   = 0xFF;   /* All above */
-
-/* ---------------------------------------------------------------------------
- * Cleanup attribute helpers (RAII-style automatic resource management)
- *
- * Usage:
- *   auto_free char *buf = malloc(1024);    // auto-free on scope exit
- *   auto_fclose FILE *f = fopen(...);      // auto-fclose on scope exit
- *   auto_close int fd = open(...);          // auto-close on scope exit
- *   auto_closedir DIR *d = opendir(...);    // auto-closedir on scope exit
- * ---------------------------------------------------------------------------*/
-[[maybe_unused]] static void cfree(void *p) {
-  void **pp = p;
-  if (*pp) {
-    free(*pp);
-    *pp = nullptr;
-  }
-}
-
-[[maybe_unused]] static void cfclose(FILE **f) {
-  if (*f) fclose(*f);
-}
-
-[[maybe_unused]] static void cclose(const int *fd) {
-  if (*fd >= 0) close(*fd);
-}
-
-[[maybe_unused]] static void cclosedir(DIR **d) {
-  if (*d) closedir(*d);
-}
-
-#define _cleanup_(x)  [[gnu::cleanup(x)]]
-#define auto_free     _cleanup_(cfree)
-#define auto_fclose   _cleanup_(cfclose)
-#define auto_close    _cleanup_(cclose)
-#define auto_closedir _cleanup_(cclosedir)
 
 struct nl_ctx {
   int fd;       /* AF_NETLINK / NETLINK_ROUTE socket */
@@ -231,32 +197,32 @@ typedef struct config cfg_t;
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
-void safe_strncpy(char *dst, const char *src, const size_t size);
+void safe_strncpy(char *dst, const char *src, size_t size);
 char *resolve_path_arg(const char *path);
-void resolve_argv_paths(const int argc, char **argv);
-long get_container_uptime(const pid_t pid);
-void format_uptime(const long uptime_sec, char *buf, const size_t size);
+void resolve_argv_paths(int argc, char **argv);
+long get_container_uptime(pid_t pid);
+void format_uptime(long uptime_sec, char *buf, size_t size);
 bool is_ramfs(const char *path);
 bool is_subpath(const char *parent, const char *child);
 int write_file(const char *path, const char *content);
-int read_file(const char *path, char *buf, const size_t size);
-ssize_t write_all(const int fd, const void *buf, const size_t count);
-int generate_uuid(char *buf, const size_t size);
+int read_file(const char *path, char *buf, size_t size);
+ssize_t write_all(int fd, const void *buf, size_t count);
+int generate_uuid(char *buf, size_t size);
 int get_kernel_version(int *major, int *minor);
 int mkdir_p(const char *path, mode_t mode);
 int remove_recursive(const char *path);
 int collect_pids(pid_t **pids_out, size_t *count_out);
-int build_proc_root_path(pid_t pid, const char *suffix, char *buf, const size_t size);
+int build_proc_root_path(pid_t pid, const char *suffix, char *buf, size_t size);
 int parse_os_release(const char *rootfs_path, char *id_out, char *ver_out,
-                     const size_t out_size);
+                     size_t out_size);
 int grep_file(const char *path, const char *pattern);
-int read_proc_environ(const pid_t pid, const char *key, char *value, const size_t size);
-int safe_openat_proc(const pid_t pid, const char *subpath, const int flags, const mode_t mode);
+int read_proc_environ(pid_t pid, const char *key, char *value, size_t size);
+int safe_openat_proc(pid_t pid, const char *subpath, int flags, mode_t mode);
 bool path_has_symlink(const char *path);
 void firmware_path_add(const char *fw_path);
 void firmware_path_remove(const char *fw_path);
 int run_command_quiet(char *const argv[]);
-void print_privileged_warning(const int privileged_mask);
+void print_privileged_warning(int privileged_mask);
 
 void write_monitor_debug_log(const char *name, const char *fmt, ...);
 void monitor_run(cfg_t *cfg, int sync_pipe_write);
@@ -266,11 +232,11 @@ void cleanup_container_resources(cfg_t *cfg,
 void open_container_log(cfg_t *cfg);
 void close_container_log(void);
 void sort_bind_mounts(cfg_t *cfg);
-void sanitize_container_name(const char *name, char *out, const size_t size);
+void sanitize_container_name(const char *name, char *out, size_t size);
 int validate_container_name(const char *name);
 int reject_container_name(const char *name);
 int parse_and_validate_names(const char *arg, char *out_buf,
-                             const size_t out_size);
+                             size_t out_size);
 int multi_stop(const char *raw_names);
 int validate_bind_destination(const char *dest);
 int count_folders(const char *path);
@@ -295,19 +261,19 @@ int domount(const char *src, const char *tgt, const char *fstype,
 int bind_mount(const char *src, const char *tgt);
 
 void apply_jail_mask(bool hw_access, int privileged_mask);
-int setup_dev(const char *rootfs, const bool hw_access, const bool gpu_mode,
-              const int privileged_mask);
-int setup_devpts(const bool hw_access);
+int setup_dev(const char *rootfs, bool hw_access, bool gpu_mode,
+              int privileged_mask);
+int setup_devpts(bool hw_access);
 int fix_host_ptys(void);
 int setup_volatile_overlay(cfg_t *cfg);
 int cleanup_volatile_overlay(cfg_t *cfg);
 int check_volatile_mode(cfg_t *cfg);
 
 void setup_custom_binds(cfg_t *cfg, const char *rootfs);
-int mount_rootfs_img(const char *img_path, char *mount_point, const size_t mp_size,
+int mount_rootfs_img(const char *img_path, char *mount_point, size_t mp_size,
                      const char *name);
 
-void unmount_rootfs_img(const char *mount_point, const bool silent);
+void unmount_rootfs_img(const char *mount_point, bool silent);
 bool is_mountpoint(const char *path);
 
 bool cgroup_host_is_v2(void);
@@ -345,10 +311,10 @@ const char *get_lock_dir(void);
 const char *get_logs_dir(void);
 int ensure_runtime(void);
 
-void generate_container_name(const char *rootfs_path, char *name, const size_t size);
+void generate_container_name(const char *rootfs_path, char *name, size_t size);
 bool is_container_running(const cfg_t *cfg, pid_t *pid_out);
-bool is_container_init(const pid_t pid);
-int count_running_containers(char *first_name, const size_t size);
+bool is_container_init(pid_t pid);
+int count_running_containers(char *first_name, size_t size);
 pid_t find_container_init_pid(const char *uuid);
 int collect_active_uuids(char uuids[][UUID_LEN + 1], int max_uuids);
 int show_containers(const cfg_t *cfg);
@@ -365,7 +331,7 @@ int show_info(cfg_t *cfg, bool trust_cfg_pid);
 int show_container_usage(cfg_t *cfg);
 int restart_rootfs(cfg_t *cfg);
 
-int check_requirements_hw(const bool hw_access);
+int check_requirements_hw(bool hw_access);
 int check_requirements_detailed(void);
 
 int daemon_run(bool foreground);

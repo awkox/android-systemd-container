@@ -18,7 +18,7 @@ bool is_mountpoint(const char *path) {
   return st1.st_dev != st2.st_dev;
 }
 
-/* Find available mount point in /tmp/ds-fork/mnt/ using container name.
+/* 使用容器名称在 /mnt/asc/ 中查找可用的挂载点
  * If a mount point already exists for this name but is not associated
  * with an active container (stale), it will be cleaned up. */
 static int find_available_mountpoint(const char *name, char *mount_path,
@@ -154,7 +154,7 @@ int check_volatile_mode(cfg_t *cfg) {
 }
 
 int setup_volatile_overlay(cfg_t *cfg) {
-  /* 1. Create temporary workspace in ds-fork/Volatile/<name> */
+  /* 1. 在 /tmp/asc/volatile/<name> 中创建临时工作区 */
   char base[PATH_MAX];
   snprintf(base, sizeof(base), "%s/" RUNTIME_VOLATILE_SUBDIR "/%s",
            get_runtime_dir(), cfg->container_name);

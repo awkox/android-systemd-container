@@ -60,10 +60,8 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
       sanitize_container_name(cfg->container_name, safe_name,
                               sizeof(safe_name));
 
-      /* v2: enable requested controllers top-down BEFORE mkdir.
-       * Controllers only appear in a child cgroup if the parent's
-       * subtree_control has them enabled first. Walk two levels:
-       * /sys/fs/cgroup -> /sys/fs/cgroup/ds-fork */
+      /* v2：在 mkdir 之前自上而下启用请求的控制器。遍历两个层级：
+       * /sys/fs/cgroup -> /sys/fs/cgroup/asc */
       if (cfg->memory_limit || cfg->cpu_quota || cfg->pids_limit) {
         /* Build enable string with snprintf offsets instead of strncat to
          * avoid truncation. Use cg_word_in_list() for exact word-boundary
@@ -216,18 +214,14 @@ reboot_loop:;
       _exit(-1); // fail
     }
 
-    /* Intermediate: redirect stdio to /dev/null NOW (after forking init).
-     * It only exists to wait for init and has no business talking to the
-     * user's terminal or holding pipes open.
+    /* Intermediate: 现在（在 fork init 之后）将 stdio 重定向到 /dev/null。
+     * 它的存在仅仅是为了等待 init，不需要与用户的终端交互或保持管道打开。
      *
-     * BUG FIX: this redirect was previously placed BEFORE the fork(), which
-     * caused init_pid to inherit /dev/null for fd 1 and fd 2. Every
-     * log_info() call inside internal_boot() writes to stdout, so all boot
-     * logs were silently swallowed by /dev/null - visible only in the log
-     * file (which uses direct file I/O, not stdout). Moving the redirect
-     * here means only the intermediate itself goes silent; internal_boot()
-     * retains the original terminal fds until it redirects to /dev/console
-     * at its own step 24. */
+     * 错误修复：这个重定向以前被放在 fork() 之前，这导致 init_pid 继承了 
+     * /dev/null 作为 fd 1 和 fd 2。internal_boot() 内部的每次 log_info() 
+     * 调用都会被 /dev/null 默默吞噬。将重定向移到这里意味着只有中间进程
+     * 本身保持静默；internal_boot() 会保留原始的终端文件描述符，
+     * 直到在它自己的第 21 步将其重定向到 /dev/console。*/
     if (!cfg->foreground) {
       auto_close int devnull = open("/dev/null", O_RDWR);
       if (devnull >= 0) {
@@ -449,12 +443,11 @@ reboot_loop:;
   /* Normal exit - monitor does cleanup */
   write_monitor_debug_log(cfg->container_name, "Monitor performing cleanup");
 
-  /* Before cleaning up the container's cgroup subtree, move the
-   * monitor process itself back to the root cgroup.  The monitor wrote its
-   * own PID into /sys/fs/cgroup/ds-fork/<name>/ at start (for cgroup
-   * namespace isolation).  If it is still in that cgroup when
-   * cgroup_cleanup_container() calls rmdir, the kernel sees a non-empty
-   * cgroup and returns EBUSY - the directory is never removed.
+  /* 在清理容器的 cgroup 子树之前，将 monitor 进程自身移回根 cgroup。
+   * monitor 在启动时将自己的 PID 写到了 /sys/fs/cgroup/asc/<name>/ 中
+   * If it is still in that cgroup when cgroup_cleanup_container() calls rmdir,
+   * the kernel sees a non-empty cgroup and returns EBUSY -
+   * the directory is never removed.
    *
    * Writing our PID to the root cgroup.procs atomically migrates us out.
    * This is safe: the monitor is about to _exit() anyway. */

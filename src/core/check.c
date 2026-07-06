@@ -2,7 +2,7 @@
 
 static bool is_root = 0;
 
-#define CHECK_BUF_SIZE 16 * 1024
+#define CHECK_BUF_SIZE (16 * 1024)
 static char check_buf[CHECK_BUF_SIZE];
 static size_t check_buf_pos = 0;
 

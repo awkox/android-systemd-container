@@ -12,10 +12,9 @@
 static int active_lock_fd = -1;
 static char active_lock_path[PATH_MAX] = {0};
 
-/* Build lock path with defensive truncation.
- * Precision: 2048 (pids_dir) + 256 (name) + 5 (.lock) = 2309 < PATH_MAX (4096)
- * This prevents format-truncation warnings while ensuring paths never overflow.
- */
+/* 构建锁路径并进行防御性截断。精度：
+ * 2048 (lock_dir) + 256 (name) + 5 (.lock) = 2309 < PATH_MAX (4096)
+ * 这样可以防止格式截断警告，同时确保路径永远不会溢出。 */
 static int get_lock_path(const char *name, char *buf, const size_t size) {
   if (!name || !buf || size == 0 || !validate_container_name(name))
     return -1;
@@ -81,7 +80,7 @@ static void release_external_lock(void) {
   if (active_lock_fd >= 0) {
     /* 
      * 在关闭 FD 前先 unlink，防止其他排队的进程获取到一个即将被删除的孤儿文件的锁。
-     * 这保持了 /tmp/ds-fork/lock 目录的干净。
+     * 这保持了 lock 目录的干净。
      */
     if (active_lock_path[0]) {
       unlink(active_lock_path);
@@ -194,7 +193,7 @@ void cleanup_container_resources(cfg_t *cfg,
      * if no external lock is active. */
   }
 
-  /* Cgroup subtree cleanup: remove /sys/fs/cgroup/ds-fork/<name>/.
+  /* Cgroup 子树清理：删除 /sys/fs/cgroup/asc/<name>/ 目录。
    * All container processes are dead by now so every leaf is empty and
    * the bottom-up rmdir walk always succeeds.  Skipped on restart
    * (skip_unmount=1) so the monitor's cgroup context stays intact for
@@ -207,8 +206,7 @@ void cleanup_container_resources(cfg_t *cfg,
 bool is_valid_container_pid(const pid_t pid) {
   char path[PATH_MAX];
 
-  /* Primary marker: /run/ds-fork must exist inside the container.
-   * This is the one authoritative marker written by ds-fork on boot.
+  /* 主要标记：容器内必须存在 /run/asc。这是由本项目在引导时写入的唯一权威标记
    * We do NOT require /run/systemd/container - Alpine/runit/openrc never
    * write that file, causing scan to be blind to non-systemd distros. */
   if (build_proc_root_path(pid, FORK_MARKER, path, sizeof(path)) < 0)

@@ -178,14 +178,12 @@ static int config_add_bind(cfg_t *cfg, const char *src, const char *dest,
 }
 
 /*
- * IMPORTANT: free_config_binds must NOT free unknown lines.
- * The --reset path in main.c saves unknown_head/tail pointers, calls this
- * function, then memset's the struct, then restores the saved pointers.
- * If we free unknown lines here, the restored pointers dangle → SIGSEGV.
+ * IMPORTANT: free_config_binds 绝不能释放未知配置行。
+ * 配置重载逻辑（如 monitor.c 中的重启流程）依赖于保留这些指针。
+ * 如果我们在这里释放未知配置行，重载时的恢复指针将会悬空 → 导致 SIGSEGV。
  *
- * Unknown lines are freed separately via free_config_unknown_lines().
+ * 未知配置行将通过 free_config_unknown_lines() 单独释放。
  */
-
 void free_config_binds(cfg_t *cfg) {
   if (!cfg->binds)
     return;

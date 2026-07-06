@@ -325,10 +325,10 @@ int fix_host_ptys(void) {
 }
 
 /*
- * Shared GPU/hardware device lists.
+ * 共享的 GPU/硬件设备列表。
  *
- * Both scan_host_gpu_gids() and mirror_gpu_nodes() iterate these tables.
- * Add new devices here once; both functions pick them up automatically.
+ * mirror_gpu_nodes() 会遍历这些表。
+ * 在此统一添加新设备，函数会自动识别并处理它们。
  */
 
 /* Dynamic directories: { host_dir, prefix_or_NULL } */
@@ -676,15 +676,14 @@ static bool is_dangerous_node(const char *name) {
 /*
  * mirror_gpu_node()
  *
- * For a single host GPU device path: if the node is absent or wrongly a
- * directory in the container's /dev, fix it with mknod().
+ * 针对单个宿主机 GPU 设备路径：如果该节点在容器的 /dev 中缺失，或者错误地
+ * 成为一个目录，则使用 mknod() 进行修复。
  *
- * Background: on Android, /dev is a plain tmpfs populated by ueventd - NOT
- * the kernel's devtmpfs.  So GPU nodes like /dev/kgsl-3d0, /dev/mali0 and
- * /dev/dri/renderD128 exist in ueventd's tmpfs but are absent (or appear as
- * empty directories) when we mount a fresh devtmpfs inside the container.
- * scan_host_gpu_gids() already detected those host nodes; here we just make
- * sure a matching character device node is present in the container /dev.
+ * 背景：在 Android 上，/dev 是由 ueventd 填充的普通 tmpfs - 而不是
+ * 内核的 devtmpfs。因此，像 /dev/kgsl-3d0、/dev/mali0 和
+ * /dev/dri/renderD128 这样的 GPU 节点存在于 ueventd 的 tmpfs 中，但当我们在
+ * 容器内挂载一个全新的 devtmpfs 时，它们却缺失了（或者显示为空目录）。
+ * 在此我们只需确保容器的 /dev 中存在正确的字符设备节点即可。
  */
 static void mirror_gpu_node(const char *host_path, const char *dev_path) {
   /* host_path must be rooted under /dev/ */
@@ -805,11 +804,10 @@ static void do_mirror_gpu_dir(const char *host_dir, const char *prefix,
 /*
  * mirror_gpu_nodes()
  *
- * Public entry point called from setup_dev() immediately after devtmpfs is
- * mounted.  Mirrors every GPU/hardware device node that scan_host_gpu_gids()
- * would detect, using the same scan paths so behaviour is always in sync.
+ * 公共入口点，在挂载 devtmpfs 后立即从 setup_dev() 调用。
+ * 镜像在表中定义的每个 GPU/硬件设备节点。
  *
- * Must be called BEFORE pivot_root while the host /dev is still accessible.
+ * 必须在 pivot_root 之前，且宿主机的 /dev 仍然可访问时调用。
  */
 static void mirror_gpu_nodes(const char *dev_path) {
   /* Dynamic directories */

@@ -63,7 +63,7 @@ int collect_active_uuids(char uuids[][UUID_LEN + 1], const int max_uuids) {
 int show_containers(const cfg_t *cfg) {
   int cap = 32;
 
-  /* Total tracked = folders under Containers */
+  /* 总跟踪数 = config 目录下的文件夹数量 */
   char container_dir[1024];
   snprintf(container_dir, sizeof(container_dir), "%s/%s", get_runtime_dir(),
            RUNTIME_CONFIG_SUBDIR);
@@ -312,7 +312,7 @@ int scan_containers(void) {
     }
   }
 
-  /* 4. Scan for orphaned loop mounts in /tmp/ds-fork/mnt */
+  /* 4. 扫描 /mnt/asc 中孤立的 loop 挂载 */
   int orphaned_found = 0;
   auto_closedir DIR *md = opendir(IMG_MOUNT_ROOT);
   if (md) {

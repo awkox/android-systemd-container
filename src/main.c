@@ -226,9 +226,8 @@ int main(const int argc, char **argv) {
    * 1. Try to load from explicitly provided config file.
    * 2. Otherwise try to auto-detect config from rootfs paths.
    * 3. Ensure we have a container name for stateful commands.
-   * 4. Perform a recovery scan to load from
-   *    <workspace dir>/Containers/<name>/container.config if config hasn't
-   *    been loaded yet.
+   * 4. 如果配置尚未成功加载，执行恢复扫描以尝试从
+   *    <workspace dir>/config/<name>/container.config 加载。
    */
   const bool is_stateful =
       discovered_cmd && (strcmp(discovered_cmd, "stop") == 0 ||

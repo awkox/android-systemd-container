@@ -319,7 +319,7 @@ void cgroup_cleanup_container(const char *container_name) {
     snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/%s/" PROJECT_NAME "/%s",
              de->d_name, safe_name);
 
-    /* Handle unified V2 where ds-fork/ is at root */
+    /* 处理统一的 V2 层次结构，此时 asc/ 位于根目录 */
     if (strcmp(de->d_name, "cgroup.procs") == 0)
       snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/" PROJECT_NAME "/%s",
                safe_name);

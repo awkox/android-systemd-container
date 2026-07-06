@@ -18,8 +18,7 @@ static int write_inplace(const pid_t pid, const char *subpath, const char *buf,
   if (fstat(fd, &st) < 0 || !S_ISREG(st.st_mode))
     return -1;
 
-  /* Security check: must be on tmpfs (the container's /run/ds-fork/vproc)
-   */
+  /* 安全检查：必须位于 tmpfs 上（即容器的 /run/asc/vproc） */
   struct statfs sfs;
   if (fstatfs(fd, &sfs) < 0 || sfs.f_type != TMPFS_MAGIC)
     return -1;

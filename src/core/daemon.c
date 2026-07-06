@@ -885,7 +885,7 @@ int daemon_run(const bool foreground) {
           "binary automatically.");
     }
 
-    const int conn = accept4(srv, nullptr, nullptr, SOCK_CLOEXEC);
+    auto_close const int conn = accept4(srv, nullptr, nullptr, SOCK_CLOEXEC);
     if (conn < 0) {
       if (errno == EINTR || errno == EAGAIN)
         continue;
@@ -893,17 +893,14 @@ int daemon_run(const bool foreground) {
       continue;
     }
 
-    /*
-     * authenticate the peer: only root or members of the 'ds-fork' group
-     * may connect. abstract socket has no filesystem permissions, so we
-     * enforce this via SO_PEERCRED + getgrouplist() -- same model as Docker's
-     * unix group.
-     */
+     /*
+      * 验证对端身份：仅允许 root 用户（uid 0）连接。
+      * 由于抽象套接字没有文件系统权限，我们通过 SO_PEERCRED 来强制执行此安全限制。
+      */
     {
       struct ucred cred;
       socklen_t clen = sizeof(cred);
       if (getsockopt(conn, SOL_SOCKET, SO_PEERCRED, &cred, &clen) < 0) {
-        close(conn);
         continue;
       }
 
@@ -911,14 +908,12 @@ int daemon_run(const bool foreground) {
         const char *msg = "permission denied: only user 0 may connect.";
         send_frame(conn, MSG_ERR, msg, (uint32_t)strlen(msg));
         send_exit(conn, 1);
-        close(conn);
         continue;
       }
     }
 
     const pid_t h = fork();
     if (h < 0) {
-      close(conn);
       continue;
     }
     if (h == 0) {
@@ -926,7 +921,6 @@ int daemon_run(const bool foreground) {
       /* keep SIGPIPE ignored so we don't die on client disconnect */
       handle_conn(conn);
     }
-    close(conn);
   }
   return 0;
 }
