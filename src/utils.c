@@ -551,22 +551,6 @@ int count_folders(const char *path) {
   return count;
 }
 
-/* Validate each comma-separated name in optarg; store raw value in out_buf. */
-int parse_and_validate_names(const char *arg, char *out_buf,
-                             const size_t out_size) {
-  char tmp[4096];
-  snprintf(tmp, sizeof(tmp), "%s", arg);
-  char *sp;
-  const char *tok = strtok_r(tmp, ",", &sp);
-  while (tok) {
-    if (reject_container_name(tok) < 0)
-      return -1;
-    tok = strtok_r(nullptr, ",", &sp);
-  }
-  snprintf(out_buf, out_size, "%s", arg);
-  return 0;
-}
-
 /* Set oom_score_adj to -1000 (unkillable).  Best-effort, no error return. */
 void oom_protect(void) {
   auto_fclose FILE *f = fopen("/proc/self/oom_score_adj", "w");

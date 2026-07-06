@@ -33,24 +33,6 @@ static int find_available_mountpoint(const char *name, char *mount_path,
 
   snprintf(mount_path, size, "%s/%s", base_dir, safe_name);
 
-  if (access(mount_path, F_OK) == 0) {
-    if (is_mountpoint(mount_path)) {
-      /* This is a stale mount point from a previous crashed run.
-       * (We know it's stale because start_rootfs ensures the container name
-       * itself is unique among currently running containers). */
-      log_warn("Found stale mount at %s, cleaning up...", mount_path);
-      if (umount2(mount_path, MNT_DETACH) < 0) {
-        /* umount2 failed: find and detach the backing loop device explicitly */
-        char stale_dev[256] = {0};
-        get_backing_dev(mount_path, stale_dev, sizeof(stale_dev));
-        umount2(mount_path, MNT_DETACH | MNT_FORCE);
-        if (stale_dev[0])
-          loop_detach(stale_dev);
-      }
-    }
-    return 0;
-  }
-
   if (mkdir(mount_path, 0755) < 0) {
     log_error("Failed to create mount directory %s: %s", mount_path,
               strerror(errno));

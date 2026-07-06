@@ -101,28 +101,7 @@ bool is_external_lock_active(const char *name) {
     return false;
 
   auto_close const int fd = open(lock_path, O_RDONLY | O_CLOEXEC);
-  if (fd < 0)
-    return false; /* 文件不存在 -> 没有锁 */
-
-  struct flock fl = {
-    .l_type = F_WRLCK,
-    .l_whence = SEEK_SET,
-  };
-
-  /* 使用 F_GETLK 向内核确认是否有进程正持有写锁 */
-  if (fcntl(fd, F_GETLK, &fl) == 0) {
-    if (fl.l_type != F_UNLCK) {
-      return true; /* Valid lock held */
-    }
-  }
-
-  /* 
-   * 到这里说明没有任何进程持有锁。由于文件还存在，这说明这是一个宿主异常断电或 
-   * kill -9 遗留的死锁文件。顺手将其清理。
-   */
-  write_monitor_debug_log(name, "Removing stale lock file");
-  unlink(lock_path);
-  return true;
+  return !(fd < 0);
 }
 
 void cleanup_container_resources(cfg_t *cfg,
@@ -173,15 +152,6 @@ void cleanup_container_resources(cfg_t *cfg,
     } else {
       /* Explicitly call unmount wrapper. It handles its own logging. */
       unmount_rootfs_img(mount_point, cfg->foreground);
-    }
-  }
-
-  /* 解除镜像文件上的防删除 VFS Bind 挂载 */
-  if (cfg->rootfs_img_path[0] && !skip_unmount) {
-    if (is_mountpoint(cfg->rootfs_img_path)) {
-      if (umount2(cfg->rootfs_img_path, MNT_DETACH) == 0) {
-        /* log_info("Released VFS lock on image file."); */
-      }
     }
   }
 
@@ -291,17 +261,6 @@ int start_rootfs(cfg_t *cfg) {
 
   /* 2. Mount rootfs image (using the resolved name) */
   if (cfg->rootfs_img_path[0] && !lock_acquired) {
-    
-    /* VFS 防删保护：通过自我绑定挂载防止宿主机意外删除或重命名镜像文件 */
-    struct stat img_st;
-    if (stat(cfg->rootfs_img_path, &img_st) == 0 && S_ISREG(img_st.st_mode)) {
-      if (mount(cfg->rootfs_img_path, cfg->rootfs_img_path, nullptr, MS_BIND, nullptr) == 0) {
-        log_info("Image file locked against deletion (VFS self-bind)");
-      } else if (errno != EBUSY) {
-        log_warn("Failed to lock image file: %s", strerror(errno));
-      }
-    }
-
     if (mount_rootfs_img(cfg->rootfs_img_path, cfg->img_mount_point,
                          sizeof(cfg->img_mount_point), cfg->container_name) < 0) {
       goto cleanup; /* 失败时跳转到清理流程，下方 cleanup 函数会自动解除绑定 */

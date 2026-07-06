@@ -268,7 +268,7 @@ static char *gen_stat(const cfg_t *cfg, size_t *out_len) {
   /* Pass 2: emit with recomputed aggregate */
   bool agg_done = false;
   while (fgets(line, sizeof(line), f)) {
-    if (off + 1024 >= cap) {
+    if (off + sizeof(line) >= cap) {
       cap *= 2;
       char *nb = realloc(buf, cap);
       if (!nb) {

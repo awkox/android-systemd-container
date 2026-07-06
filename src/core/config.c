@@ -289,17 +289,25 @@ int config_save(const char *config_path, cfg_t *cfg) {
       auto_free char *buf_disk = nullptr;
       size_t size_cfg = 0;
       size_t size_disk = 0;
-      auto_fclose FILE *f_cfg = open_memstream(&buf_cfg, &size_cfg);
-      auto_fclose FILE *f_disk = open_memstream(&buf_disk, &size_disk);
+      FILE *f_cfg = open_memstream(&buf_cfg, &size_cfg);
+      FILE *f_disk = open_memstream(&buf_disk, &size_disk);
       bool is_equal = false;
 
       if (f_cfg && f_disk) {
         config_serialize_known(f_cfg, cfg);
         config_serialize_known(f_disk, &disk_cfg);
+        fclose(f_cfg);
+        fclose(f_disk);
         if (size_cfg == size_disk && memcmp(buf_cfg, buf_disk, size_cfg) == 0) {
           is_equal = true;
         }
+      } else {
+        if (f_cfg)
+          fclose(f_cfg);
+        if (f_disk)
+          fclose(f_disk);
       }
+
       free_config_unknown_lines(&disk_cfg);
 
       if (is_equal) {
@@ -315,7 +323,7 @@ int config_save(const char *config_path, cfg_t *cfg) {
   snprintf(temp_path, sizeof(temp_path), "%s.tmp", config_path);
 
   /* Step 2: Write all configurations to temporary file */
-  auto_fclose FILE *f_out = fopen(temp_path, "we");
+  FILE *f_out = fopen(temp_path, "we");
   if (!f_out)
     return -1;
 
@@ -329,6 +337,8 @@ int config_save(const char *config_path, cfg_t *cfg) {
       node = node->next;
     }
   }
+
+  fclose(f_out);
 
   /* Step 4: Atomic rename commit */
   if (rename(temp_path, config_path) < 0) {

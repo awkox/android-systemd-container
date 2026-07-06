@@ -112,13 +112,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
       safe_strncpy(cg_procs, cg_path, sizeof(cg_procs));
       strncat(cg_procs, "/cgroup.procs",
               sizeof(cg_procs) - strlen(cg_procs) - 1);
-      FILE *f = fopen(cg_procs, "we");
-      if (f) {
-        fprintf(f, "%d\n", getpid());
-        fclose(f);
-      }
     }
-    ns_flags |= CLONE_NEWCGROUP;
   } else {
     /* Legacy kernel without force flag - skip cgroupns, run in host
      * cgroupns with full rights so setup_cgroups() can create named
@@ -131,9 +125,6 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
   if (cgroup_apply_limits(cfg) < 0 &&
       (cfg->memory_limit || cfg->cpu_quota || cfg->pids_limit))
     log_warn("[CGROUP] Some resource limits could not be enforced.");
-
-  if (unshare(ns_flags) < 0)
-    log_die("unshare failed: %s", strerror(errno));
 
   bool stdio_redirected = false;
 
@@ -150,28 +141,6 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
    * This eliminates ghost containers because the Monitor never handles
    * SIGHUP - it only checks a deterministic exit code. */
 reboot_loop:;
-
-  /* First boot only: ensure no stale container with the same name is running
-   */
-  if (!cfg->reboot_cycle) {
-    pid_t existing_pid = 0;
-    if (is_container_running(cfg, &existing_pid)) {
-      if (existing_pid != getpid()) {
-        /*
-         * Crucial Safety: Only kill the process if it's confirmed to be a
-         * ds-fork container. This prevents killing random processes that
-         * might have recycled the PID after the container died without
-         * cleanup.
-         */
-        if (is_valid_container_pid(existing_pid)) {
-          log_warn("Killing stale container with same name (PID %d)",
-                   existing_pid);
-          kill(existing_pid, SIGKILL);
-          usleep(100000);
-        }
-      }
-    }
-  }
 
   /* Stdio handling for monitor in background mode (early redirection).
    * We must do this BEFORE forking the intermediate process, otherwise
@@ -192,14 +161,33 @@ reboot_loop:;
 
   if (mid_pid == 0) {
     /* INTERMEDIATE PROCESS
-     * Create a fresh PID namespace (and NET namespace for NAT/none modes)
-     * for this boot cycle. */
-    int clone_flags = CLONE_NEWPID;
+     * Create fresh namespaces for this boot cycle. */
+     
+    /* 中间进程加入容器的 Cgroup */
+    bool cg_ns_ok = access("/proc/self/ns/cgroup", F_OK) == 0 &&
+                    cgroup_host_is_v2() && !cfg->force_cgroupv1;
+    if (cg_ns_ok) {
+      char safe_name[256];
+      sanitize_container_name(cfg->container_name, safe_name, sizeof(safe_name));
+      char cg_procs[PATH_MAX];
+      snprintf(cg_procs, sizeof(cg_procs), "/sys/fs/cgroup/" PROJECT_NAME "/%s/cgroup.procs", safe_name);
+      
+      FILE *f = fopen(cg_procs, "we");
+      if (f) {
+        fprintf(f, "%d\n", getpid());
+        fclose(f);
+      }
+    }
+
+    /* 执行 Namespace 隔离 */
+    int clone_flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC;
     if (cfg->isolation_network)
       clone_flags |= CLONE_NEWNET;
+    if (cg_ns_ok)
+      clone_flags |= CLONE_NEWCGROUP;
 
     if (unshare(clone_flags) < 0) {
-      log_error("unshare(PID|NET) failed: %s", strerror(errno));
+      log_error("unshare failed: %s", strerror(errno));
       _exit(EXIT_FAILURE);
     }
 
@@ -441,24 +429,6 @@ reboot_loop:;
 
   /* Normal exit - monitor does cleanup */
   write_monitor_debug_log(cfg->container_name, "Monitor performing cleanup");
-
-  /* 在清理容器的 cgroup 子树之前，将 monitor 进程自身移回根 cgroup。
-   * monitor 在启动时将自己的 PID 写到了 /sys/fs/cgroup/asc/<name>/ 中
-   * If it is still in that cgroup when cgroup_cleanup_container() calls rmdir,
-   * the kernel sees a non-empty cgroup and returns EBUSY -
-   * the directory is never removed.
-   *
-   * Writing our PID to the root cgroup.procs atomically migrates us out.
-   * This is safe: the monitor is about to _exit() anyway. */
-  {
-    auto_close int root_fd = open("/sys/fs/cgroup/cgroup.procs", O_WRONLY | O_CLOEXEC);
-    if (root_fd >= 0) {
-      char pid_s[32];
-      int len = snprintf(pid_s, sizeof(pid_s), "%d", (int)getpid());
-      if (write(root_fd, pid_s, len) < 0) {
-      }
-    }
-  }
 
   cleanup_container_resources(cfg, false, false);
 

@@ -1,5 +1,11 @@
 #include "asc.h"
 
+/*
+ * !!!我们假设本程序在除了系统关机外不会被意外杀死!!!
+ * !!!所以我们移除了部分意外防护代码，仅保留了正常情况的处理!!!
+ * !!!若程序意外退出，必须重启系统进行清理!!!
+ */
+
 static void print_usage(void) {
   printf(
       "Usage: " PROJECT_NAME " [options] <command> [args]\n\n"
@@ -10,7 +16,6 @@ static void print_usage(void) {
       "  info                      Show detailed container info\n"
       "  pid                       Show the live PID of the container init\n"
       "  show                      List all running containers\n"
-      "  scan                      Scan for untracked containers\n"
       "  check                     Check system requirements\n"
       "  help                      Show this help message\n"
       "  daemon                    Run daemon mode (use --foreground for "
@@ -75,7 +80,6 @@ int main(const int argc, char **argv) {
   int ret = 0;
   /* CRITICAL: Zero all fields to avoid garbage pointer in dynamic arrays */
   cfg_t cfg = {};
-  char raw_names[4096] = "";
 
   static const struct option long_options[] = {
     {"name", required_argument, nullptr, 'n'},
@@ -117,7 +121,7 @@ int main(const int argc, char **argv) {
       safe_strncpy(cfg.config_file, optarg, sizeof(cfg.config_file));
       cfg.config_file_specified = true;
     } else if (opt == 'n') {
-      if (parse_and_validate_names(optarg, raw_names, sizeof(raw_names)) < 0) {
+      if (reject_container_name(optarg) < 0) {
         ret = 1;
         goto cleanup;
       }
@@ -204,18 +208,13 @@ int main(const int argc, char **argv) {
   }
 
   /* If we have a name but haven't successfully loaded a config file yet, load
-   * by name. Skip for comma-separated names - multi_* handles those. */
-  if (!loaded && cfg.container_name[0] != '\0' && !strchr(raw_names, ',')) {
+   * by name. */
+  if (!loaded && cfg.container_name[0] != '\0') {
     if (config_load_by_name(cfg.container_name, &cfg) < 0) {
       /* If loading by name fails and it's a stateful command, maybe the
        * container was moved or renamed. Perform a recovery scan of running
        * systems as a last resort. */
       if (is_stateful) {
-        const bool prev = log_silent;
-        log_silent = true;
-        scan_containers();
-        log_silent = prev;
-
         if (config_load_by_name(cfg.container_name, &cfg) < 0) {
           log_error("Container '%s' not found or metadata missing.",
                     cfg.container_name);
@@ -234,7 +233,7 @@ int main(const int argc, char **argv) {
   while ((opt = getopt_long(argc, argv, optstring, long_options, nullptr)) != -1) {
     switch (opt) {
     case 'n':
-      if (parse_and_validate_names(optarg, raw_names, sizeof(raw_names)) < 0) {
+      if (reject_container_name(optarg) < 0) {
         ret = 1;
         goto cleanup;
       }
@@ -299,19 +298,8 @@ int main(const int argc, char **argv) {
     goto cleanup;
   }
 
-  if (strcmp(cmd, "scan") == 0) {
-    scan_containers();
-    ret = 0;
-    goto cleanup;
-  }
-
   /* start/restart: single container only */
   if (strcmp(cmd, "start") == 0) {
-    if (strchr(raw_names, ',')) {
-      log_error("start does not support multiple containers.");
-      ret = 1;
-      goto cleanup;
-    }
     if (validate_configuration_cli(&cfg) < 0) {
       ret = 1;
       goto cleanup;
@@ -338,11 +326,6 @@ int main(const int argc, char **argv) {
   }
 
   if (strcmp(cmd, "restart") == 0) {
-    if (strchr(raw_names, ',')) {
-      log_error("restart does not support multiple containers.");
-      ret = 1;
-      goto cleanup;
-    }
     if (check_requirements_hw(cfg.hw_access) < 0) {
       ret = 1;
       goto cleanup;
