@@ -113,26 +113,26 @@ void cleanup_container_resources(cfg_t *cfg,
 
   /* 1. Cleanup firmware path (hw_access mode only; skip on force-cleanup
    * since accessing a zombie-held mount can hang).
-   * Use cfg->img_mount_point directly - it is already fully resolved and valid. */
-  if (!force_cleanup && cfg->hw_access && cfg->img_mount_point[0]) {
+   * Use cfg->conf.img_mount_point directly - it is already fully resolved and valid. */
+  if (!force_cleanup && cfg->conf.hw_access && cfg->conf.img_mount_point[0]) {
     char fw_path[PATH_MAX + 16];
-    snprintf(fw_path, sizeof(fw_path), "%s/lib/firmware", cfg->img_mount_point);
+    snprintf(fw_path, sizeof(fw_path), "%s/lib/firmware", cfg->conf.img_mount_point);
     firmware_path_remove(fw_path);
   }
 
   /* 2. Handle Volatile Overlay Cleanup (upper/work/merged)
    * This MUST happen before unmounting the lower image mount.
    * When force_cleanup, use detach+force unmount to avoid hangs. */
-  if (cfg->volatile_mode) {
+  if (cfg->conf.volatile_mode) {
     if (force_cleanup) {
       /* Force path: skip sync, just detach everything */
       char merged[PATH_MAX + 32];
-      snprintf(merged, sizeof(merged), "%s/merged", cfg->volatile_dir);
+      snprintf(merged, sizeof(merged), "%s/merged", cfg->rt.volatile_dir);
       umount2(merged, MNT_DETACH | MNT_FORCE);
-      umount2(cfg->volatile_dir, MNT_DETACH | MNT_FORCE);
+      umount2(cfg->rt.volatile_dir, MNT_DETACH | MNT_FORCE);
       /* Best-effort directory removal */
-      remove_recursive(cfg->volatile_dir);
-      cfg->volatile_dir[0] = '\0';
+      remove_recursive(cfg->rt.volatile_dir);
+      cfg->rt.volatile_dir[0] = '\0';
     } else {
       cleanup_volatile_overlay(cfg);
     }
@@ -140,8 +140,8 @@ void cleanup_container_resources(cfg_t *cfg,
 
   /* 4. Handle rootfs image unmount */
   char mount_point[PATH_MAX] = "";
-  if (cfg->img_mount_point[0]) {
-    safe_strncpy(mount_point, cfg->img_mount_point, sizeof(mount_point));
+  if (cfg->conf.img_mount_point[0]) {
+    safe_strncpy(mount_point, cfg->conf.img_mount_point, sizeof(mount_point));
   }
 
   if (mount_point[0] && !skip_unmount) {
@@ -151,7 +151,7 @@ void cleanup_container_resources(cfg_t *cfg,
       rmdir(mount_point); /* best-effort */
     } else {
       /* Explicitly call unmount wrapper. It handles its own logging. */
-      unmount_rootfs_img(mount_point, cfg->foreground);
+      unmount_rootfs_img(mount_point, cfg->rt.foreground);
     }
   }
 
@@ -169,7 +169,7 @@ void cleanup_container_resources(cfg_t *cfg,
    * (skip_unmount=1) so the monitor's cgroup context stays intact for
    * the next boot cycle. */
   if (!skip_unmount) {
-    cgroup_cleanup_container(cfg->container_name);
+    cgroup_cleanup_container(cfg->conf.container_name);
   }
 }
 
@@ -199,16 +199,16 @@ int start_rootfs(cfg_t *cfg) {
 
   /* 0. Early restart detection: check for external lock from previous stop
    *    command to detect a preserved mount for reuse. */
-  if (cfg->container_name[0]) {
+  if (cfg->conf.container_name[0]) {
     char lock_path[PATH_MAX];
-    if (get_lock_path(cfg->container_name, lock_path, sizeof(lock_path)) == 0 &&
+    if (get_lock_path(cfg->conf.container_name, lock_path, sizeof(lock_path)) == 0 &&
         access(lock_path, F_OK) == 0) {
       /* This looks like a restart handoff - take ownership of the lock */
-      if (acquire_external_lock(cfg->container_name) == 0) {
+      if (acquire_external_lock(cfg->conf.container_name) == 0) {
         lock_acquired = true;
 
         /* Try to reuse existing mount from config */
-        if (cfg->img_mount_point[0] && is_mountpoint(cfg->img_mount_point)) {
+        if (cfg->conf.img_mount_point[0] && is_mountpoint(cfg->conf.img_mount_point)) {
         } else {
           /* Mount not active - remove invalid lock */
           release_external_lock();
@@ -225,7 +225,7 @@ int start_rootfs(cfg_t *cfg) {
     pid_t existing_pid = 0;
     if (is_container_running(cfg, &existing_pid)) {
       log_error("Container name '%s' is already in use by PID %d.",
-                cfg->container_name, existing_pid);
+                cfg->conf.container_name, existing_pid);
       goto cleanup;
     }
   }
@@ -236,21 +236,21 @@ int start_rootfs(cfg_t *cfg) {
   /* 0a. Resolve any symlinks in rootfs image path to canonical absolute paths.
    *     This prevents symlink-based attacks and ensures that all subsequent
    *     operations use the intended location. */
-  if (cfg->rootfs_img_path[0]) {
-    auto_free char *abs_path = resolve_path_arg(cfg->rootfs_img_path);
+  if (cfg->conf.rootfs_img_path[0]) {
+    auto_free char *abs_path = resolve_path_arg(cfg->conf.rootfs_img_path);
     if (!abs_path || access(abs_path, F_OK) != 0) {
       log_error("Failed to resolve rootfs image path '%s': %s",
-                abs_path ? abs_path : cfg->rootfs_img_path, strerror(errno));
+                abs_path ? abs_path : cfg->conf.rootfs_img_path, strerror(errno));
       goto cleanup;
     }
-    safe_strncpy(cfg->rootfs_img_path, abs_path, sizeof(cfg->rootfs_img_path));
+    safe_strncpy(cfg->conf.rootfs_img_path, abs_path, sizeof(cfg->conf.rootfs_img_path));
   }
 
   /* if foreground was requested but we have no interactive terminal (piped,
    * scripted, config foreground=1, etc.), flip the switch once here and warn
    * once. Covers both CLI and daemon paths. */
-  if (cfg->foreground && (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))) {
-    cfg->foreground = 0;
+  if (cfg->rt.foreground && (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))) {
+    cfg->rt.foreground = 0;
     log_warn("No interactive terminal - foreground mode disabled, running in "
              "background.");
   }
@@ -260,9 +260,9 @@ int start_rootfs(cfg_t *cfg) {
   has_side_effects = true;
 
   /* 2. Mount rootfs image (using the resolved name) */
-  if (cfg->rootfs_img_path[0] && !lock_acquired) {
-    if (mount_rootfs_img(cfg->rootfs_img_path, cfg->img_mount_point,
-                         sizeof(cfg->img_mount_point), cfg->container_name) < 0) {
+  if (cfg->conf.rootfs_img_path[0] && !lock_acquired) {
+    if (mount_rootfs_img(cfg->conf.rootfs_img_path, cfg->conf.img_mount_point,
+                         sizeof(cfg->conf.img_mount_point), cfg->conf.container_name) < 0) {
       goto cleanup; /* 失败时跳转到清理流程，下方 cleanup 函数会自动解除绑定 */
     }
   }
@@ -272,8 +272,8 @@ int start_rootfs(cfg_t *cfg) {
   {
     char init_path[PATH_MAX * 2];
     char rootfs_norm[PATH_MAX];
-    if (cfg->img_mount_point[0])
-      safe_strncpy(rootfs_norm, cfg->img_mount_point, sizeof(rootfs_norm));
+    if (cfg->conf.img_mount_point[0])
+      safe_strncpy(rootfs_norm, cfg->conf.img_mount_point, sizeof(rootfs_norm));
     else {
       log_error("Rootfs image mount point not available.");
       return -1;
@@ -283,7 +283,7 @@ int start_rootfs(cfg_t *cfg) {
       rootfs_norm[rlen - 1] = '\0';
 
     const char *init_bin =
-        cfg->custom_init[0] ? cfg->custom_init : DEFAULT_INIT;
+        cfg->conf.custom_init[0] ? cfg->conf.custom_init : DEFAULT_INIT;
     snprintf(init_path, sizeof(init_path), "%.*s%s",
              (int)(sizeof(init_path) - strlen(init_bin) - 1), rootfs_norm,
              init_bin);
@@ -292,7 +292,7 @@ int start_rootfs(cfg_t *cfg) {
       log_error("Init binary not found: %s", init_path);
       log_error("Please ensure the rootfs path is correct and contains %s.",
                 init_bin);
-      unmount_rootfs_img(cfg->img_mount_point, cfg->foreground);
+      unmount_rootfs_img(cfg->conf.img_mount_point, cfg->rt.foreground);
       return -1;
     }
     /* Absolute symlinks resolve correctly inside the container after
@@ -300,7 +300,7 @@ int start_rootfs(cfg_t *cfg) {
     if (!S_ISLNK(st.st_mode) && access(init_path, X_OK) != 0) {
       log_error("Init binary is not executable: %s", init_path);
       log_error("Ensure it has executable permissions.");
-      unmount_rootfs_img(cfg->img_mount_point, cfg->foreground);
+      unmount_rootfs_img(cfg->conf.img_mount_point, cfg->rt.foreground);
       return -1;
     }
   }
@@ -313,47 +313,47 @@ int start_rootfs(cfg_t *cfg) {
   {
     char active_uuids[MAX_CONTAINERS][UUID_LEN + 1];
     int uuid_count = collect_active_uuids(active_uuids, MAX_CONTAINERS);
-    bool need_new = cfg->uuid[0] == '\0';
+    bool need_new = cfg->conf.uuid[0] == '\0';
     if (!need_new) {
       for (int _i = 0; _i < uuid_count; _i++) {
-        if (strcmp(cfg->uuid, active_uuids[_i]) == 0) {
+        if (strcmp(cfg->conf.uuid, active_uuids[_i]) == 0) {
           need_new = true;
           break;
         }
       }
     }
     if (need_new)
-      generate_uuid(cfg->uuid, sizeof(cfg->uuid));
+      generate_uuid(cfg->conf.uuid, sizeof(cfg->conf.uuid));
   }
 
   /* Persist UUID to config immediately
    * so disk always matches the running container. CLI overrides (e.g. -f)
    * are already in cfg at this point since start_rootfs() is called after
    * argument parsing. */
-  if (cfg->config_file[0]) {
-    bool was_new = !cfg->config_file_existed;
-    if (config_save(cfg->config_file, cfg) < 0) {
-      log_error("Failed to persist configuration to '%s': %s", cfg->config_file,
+  if (cfg->rt.config_file[0]) {
+    bool was_new = !cfg->rt.config_file_existed;
+    if (config_save(cfg->rt.config_file, cfg) < 0) {
+      log_error("Failed to persist configuration to '%s': %s", cfg->rt.config_file,
                 strerror(errno));
       goto cleanup;
     }
     if (was_new) {
-      log_info("Configuration persisted to %s", cfg->config_file);
+      log_info("Configuration persisted to %s", cfg->rt.config_file);
     }
   }
 
   /* Mirror to workspace so 'start -n <n>' works later without --conf */
-  if (config_save_by_name(cfg->container_name, cfg) < 0) {
+  if (config_save_by_name(cfg->conf.container_name, cfg) < 0) {
     log_warn("Failed to mirror configuration to workspace for '%s': %s",
-             cfg->container_name, strerror(errno));
+             cfg->conf.container_name, strerror(errno));
   }
 
   /* Pre-populate volatile_dir for monitor cleanup (actual overlay setup
    * happens inside internal_boot's isolated mount namespace) */
-  if (cfg->volatile_mode) {
-    snprintf(cfg->volatile_dir, sizeof(cfg->volatile_dir),
+  if (cfg->conf.volatile_mode) {
+    snprintf(cfg->rt.volatile_dir, sizeof(cfg->rt.volatile_dir),
              "%s/" RUNTIME_VOLATILE_SUBDIR "/%s", get_runtime_dir(),
-             cfg->container_name);
+             cfg->conf.container_name);
   }
 
   /* 4. Parent-side PTY allocation (LXC Model) */
@@ -362,15 +362,15 @@ int start_rootfs(cfg_t *cfg) {
    * The image is mounted at img_mount_point.  firmware_path_add() internally
    * checks that /lib/firmware exists in the rootfs before touching the sysfs
    * node. */
-  if (cfg->hw_access) {
+  if (cfg->conf.hw_access) {
     char fw_path[PATH_MAX + 16];
-    snprintf(fw_path, sizeof(fw_path), "%s/lib/firmware", cfg->img_mount_point);
+    snprintf(fw_path, sizeof(fw_path), "%s/lib/firmware", cfg->conf.img_mount_point);
     firmware_path_add(fw_path);
   }
 
   fix_host_ptys();
 
-  if (terminal_create(&cfg->console) < 0) {
+  if (terminal_create(&cfg->rt.console) < 0) {
     log_error("Failed to allocate console PTY");
     goto cleanup;
   }
@@ -385,7 +385,7 @@ int start_rootfs(cfg_t *cfg) {
   if (isatty(STDIN_FILENO)) {
     struct winsize ws;
     if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
-      ioctl(cfg->console.master, TIOCSWINSZ, &ws);
+      ioctl(cfg->rt.console.master, TIOCSWINSZ, &ws);
   }
 
   /* 5. Pipe for synchronization */
@@ -400,7 +400,7 @@ int start_rootfs(cfg_t *cfg) {
   fcntl(sync_pipe[1], F_SETFD, FD_CLOEXEC);
 
   /* Record start time before fork so monitor and virtualize_update share it */
-  clock_gettime(CLOCK_BOOTTIME, &cfg->start_time);
+  clock_gettime(CLOCK_BOOTTIME, &cfg->rt.start_time);
 
   /* 7. Fork Monitor Process */
   pid_t monitor_pid = fork();
@@ -422,7 +422,7 @@ int start_rootfs(cfg_t *cfg) {
   close(sync_pipe[1]);
 
   /* Wait for Monitor to send child PID */
-  if (read(sync_pipe[0], &cfg->container_pid, sizeof(pid_t)) != sizeof(pid_t)) {
+  if (read(sync_pipe[0], &cfg->rt.container_pid, sizeof(pid_t)) != sizeof(pid_t)) {
     log_error("Monitor failed to send container PID.");
     if (lock_acquired)
       release_external_lock();
@@ -431,27 +431,27 @@ int start_rootfs(cfg_t *cfg) {
   close(sync_pipe[0]);
   sync_pipe[0] = -1;
 
-  log_info("Container started with PID %d (Monitor: %d)", cfg->container_pid,
+  log_info("Container started with PID %d (Monitor: %d)", cfg->rt.container_pid,
            monitor_pid);
 
   /* Log volatile mode */
-  if (cfg->volatile_mode)
+  if (cfg->conf.volatile_mode)
     log_info("Entering volatile mode (OverlayFS)...");
 
   /* 9. Done - container is running, metadata is in /proc/<pid>/environ */
-  if (cfg->img_mount_point[0]) {
+  if (cfg->conf.img_mount_point[0]) {
     /* Ensure mount point is persisted in config for restart recovery */
     cfg_t save_cfg = *cfg;
-    config_save_by_name(cfg->container_name, &save_cfg);
+    config_save_by_name(cfg->conf.container_name, &save_cfg);
   }
 
   /* 10. Foreground or background finish */
-  if (cfg->foreground) {
+  if (cfg->rt.foreground) {
     if (lock_acquired) {
       release_external_lock();
     }
 
-    int ret = console_monitor_loop(cfg->console.master, monitor_pid, cfg);
+    int ret = console_monitor_loop(cfg->rt.console.master, monitor_pid, cfg);
     return ret;
   } else {
     /* Wait for container to finish pivot_root before showing info.
@@ -459,7 +459,7 @@ int start_rootfs(cfg_t *cfg) {
      * so we poll for it via /proc/<pid>/root/run/ds-fork. */
     char marker[PATH_MAX];
     snprintf(marker, sizeof(marker), "/proc/%d/root/run/" PROJECT_NAME,
-             cfg->container_pid);
+             cfg->rt.container_pid);
     bool booted = false;
     for (int i = 0; i < 50; i++) { /* 5 seconds max */
       if (access(marker, F_OK) == 0) {
@@ -467,7 +467,7 @@ int start_rootfs(cfg_t *cfg) {
         break;
       }
       /* If the container PID is already dead, stop polling */
-      if (kill(cfg->container_pid, 0) < 0 && errno == ESRCH)
+      if (kill(cfg->rt.container_pid, 0) < 0 && errno == ESRCH)
         break;
       usleep(100000); /* 100ms */
     }
@@ -482,7 +482,7 @@ int start_rootfs(cfg_t *cfg) {
     }
 
     show_info(cfg, true);
-    log_info("Container '%s' is running in background.", cfg->container_name);
+    log_info("Container '%s' is running in background.", cfg->conf.container_name);
   }
 
   if (lock_acquired)
@@ -502,9 +502,9 @@ cleanup:
   if (lock_acquired)
     release_external_lock();
 
-  if (cfg->console.master >= 0) {
-    close(cfg->console.master);
-    cfg->console.master = -1;
+  if (cfg->rt.console.master >= 0) {
+    close(cfg->rt.console.master);
+    cfg->rt.console.master = -1;
   }
   if (sync_pipe[0] >= 0)
     close(sync_pipe[0]);
@@ -521,9 +521,9 @@ static int stop_rootfs_with_timeout(cfg_t *cfg, const bool skip_unmount,
     timeout_seconds = STOP_TIMEOUT;
 
   /* Acquire external command lock FIRST */
-  if (acquire_external_lock(cfg->container_name) != 0) {
+  if (acquire_external_lock(cfg->conf.container_name) != 0) {
     log_error("Cannot stop '%s': another command is managing this container",
-              cfg->container_name);
+              cfg->conf.container_name);
     log_error("Wait for the other operation to complete, or use '" PROJECT_NAME
               " "
               "show' to check status");
@@ -532,18 +532,18 @@ static int stop_rootfs_with_timeout(cfg_t *cfg, const bool skip_unmount,
 
   pid_t pid = 0;
   if (!is_container_running(cfg, &pid) || pid <= 0) {
-    log_error("Container '%s' is not running or invalid.", cfg->container_name);
+    log_error("Container '%s' is not running or invalid.", cfg->conf.container_name);
     release_external_lock();
     return -1;
   }
 
-  log_info("Stopping container '%s' (PID %d)...", cfg->container_name, pid);
+  log_info("Stopping container '%s' (PID %d)...", cfg->conf.container_name, pid);
 
   /* Safe Metadata Capture: Read mount path from /proc/<pid>/environ
    * before shutdown to preserve it for cleanup if container dies. */
-  if (cfg->img_mount_point[0] == '\0') {
-    read_proc_environ(pid, "RUNTIME_MOUNT_PATH", cfg->img_mount_point,
-                      sizeof(cfg->img_mount_point));
+  if (cfg->conf.img_mount_point[0] == '\0') {
+    read_proc_environ(pid, "RUNTIME_MOUNT_PATH", cfg->conf.img_mount_point,
+                      sizeof(cfg->conf.img_mount_point));
   }
 
   /* 1. Send shutdown signal. */
@@ -596,17 +596,17 @@ static int stop_rootfs_with_timeout(cfg_t *cfg, const bool skip_unmount,
 
   /* 4. Firmware cleanup (hw_access mode only).
    * Skip when unkillable - accessing zombie-held rootfs can hang. */
-  if (cfg->img_mount_point[0] && !unkillable && cfg->hw_access) {
+  if (cfg->conf.img_mount_point[0] && !unkillable && cfg->conf.hw_access) {
     char fw_path[PATH_MAX + 16];
-    snprintf(fw_path, sizeof(fw_path), "%s/lib/firmware", cfg->img_mount_point);
+    snprintf(fw_path, sizeof(fw_path), "%s/lib/firmware", cfg->conf.img_mount_point);
     firmware_path_remove(fw_path);
   }
 
   /* 5. Complete resource cleanup. */
   cleanup_container_resources(cfg, skip_unmount, unkillable);
 
-  if (!cfg->foreground)
-    log_info("Container '%s' stopped.", cfg->container_name);
+  if (!cfg->rt.foreground)
+    log_info("Container '%s' stopped.", cfg->conf.container_name);
 
   /* Release lock ONLY if this is a final stop.
    * For restarts (skip_unmount=1), keep lock alive as handoff. */
@@ -662,7 +662,7 @@ static void get_os_pretty(const char *osrelease_path, char *buf, const size_t si
 
 int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
   /* Case 1: No container name specified - try auto-resolution or listing */
-  if (cfg->container_name[0] == '\0') {
+  if (cfg->conf.container_name[0] == '\0') {
     log_error("Container name is missing.");
     return 0;
   }
@@ -671,30 +671,30 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
    * of truth (container.config) so we show accurate feature info without
    * expensive live probing. */
   if (!trust_cfg_pid) {
-    config_load_by_name(cfg->container_name, cfg);
+    config_load_by_name(cfg->conf.container_name, cfg);
   }
 
   /* Case 2: Validate running status */
   pid_t pid = 0;
-  if (trust_cfg_pid && cfg->container_pid > 0) {
+  if (trust_cfg_pid && cfg->rt.container_pid > 0) {
     /* Trust the PID we just got from the sync pipe.
      * We assume it's running because parent waited for boot marker. */
-    pid = cfg->container_pid;
+    pid = cfg->rt.container_pid;
   } else {
     /* For other calls (e.g., info command), read and validate from pidfile. */
     is_container_running(cfg, &pid);
   }
 
   if (pid <= 0) {
-    log_error("Container '%s' is not running or invalid.", cfg->container_name);
+    log_error("Container '%s' is not running or invalid.", cfg->conf.container_name);
     return -1;
   }
 
   /* Success - print Host and detailed Container info */
-  if (cfg->format_output) {
+  if (cfg->rt.format_output) {
     const char *arch = get_architecture();
     printf("HOST_ARCH=%s\n", arch);
-    printf("CONTAINER_NAME=%s\n", cfg->container_name);
+    printf("CONTAINER_NAME=%s\n", cfg->conf.container_name);
     printf("CONTAINER_PID=%d\n", pid);
 
     char pretty[256];
@@ -715,42 +715,42 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
       }
     }
 
-    printf("ISOLATION_NETWORK=%d\n", cfg->isolation_network);
+    printf("ISOLATION_NETWORK=%d\n", cfg->conf.isolation_network);
 
-    if (cfg->hw_access)
+    if (cfg->conf.hw_access)
       printf("HW_ACCESS=full\n");
-    else if (cfg->gpu_mode)
+    else if (cfg->conf.gpu_mode)
       printf("HW_ACCESS=GPU\n");
     else
       printf("HW_ACCESS=none\n");
 
-    printf("VOLATILE_MODE=%d\n", cfg->volatile_mode);
-    printf("FORCE_CGROUP_V1=%d\n", cfg->force_cgroupv1);
-    printf("DEADLOCK_SHIELD=%d\n", cfg->block_nested_ns);
+    printf("VOLATILE_MODE=%d\n", cfg->conf.volatile_mode);
+    printf("FORCE_CGROUP_V1=%d\n", cfg->conf.force_cgroupv1);
+    printf("DEADLOCK_SHIELD=%d\n", cfg->conf.block_nested_ns);
 
-    if (cfg->privileged_mask > 0) {
+    if (cfg->conf.privileged_mask > 0) {
       printf("PRIVILEGED_MODE=");
-      if (cfg->privileged_mask == PRIV_FULL) {
+      if (cfg->conf.privileged_mask == PRIV_FULL) {
         printf("full");
       } else {
         bool first = true;
-        if (cfg->privileged_mask & PRIV_NOMASK) {
+        if (cfg->conf.privileged_mask & PRIV_NOMASK) {
           printf("%snomask", first ? "" : ",");
           first = false;
         }
-        if (cfg->privileged_mask & PRIV_NOCAPS) {
+        if (cfg->conf.privileged_mask & PRIV_NOCAPS) {
           printf("%snocaps", first ? "" : ",");
           first = false;
         }
-        if (cfg->privileged_mask & PRIV_NOSEC) {
+        if (cfg->conf.privileged_mask & PRIV_NOSEC) {
           printf("%snoseccomp", first ? "" : ",");
           first = false;
         }
-        if (cfg->privileged_mask & PRIV_SHARED) {
+        if (cfg->conf.privileged_mask & PRIV_SHARED) {
           printf("%sshared", first ? "" : ",");
           first = false;
         }
-        if (cfg->privileged_mask & PRIV_UNFILT) {
+        if (cfg->conf.privileged_mask & PRIV_UNFILT) {
           printf("%sunfiltered-dev", first ? "" : ",");
           first = false;
         }
@@ -763,7 +763,7 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
     printf("Host: %s\n", arch);
 
     printf("\nContainer: %s (RUNNING)\n",
-           cfg->container_name);
+           cfg->conf.container_name);
     printf("  PID: %d\n", pid);
 
     char pretty[256];
@@ -789,62 +789,62 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
     int feat_count = 0;
 
     /* 1. Isolation Network */
-    if (cfg->isolation_network) {
+    if (cfg->conf.isolation_network) {
       printf("  Isolation network: enabled\n");
       feat_count++;
     }
 
     /* 2. HW/GPU Access */
-    if (cfg->hw_access) {
+    if (cfg->conf.hw_access) {
       printf("  HW access: full\n");
       feat_count++;
-    } else if (cfg->gpu_mode) {
+    } else if (cfg->conf.gpu_mode) {
       printf("  HW access: GPU\n");
       feat_count++;
     }
 
     /* 3. Volatile Mode */
-    if (cfg->volatile_mode) {
+    if (cfg->conf.volatile_mode) {
       printf("  Volatile mode: enabled\n");
       feat_count++;
     }
 
     /* 4. Cgroup v1 */
-    if (cfg->force_cgroupv1) {
+    if (cfg->conf.force_cgroupv1) {
       printf("  Force Cgroup V1: yes\n");
       feat_count++;
     }
 
     /* 5. Deadlock Shield (block_nested_ns) */
-    if (cfg->block_nested_ns) {
+    if (cfg->conf.block_nested_ns) {
       printf("  Deadlock Shield: enabled\n");
       feat_count++;
     }
 
     /* 6. Privileged Mode */
-    if (cfg->privileged_mask > 0) {
+    if (cfg->conf.privileged_mask > 0) {
       printf("  Privileged mode: ");
-      if (cfg->privileged_mask == PRIV_FULL) {
+      if (cfg->conf.privileged_mask == PRIV_FULL) {
         printf("full");
       } else {
         bool first = true;
-        if (cfg->privileged_mask & PRIV_NOMASK) {
+        if (cfg->conf.privileged_mask & PRIV_NOMASK) {
           printf("%snomask", first ? "" : ", ");
           first = false;
         }
-        if (cfg->privileged_mask & PRIV_NOCAPS) {
+        if (cfg->conf.privileged_mask & PRIV_NOCAPS) {
           printf("%snocaps", first ? "" : ", ");
           first = false;
         }
-        if (cfg->privileged_mask & PRIV_NOSEC) {
+        if (cfg->conf.privileged_mask & PRIV_NOSEC) {
           printf("%snoseccomp", first ? "" : ", ");
           first = false;
         }
-        if (cfg->privileged_mask & PRIV_SHARED) {
+        if (cfg->conf.privileged_mask & PRIV_SHARED) {
           printf("%sshared", first ? "" : ", ");
           first = false;
         }
-        if (cfg->privileged_mask & PRIV_UNFILT) {
+        if (cfg->conf.privileged_mask & PRIV_UNFILT) {
           printf("%sunfiltered-dev", first ? "" : ", ");
           first = false;
         }
@@ -862,22 +862,22 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
    * since we skip resource management entirely on V1. We also skip this
    * when called during the boot sequence (!trust_cfg_pid). */
   if (!trust_cfg_pid &&
-      (cfg->memory_limit || cfg->cpu_quota || cfg->pids_limit) &&
-      !cfg->force_cgroupv1 && cgroup_host_is_v2()) {
+      (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit) &&
+      !cfg->conf.force_cgroupv1 && cgroup_host_is_v2()) {
     long long mu = -1, cu = -1, pu = -1;
     cgroup_get_usage(cfg, &mu, &cu, &pu);
     printf("\nResources:\n");
 
-    if (cfg->memory_limit) {
+    if (cfg->conf.memory_limit) {
       char used[32] = "?", lim[32];
       if (mu >= 0)
         format_size(mu, used, sizeof(used));
-      format_size(cfg->memory_limit, lim, sizeof(lim));
+      format_size(cfg->conf.memory_limit, lim, sizeof(lim));
       printf("  Memory : %s / %s\n", used, lim);
     }
-    if (cfg->cpu_quota) {
-      const long long period = cfg->cpu_period > 0 ? cfg->cpu_period : 100000;
-      const double cores = (double)cfg->cpu_quota / period;
+    if (cfg->conf.cpu_quota) {
+      const long long period = cfg->conf.cpu_period > 0 ? cfg->conf.cpu_period : 100000;
+      const double cores = (double)cfg->conf.cpu_quota / period;
       printf("  CPU    : %.2f cores", cores);
       if (cu >= 0) {
         const long uptime = get_container_uptime(pid);
@@ -893,8 +893,8 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
       }
       printf("\n");
     }
-    if (cfg->pids_limit) {
-      printf("  PIDs   : limit %lld", cfg->pids_limit);
+    if (cfg->conf.pids_limit) {
+      printf("  PIDs   : limit %lld", cfg->conf.pids_limit);
       if (pu >= 0)
         printf(" (current: %lld)", pu);
       printf("\n");
@@ -908,10 +908,10 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
 static int restart_rootfs_with_timeout(cfg_t *cfg, const int timeout_seconds) {
   pid_t pid = 0;
   if (!is_container_running(cfg, &pid) || pid <= 0) {
-    log_error("Container '%s' is not running or invalid.", cfg->container_name);
+    log_error("Container '%s' is not running or invalid.", cfg->conf.container_name);
     return -1;
   }
-  log_info("Restarting container %s...", cfg->container_name);
+  log_info("Restarting container %s...", cfg->conf.container_name);
   if (stop_rootfs_with_timeout(cfg, true, timeout_seconds) < 0) {
     return -1;
   }

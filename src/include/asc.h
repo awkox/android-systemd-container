@@ -124,53 +124,49 @@ struct container_info {
 
 /* Container configuration - replaces all global variables */
 typedef struct {
-  /* Paths */
-  char rootfs_img_path[PATH_MAX]; /* --rootfs-img= */
-  char container_name[256];       /* --name= (mandatory) */
-
-  /* UUID for PID discovery */
+  char rootfs_img_path[PATH_MAX];
+  char container_name[256];
   char uuid[UUID_LEN + 1];
+  char img_mount_point[PATH_MAX];
+  char custom_init[PATH_MAX];
 
-  /* Flags */
-  bool foreground;      /* --foreground */
-  bool hw_access;       /* --hw-access */
-  bool gpu_mode;        /* --gpu: mirror GPU nodes into isolated tmpfs /dev */
-  bool volatile_mode;   /* --volatile */
-  bool reboot_cycle;    /* 1 if we are in a reboot loop */
-  bool force_cgroupv1;  /* --force-cgroupv1: use v1 even if v2 is available */
-  bool isolation_network; /* --isolation_network */
-  bool format_output;   /* --format: machine-parseable output (KEY=VALUE) */
-  bool block_nested_ns; /* --block-nested-namespaces: fix VFS deadlock by
-                            blocking nested namespace creation */
-  int privileged_mask;  /* --privileged bitmask */
+  bool hw_access;
+  bool gpu_mode;
+  bool volatile_mode;
+  bool force_cgroupv1;
+  bool isolation_network;
+  bool block_nested_ns;
+  int privileged_mask;
 
-  /* Runtime state */
-  char volatile_dir[PATH_MAX];    /* temporary overlay dir */
-  pid_t container_pid;            /* PID 1 of the container (host view) */
-  char img_mount_point[PATH_MAX]; /* where the .img was mounted */
-  char custom_init[PATH_MAX];     /* --init=PATH override */
-
-  /* Configuration persistence */
-  char config_file[PATH_MAX];
-  bool config_file_specified;
-  bool config_file_existed;
-
-  /* Terminal (console + ttys) */
-  struct tty_info console;
-
-  /* Unknown config lines (preserved from Android metadata) */
   struct config_line *unknown_head;
   struct config_line *unknown_tail;
 
-  /* Resource limits (0 = unlimited) */
-  long long memory_limit; /* bytes */
+  long long memory_limit;
   long long pids_limit;
-  long long cpu_quota;    /* us per period */
-  long long cpu_period;   /* us (default 100000) */
+  long long cpu_quota;
+  long long cpu_period;
+} asc_conf_t;
 
-  /* Resource virtualization (auto-enabled when limits are set) */
-  struct timespec start_time; /* container start time (CLOCK_MONOTONIC) */
-  unsigned long ns_inode;     /* PID namespace inode for PID-recycling guard */
+typedef struct {
+  bool foreground;
+  bool reboot_cycle;
+  bool format_output;
+  bool config_file_specified;
+  bool config_file_existed;
+
+  char volatile_dir[PATH_MAX];
+  char config_file[PATH_MAX];
+
+  pid_t container_pid;
+
+  struct tty_info console;
+  struct timespec start_time;
+  unsigned long ns_inode;
+} asc_rt_t;
+
+typedef struct {
+  asc_conf_t conf;
+  asc_rt_t rt;
 } cfg_t;
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))

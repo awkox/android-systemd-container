@@ -1,10 +1,10 @@
 #include "asc.h"
 
 bool is_container_running(const cfg_t *cfg, pid_t *pid_out) {
-  if (cfg->uuid[0] == '\0')
+  if (cfg->conf.uuid[0] == '\0')
     return false;
 
-  const pid_t deep_pid = find_container_init_pid(cfg->uuid);
+  const pid_t deep_pid = find_container_init_pid(cfg->conf.uuid);
   if (deep_pid > 0) {
     if (pid_out)
       *pid_out = deep_pid;
@@ -130,7 +130,7 @@ int show_containers(const cfg_t *cfg) {
       return 0;
     }
 
-    if (cfg->format_output) {
+    if (cfg->rt.format_output) {
       printf("TOTAL_CONTAINERS=%d\n", totalcount);
       printf("RUN_CONTAINERS=%d\n", count);
 

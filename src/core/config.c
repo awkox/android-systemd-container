@@ -1,8 +1,8 @@
 #include "asc.h"
 
 /* Forward declarations */
-static void add_unknown_line(cfg_t *cfg, const char *line);
-static void free_config_unknown_lines(cfg_t *cfg);
+static void add_unknown_line(asc_conf_t *conf, const char *line);
+static void free_config_unknown_lines(asc_conf_t *conf);
 
 static char *trim_whitespace(char *str) {
   while (isspace((unsigned char)*str))
@@ -45,12 +45,12 @@ static long long parse_ll_positive(const char *val) {
   return v;
 }
 
-static void parse_privileged(const char *value, cfg_t *cfg) {
+static void parse_privileged(const char *value, asc_conf_t *conf) {
   if (!value)
     return;
 
   /* Reset first so removing flags from config takes effect on reload */
-  cfg->privileged_mask = 0;
+  conf->privileged_mask = 0;
 
   char copy[1024];
   safe_strncpy(copy, value, sizeof(copy));
@@ -61,17 +61,17 @@ static void parse_privileged(const char *value, cfg_t *cfg) {
   while (token) {
     const char *t = trim_whitespace(token);
     if (strcasecmp(t, "nomask") == 0)
-      cfg->privileged_mask |= PRIV_NOMASK;
+      conf->privileged_mask |= PRIV_NOMASK;
     else if (strcasecmp(t, "nocaps") == 0)
-      cfg->privileged_mask |= PRIV_NOCAPS;
+      conf->privileged_mask |= PRIV_NOCAPS;
     else if (strcasecmp(t, "noseccomp") == 0)
-      cfg->privileged_mask |= PRIV_NOSEC;
+      conf->privileged_mask |= PRIV_NOSEC;
     else if (strcasecmp(t, "shared") == 0)
-      cfg->privileged_mask |= PRIV_SHARED;
+      conf->privileged_mask |= PRIV_SHARED;
     else if (strcasecmp(t, "unfiltered-dev") == 0)
-      cfg->privileged_mask |= PRIV_UNFILT;
+      conf->privileged_mask |= PRIV_UNFILT;
     else if (strcasecmp(t, "full") == 0)
-      cfg->privileged_mask |= PRIV_FULL;
+      conf->privileged_mask |= PRIV_FULL;
 
     token = strtok_r(nullptr, ",", &saveptr);
   }
@@ -81,16 +81,18 @@ int config_load(const char *config_path, cfg_t *cfg) {
   auto_fclose FILE *f = fopen(config_path, "re");
   if (!f) {
     if (errno == ENOENT) {
-      cfg->config_file_existed = false;
+      cfg->rt.config_file_existed = false;
       return 0; /* Optional config */
     }
     return -1;
   }
 
-  /* Clear existing unknown lines to avoid duplication on re-load */
-  free_config_unknown_lines(cfg);
+  cfg->rt.config_file_existed = true;
 
-  cfg->config_file_existed = true;
+  asc_conf_t *conf = &cfg->conf;
+
+  /* Clear existing unknown lines to avoid duplication on re-load */
+  free_config_unknown_lines(conf);
 
   char line[2048];
 
@@ -113,65 +115,65 @@ int config_load(const char *config_path, cfg_t *cfg) {
 
     if (strcmp(key, "name") == 0) {
       if (validate_container_name(val))
-        safe_strncpy(cfg->container_name, val, sizeof(cfg->container_name));
+        safe_strncpy(conf->container_name, val, sizeof(conf->container_name));
       else
         log_warn("config: ignoring invalid container name '%s'", val);
     } else if (strcmp(key, "rootfs_path") == 0) {
-      safe_strncpy(cfg->rootfs_img_path, val, sizeof(cfg->rootfs_img_path));
+      safe_strncpy(conf->rootfs_img_path, val, sizeof(conf->rootfs_img_path));
     } else if (strcmp(key, "img_mount_point") == 0) {
-      safe_strncpy(cfg->img_mount_point, val, sizeof(cfg->img_mount_point));
+      safe_strncpy(conf->img_mount_point, val, sizeof(conf->img_mount_point));
     } else if (strcmp(key, "enable_hw_access") == 0) {
-      cfg->hw_access = parse_bool(val);
+      conf->hw_access = parse_bool(val);
     } else if (strcmp(key, "enable_gpu_mode") == 0) {
-      cfg->gpu_mode = parse_bool(val);
+      conf->gpu_mode = parse_bool(val);
     } else if (strcmp(key, "volatile_mode") == 0) {
-      cfg->volatile_mode = parse_bool(val);
+      conf->volatile_mode = parse_bool(val);
     } else if (strcmp(key, "force_cgroupv1") == 0) {
-      cfg->force_cgroupv1 = parse_bool(val);
+      conf->force_cgroupv1 = parse_bool(val);
     } else if (strcmp(key, "block_nested_ns") == 0) {
-      cfg->block_nested_ns = parse_bool(val);
+      conf->block_nested_ns = parse_bool(val);
     } else if (strcmp(key, "memory_limit") == 0) {
       const long long v = parse_ll_positive(val);
       if (v > 0)
-        cfg->memory_limit = v;
+        conf->memory_limit = v;
       else
         log_warn("config: ignoring invalid memory_limit '%s'", val);
     } else if (strcmp(key, "cpu_quota") == 0) {
       const long long v = parse_ll_positive(val);
       if (v > 0)
-        cfg->cpu_quota = v;
+        conf->cpu_quota = v;
       else
         log_warn("config: ignoring invalid cpu_quota '%s'", val);
     } else if (strcmp(key, "cpu_period") == 0) {
       const long long v = parse_ll_positive(val);
       if (v > 0)
-        cfg->cpu_period = v;
+        conf->cpu_period = v;
       else
         log_warn("config: ignoring invalid cpu_period '%s'", val);
     } else if (strcmp(key, "pids_limit") == 0) {
       const long long v = parse_ll_positive(val);
       if (v > 0)
-        cfg->pids_limit = v;
+        conf->pids_limit = v;
       else
         log_warn("config: ignoring invalid pids_limit '%s'", val);
     } else if (strcmp(key, "privileged") == 0) {
-      parse_privileged(val, cfg);
+      parse_privileged(val, conf);
     } else if (strcmp(key, "custom_init") == 0) {
       if (val[0] != '/')
         log_warn("config: ignoring non-absolute custom_init path '%s'", val);
       else if (strchr(val, ' '))
         log_warn("config: ignoring custom_init path with spaces '%s'", val);
       else
-        safe_strncpy(cfg->custom_init, val, sizeof(cfg->custom_init));
+        safe_strncpy(conf->custom_init, val, sizeof(conf->custom_init));
     } else if (strcmp(key, "uuid") == 0) {
-      safe_strncpy(cfg->uuid, val, sizeof(cfg->uuid));
+      safe_strncpy(conf->uuid, val, sizeof(conf->uuid));
     } else if (strcmp(key, "isolation_network") == 0) {
-      cfg->isolation_network = parse_bool(val);
+      conf->isolation_network = parse_bool(val);
     } else {
       /* Unknown key - preserve verbatim so Android App metadata
        * (run_at_boot, use_sparse_image, sparse_image_size_gb, etc.)
        * survives config_save() unchanged. */
-      add_unknown_line(cfg, line);
+      add_unknown_line(conf, line);
     }
   }
   
@@ -179,87 +181,87 @@ int config_load(const char *config_path, cfg_t *cfg) {
 }
 
 /* Internal helper to add a raw line to the unknown list */
-static void add_unknown_line(cfg_t *cfg, const char *line) {
+static void add_unknown_line(asc_conf_t *conf, const char *line) {
   struct config_line *node = malloc(sizeof(*node));
   if (!node)
     return;
   safe_strncpy(node->line, line, sizeof(node->line));
   node->next = nullptr;
-  if (!cfg->unknown_head) {
-    cfg->unknown_head = cfg->unknown_tail = node;
+  if (!conf->unknown_head) {
+    conf->unknown_head = conf->unknown_tail = node;
   } else {
-    cfg->unknown_tail->next = node;
-    cfg->unknown_tail = node;
+    conf->unknown_tail->next = node;
+    conf->unknown_tail = node;
   }
 }
 
-static void free_config_unknown_lines(cfg_t *cfg) {
-  struct config_line *curr = cfg->unknown_head;
+static void free_config_unknown_lines(asc_conf_t *conf) {
+  struct config_line *curr = conf->unknown_head;
   while (curr) {
     struct config_line *next = curr->next;
     free(curr);
     curr = next;
   }
-  cfg->unknown_head = cfg->unknown_tail = nullptr;
+  conf->unknown_head = conf->unknown_tail = nullptr;
 }
 
 void config_free(cfg_t *cfg) {
-  free_config_unknown_lines(cfg);
+  free_config_unknown_lines(&cfg->conf);
 }
 
-static void config_serialize_known(FILE *f, cfg_t *cfg) {
+static void config_serialize_known(FILE *f, asc_conf_t *conf) {
   fprintf(f, "# " PROJECT_NAME " Container Configuration\n");
   fprintf(f, "# Generated automatically - Changes may be overwritten\n\n");
 
   /* Write managed keys */
-  if (cfg->container_name[0])
-    fprintf(f, "name=%s\n", cfg->container_name);
+  if (conf->container_name[0])
+    fprintf(f, "name=%s\n", conf->container_name);
 
-  if (cfg->rootfs_img_path[0]) {
-    auto_free char *abs_path = resolve_path_arg(cfg->rootfs_img_path);
-    fprintf(f, "rootfs_path=%s\n", abs_path ? abs_path : cfg->rootfs_img_path);
+  if (conf->rootfs_img_path[0]) {
+    auto_free char *abs_path = resolve_path_arg(conf->rootfs_img_path);
+    fprintf(f, "rootfs_path=%s\n", abs_path ? abs_path : conf->rootfs_img_path);
   }
 
-  if (cfg->img_mount_point[0])
-    fprintf(f, "img_mount_point=%s\n", cfg->img_mount_point);
+  if (conf->img_mount_point[0])
+    fprintf(f, "img_mount_point=%s\n", conf->img_mount_point);
 
-  fprintf(f, "enable_hw_access=%d\n", cfg->hw_access);
-  fprintf(f, "enable_gpu_mode=%d\n", cfg->gpu_mode);
-  fprintf(f, "volatile_mode=%d\n", cfg->volatile_mode);
-  fprintf(f, "force_cgroupv1=%d\n", cfg->force_cgroupv1);
-  fprintf(f, "block_nested_ns=%d\n", cfg->block_nested_ns);
-  if (cfg->memory_limit > 0)
-    fprintf(f, "memory_limit=%lld\n", cfg->memory_limit);
-  if (cfg->cpu_quota > 0)
-    fprintf(f, "cpu_quota=%lld\n", cfg->cpu_quota);
-  if (cfg->cpu_period > 0)
-    fprintf(f, "cpu_period=%lld\n", cfg->cpu_period);
-  if (cfg->pids_limit > 0)
-    fprintf(f, "pids_limit=%lld\n", cfg->pids_limit);
+  fprintf(f, "enable_hw_access=%d\n", conf->hw_access);
+  fprintf(f, "enable_gpu_mode=%d\n", conf->gpu_mode);
+  fprintf(f, "volatile_mode=%d\n", conf->volatile_mode);
+  fprintf(f, "force_cgroupv1=%d\n", conf->force_cgroupv1);
+  fprintf(f, "block_nested_ns=%d\n", conf->block_nested_ns);
+  if (conf->memory_limit > 0)
+    fprintf(f, "memory_limit=%lld\n", conf->memory_limit);
+  if (conf->cpu_quota > 0)
+    fprintf(f, "cpu_quota=%lld\n", conf->cpu_quota);
+  if (conf->cpu_period > 0)
+    fprintf(f, "cpu_period=%lld\n", conf->cpu_period);
+  if (conf->pids_limit > 0)
+    fprintf(f, "pids_limit=%lld\n", conf->pids_limit);
 
-  if (cfg->privileged_mask > 0) {
+  if (conf->privileged_mask > 0) {
     fprintf(f, "privileged=");
-    if (cfg->privileged_mask == PRIV_FULL) {
+    if (conf->privileged_mask == PRIV_FULL) {
       fprintf(f, "full");
     } else {
       bool first = true;
-      if (cfg->privileged_mask & PRIV_NOMASK) {
+      if (conf->privileged_mask & PRIV_NOMASK) {
         fprintf(f, "%snomask", first ? "" : ",");
         first = false;
       }
-      if (cfg->privileged_mask & PRIV_NOCAPS) {
+      if (conf->privileged_mask & PRIV_NOCAPS) {
         fprintf(f, "%snocaps", first ? "" : ",");
         first = false;
       }
-      if (cfg->privileged_mask & PRIV_NOSEC) {
+      if (conf->privileged_mask & PRIV_NOSEC) {
         fprintf(f, "%snoseccomp", first ? "" : ",");
         first = false;
       }
-      if (cfg->privileged_mask & PRIV_SHARED) {
+      if (conf->privileged_mask & PRIV_SHARED) {
         fprintf(f, "%sshared", first ? "" : ",");
         first = false;
       }
-      if (cfg->privileged_mask & PRIV_UNFILT) {
+      if (conf->privileged_mask & PRIV_UNFILT) {
         fprintf(f, "%sunfiltered-dev", first ? "" : ",");
         first = false;
       }
@@ -267,14 +269,14 @@ static void config_serialize_known(FILE *f, cfg_t *cfg) {
     fprintf(f, "\n");
   }
 
-  fprintf(f, "isolation_network=%d\n", cfg->isolation_network);
+  fprintf(f, "isolation_network=%d\n", conf->isolation_network);
 
-  if (cfg->uuid[0])
-    fprintf(f, "uuid=%s\n", cfg->uuid);
+  if (conf->uuid[0])
+    fprintf(f, "uuid=%s\n", conf->uuid);
 
-  if (cfg->custom_init[0]) {
-    auto_free char *abs_path = resolve_path_arg(cfg->custom_init);
-    fprintf(f, "custom_init=%s\n", abs_path ? abs_path : cfg->custom_init);
+  if (conf->custom_init[0]) {
+    auto_free char *abs_path = resolve_path_arg(conf->custom_init);
+    fprintf(f, "custom_init=%s\n", abs_path ? abs_path : conf->custom_init);
   }
 }
 
@@ -294,8 +296,8 @@ int config_save(const char *config_path, cfg_t *cfg) {
       bool is_equal = false;
 
       if (f_cfg && f_disk) {
-        config_serialize_known(f_cfg, cfg);
-        config_serialize_known(f_disk, &disk_cfg);
+        config_serialize_known(f_cfg, &cfg->conf);
+        config_serialize_known(f_disk, &disk_cfg.conf);
         fclose(f_cfg);
         fclose(f_disk);
         if (size_cfg == size_disk && memcmp(buf_cfg, buf_disk, size_cfg) == 0) {
@@ -308,11 +310,11 @@ int config_save(const char *config_path, cfg_t *cfg) {
           fclose(f_disk);
       }
 
-      free_config_unknown_lines(&disk_cfg);
+      free_config_unknown_lines(&disk_cfg.conf);
 
       if (is_equal) {
-        if (!cfg->config_file_existed) {
-          cfg->config_file_existed = true;
+        if (!cfg->rt.config_file_existed) {
+          cfg->rt.config_file_existed = true;
         }
         return 0;
       }
@@ -327,11 +329,11 @@ int config_save(const char *config_path, cfg_t *cfg) {
   if (!f_out)
     return -1;
 
-  config_serialize_known(f_out, cfg);
+  config_serialize_known(f_out, &cfg->conf);
 
   /* Step 3: Append preserved keys (Android App Config) from memory */
-  if (cfg->unknown_head) {
-    struct config_line *node = cfg->unknown_head;
+  if (cfg->conf.unknown_head) {
+    struct config_line *node = cfg->conf.unknown_head;
     while (node) {
       fprintf(f_out, "%s", node->line);
       node = node->next;
@@ -346,8 +348,8 @@ int config_save(const char *config_path, cfg_t *cfg) {
     return -1;
   }
 
-  if (!cfg->config_file_existed) {
-    cfg->config_file_existed = true;
+  if (!cfg->rt.config_file_existed) {
+    cfg->rt.config_file_existed = true;
   }
   return 0;
 }

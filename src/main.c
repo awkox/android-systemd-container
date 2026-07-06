@@ -19,7 +19,8 @@ static void print_usage(void) {
       "  check                     Check system requirements\n"
       "  help                      Show this help message\n"
       "  daemon                    Run daemon mode (use --foreground for "
-      "foreground execution)\n\n"
+      "foreground execution)\n"
+      "  daemon-stop               Stop the running background daemon\n\n"
 
       "Options (Container Setup):\n"
       "  -n, --name=NAME           Container name (mandatory)\n"
@@ -38,37 +39,37 @@ static void print_usage(void) {
 static int validate_configuration_cli(cfg_t *cfg) {
   bool error = false;
 
-  if (!cfg->container_name[0]) {
+  if (!cfg->conf.container_name[0]) {
     log_error("Container name is mandatory (--name).");
     error = true;
-  } else if (reject_container_name(cfg->container_name) < 0) {
+  } else if (reject_container_name(cfg->conf.container_name) < 0) {
     error = true;
   }
 
-  if (!cfg->rootfs_img_path[0]) {
+  if (!cfg->conf.rootfs_img_path[0]) {
     log_error("No rootfs image specified in configuration.");
     error = true;
   }
 
   /* Existence checks */
-  if (cfg->rootfs_img_path[0] && access(cfg->rootfs_img_path, F_OK) != 0) {
-    log_error("Rootfs image not found: '%s' (%s)", cfg->rootfs_img_path,
+  if (cfg->conf.rootfs_img_path[0] && access(cfg->conf.rootfs_img_path, F_OK) != 0) {
+    log_error("Rootfs image not found: '%s' (%s)", cfg->conf.rootfs_img_path,
               strerror(errno));
     error = true;
   }
 
   /* Image mode requires a name for the mount point */
-  if (cfg->rootfs_img_path[0] && !cfg->container_name[0]) {
+  if (cfg->conf.rootfs_img_path[0] && !cfg->conf.container_name[0]) {
     log_error("Rootfs image requires a container name (--name).");
     error = true;
   }
 
-  if (cfg->custom_init[0]) {
-    if (cfg->custom_init[0] != '/') {
-      log_error("Custom init path must be absolute: %s", cfg->custom_init);
+  if (cfg->conf.custom_init[0]) {
+    if (cfg->conf.custom_init[0] != '/') {
+      log_error("Custom init path must be absolute: %s", cfg->conf.custom_init);
       error = true;
-    } else if (strchr(cfg->custom_init, ' ')) {
-      log_error("Custom init path cannot contain spaces: %s", cfg->custom_init);
+    } else if (strchr(cfg->conf.custom_init, ' ')) {
+      log_error("Custom init path cannot contain spaces: %s", cfg->conf.custom_init);
       error = true;
     }
   }
@@ -118,14 +119,14 @@ int main(const int argc, char **argv) {
         discovered_cmd = optarg;
       }
     } else if (opt == 'C') {
-      safe_strncpy(cfg.config_file, optarg, sizeof(cfg.config_file));
-      cfg.config_file_specified = true;
+      safe_strncpy(cfg.rt.config_file, optarg, sizeof(cfg.rt.config_file));
+      cfg.rt.config_file_specified = true;
     } else if (opt == 'n') {
       if (reject_container_name(optarg) < 0) {
         ret = 1;
         goto cleanup;
       }
-      safe_strncpy(cfg.container_name, optarg, sizeof(cfg.container_name));
+      safe_strncpy(cfg.conf.container_name, optarg, sizeof(cfg.conf.container_name));
     }
   }
   optind = 0; /* Reset for next steps */
@@ -177,9 +178,9 @@ int main(const int argc, char **argv) {
                          strcmp(discovered_cmd, "info") == 0);
 
   bool loaded = false;
-  if (cfg.config_file_specified) {
-    if (config_load(cfg.config_file, &cfg) < 0) {
-      log_error("Failed to load configuration from '%s': %s", cfg.config_file,
+  if (cfg.rt.config_file_specified) {
+    if (config_load(cfg.rt.config_file, &cfg) < 0) {
+      log_error("Failed to load configuration from '%s': %s", cfg.rt.config_file,
                 strerror(errno));
       ret = 1;
       goto cleanup;
@@ -188,19 +189,19 @@ int main(const int argc, char **argv) {
   } else {
     auto_free char *auto_p = config_auto_path(temp_i);
     if (auto_p) {
-      safe_strncpy(cfg.config_file, auto_p, sizeof(cfg.config_file));
-      if (config_load(cfg.config_file, &cfg) == 0) {
+      safe_strncpy(cfg.rt.config_file, auto_p, sizeof(cfg.rt.config_file));
+      if (config_load(cfg.rt.config_file, &cfg) == 0) {
         loaded = true;
       } else if (errno != ENOENT) {
         log_warn("Failed to load auto-detected config from '%s': %s",
-                 cfg.config_file, strerror(errno));
+                 cfg.rt.config_file, strerror(errno));
       }
     }
   }
 
   /* For stateful commands, we absolutely need a container name.
    * If we don't have one by now, try to guess the active container. */
-  if (is_stateful && cfg.container_name[0] == '\0') {
+  if (is_stateful && cfg.conf.container_name[0] == '\0') {
     log_error("Container name is required for this command.");
     log_info("Please specify the container using '-n' or '--name'.");
     ret = 1;
@@ -209,15 +210,15 @@ int main(const int argc, char **argv) {
 
   /* If we have a name but haven't successfully loaded a config file yet, load
    * by name. */
-  if (!loaded && cfg.container_name[0] != '\0') {
-    if (config_load_by_name(cfg.container_name, &cfg) < 0) {
+  if (!loaded && cfg.conf.container_name[0] != '\0') {
+    if (config_load_by_name(cfg.conf.container_name, &cfg) < 0) {
       /* If loading by name fails and it's a stateful command, maybe the
        * container was moved or renamed. Perform a recovery scan of running
        * systems as a last resort. */
       if (is_stateful) {
-        if (config_load_by_name(cfg.container_name, &cfg) < 0) {
+        if (config_load_by_name(cfg.conf.container_name, &cfg) < 0) {
           log_error("Container '%s' not found or metadata missing.",
-                    cfg.container_name);
+                    cfg.conf.container_name);
           ret = 1;
           goto cleanup;
         }
@@ -237,18 +238,18 @@ int main(const int argc, char **argv) {
         ret = 1;
         goto cleanup;
       }
-      safe_strncpy(cfg.container_name, optarg, sizeof(cfg.container_name));
+      safe_strncpy(cfg.conf.container_name, optarg, sizeof(cfg.conf.container_name));
       break;
     case 'f':
-      cfg.foreground = 1;
+      cfg.rt.foreground = 1;
       break;
     case 'C':
-      safe_strncpy(cfg.config_file, optarg, sizeof(cfg.config_file));
-      cfg.config_file_specified = true;
+      safe_strncpy(cfg.rt.config_file, optarg, sizeof(cfg.rt.config_file));
+      cfg.rt.config_file_specified = true;
       break;
     case 265:
       /* --format: machine-parseable output */
-      cfg.format_output = true;
+      cfg.rt.format_output = true;
       break;
     case 270: /* --help */
       print_usage();
@@ -269,8 +270,8 @@ int main(const int argc, char **argv) {
   const char *cmd = argv[optind];
 
   /* Set up global logging context for centralized logging engine */
-  if (cfg.container_name[0] != '\0') {
-    safe_strncpy(log_container_name, cfg.container_name,
+  if (cfg.conf.container_name[0] != '\0') {
+    safe_strncpy(log_container_name, cfg.conf.container_name,
                  sizeof(log_container_name));
   }
 
@@ -304,18 +305,18 @@ int main(const int argc, char **argv) {
       ret = 1;
       goto cleanup;
     }
-    if (check_requirements_hw(cfg.hw_access) < 0) {
+    if (check_requirements_hw(cfg.conf.hw_access) < 0) {
       ret = 1;
       goto cleanup;
     }
-    print_privileged_warning(cfg.privileged_mask);
-    if (cfg.privileged_mask & PRIV_NOSEC && cfg.block_nested_ns)
+    print_privileged_warning(cfg.conf.privileged_mask);
+    if (cfg.conf.privileged_mask & PRIV_NOSEC && cfg.conf.block_nested_ns)
       log_warn("--privileged=noseccomp is active: --block-nested-namespaces "
                "is now a NO-OP.");
-    cgroup_host_bootstrap(cfg.force_cgroupv1);
-    if (cfg.container_name[0] == '\0' && cfg.rootfs_img_path[0])
-      generate_container_name(cfg.rootfs_img_path, cfg.container_name,
-                              sizeof(cfg.container_name));
+    cgroup_host_bootstrap(cfg.conf.force_cgroupv1);
+    if (cfg.conf.container_name[0] == '\0' && cfg.conf.rootfs_img_path[0])
+      generate_container_name(cfg.conf.rootfs_img_path, cfg.conf.container_name,
+                              sizeof(cfg.conf.container_name));
     ret = start_rootfs(&cfg);
     goto cleanup;
   }
@@ -326,15 +327,15 @@ int main(const int argc, char **argv) {
   }
 
   if (strcmp(cmd, "restart") == 0) {
-    if (check_requirements_hw(cfg.hw_access) < 0) {
+    if (check_requirements_hw(cfg.conf.hw_access) < 0) {
       ret = 1;
       goto cleanup;
     }
-    print_privileged_warning(cfg.privileged_mask);
-    if (cfg.privileged_mask & PRIV_NOSEC && cfg.block_nested_ns)
+    print_privileged_warning(cfg.conf.privileged_mask);
+    if (cfg.conf.privileged_mask & PRIV_NOSEC && cfg.conf.block_nested_ns)
       log_warn("--privileged=noseccomp is active: --block-nested-namespaces "
                "is now a NO-OP.");
-    cgroup_host_bootstrap(cfg.force_cgroupv1);
+    cgroup_host_bootstrap(cfg.conf.force_cgroupv1);
     ret = restart_rootfs(&cfg);
     goto cleanup;
   }
@@ -357,7 +358,14 @@ int main(const int argc, char **argv) {
   }
 
   if (strcmp(cmd, "daemon") == 0) {
-    ret = daemon_run(cfg.foreground);
+    ret = daemon_run(cfg.rt.foreground);
+    goto cleanup;
+  }
+
+  /* 如果执行到这里，说明 Daemon 没启动（client_run 代理失败并回退了） */
+  if (strcmp(cmd, "daemon-stop") == 0) {
+    log_info("Daemon is not running.");
+    ret = 0;
     goto cleanup;
   }
 

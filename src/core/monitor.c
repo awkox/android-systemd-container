@@ -36,20 +36,13 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
 
   prctl(PR_SET_NAME, "[ds-monitor]", 0, 0, 0);
 
-  /* Unshare namespaces - Monitor enters new UTS, IPC, and optionally Cgroup
-   * namespaces immediately. PID namespace is NOT unshared here because
-   * unshare(CLONE_NEWPID) can only be called once per process. Instead,
-   * each boot/reboot cycle forks an intermediate that creates a fresh
-   * PID namespace. */
-  int ns_flags = CLONE_NEWUTS | CLONE_NEWIPC;
-
   /* Adaptive Cgroup Namespace (introduced in Linux 4.6).
    *
    * CGROUP SELECTION: Only enable cgroupns when V2 is active.
    * If --force-cgroupv1 is set, we skip cgroupns so setup_cgroups()
    * has full rights to create named V1 hierarchies from the host context. */
   bool cg_ns_ok = access("/proc/self/ns/cgroup", F_OK) == 0 &&
-                 cgroup_host_is_v2() && !cfg->force_cgroupv1;
+                 cgroup_host_is_v2() && !cfg->conf.force_cgroupv1;
   if (cg_ns_ok) {
     /* To get isolation from a cgroup namespace, we must be in a sub-cgroup
      * BEFORE we unshare. If we are in the root '/', the namespace root
@@ -57,12 +50,12 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
      * We use a container-specific path to avoid conflicts. */
     if (access("/sys/fs/cgroup/cgroup.procs", F_OK) == 0) {
       char safe_name[256];
-      sanitize_container_name(cfg->container_name, safe_name,
+      sanitize_container_name(cfg->conf.container_name, safe_name,
                               sizeof(safe_name));
 
       /* v2：在 mkdir 之前自上而下启用请求的控制器。遍历两个层级：
        * /sys/fs/cgroup -> /sys/fs/cgroup/asc */
-      if (cfg->memory_limit || cfg->cpu_quota || cfg->pids_limit) {
+      if (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit) {
         /* Build enable string with snprintf offsets instead of strncat to
          * avoid truncation. Use cg_word_in_list() for exact word-boundary
          * matching to prevent false positives (e.g. matching "cpuset"
@@ -72,19 +65,19 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
         int eoff = 0;
         if (read_file("/sys/fs/cgroup/cgroup.controllers", buf, sizeof(buf)) >
             0) {
-          if (cfg->memory_limit && cg_word_in_list(buf, "memory")) {
+          if (cfg->conf.memory_limit && cg_word_in_list(buf, "memory")) {
             int n = snprintf(enable + eoff, sizeof(enable) - (size_t)eoff,
                              "%s+memory", eoff ? " " : "");
             if (n > 0)
               eoff += n;
           }
-          if (cfg->cpu_quota && cg_word_in_list(buf, "cpu")) {
+          if (cfg->conf.cpu_quota && cg_word_in_list(buf, "cpu")) {
             int n = snprintf(enable + eoff, sizeof(enable) - (size_t)eoff,
                              "%s+cpu", eoff ? " " : "");
             if (n > 0)
               eoff += n;
           }
-          if (cfg->pids_limit && cg_word_in_list(buf, "pids")) {
+          if (cfg->conf.pids_limit && cg_word_in_list(buf, "pids")) {
             int n = snprintf(enable + eoff, sizeof(enable) - (size_t)eoff,
                              "%s+pids", eoff ? " " : "");
             if (n > 0)
@@ -123,7 +116,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
    * pids.max into the delegated cgroup. On v1 or --force-cgroupv1 the
    * function skips with a warning since v1 delegation is unreliable. */
   if (cgroup_apply_limits(cfg) < 0 &&
-      (cfg->memory_limit || cfg->cpu_quota || cfg->pids_limit))
+      (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit))
     log_warn("[CGROUP] Some resource limits could not be enforced.");
 
   bool stdio_redirected = false;
@@ -146,7 +139,7 @@ reboot_loop:;
    * We must do this BEFORE forking the intermediate process, otherwise
    * the intermediate inherits the user's stdout/stderr (e.g. a pipe)
    * and holds it open indefinitely, causing CLI hangs in direct mode. */
-  if (!cfg->foreground && !stdio_redirected) {
+  if (!cfg->rt.foreground && !stdio_redirected) {
     auto_close int devnull = open("/dev/null", O_RDWR);
     if (devnull >= 0) {
       dup2(devnull, 0);
@@ -164,11 +157,9 @@ reboot_loop:;
      * Create fresh namespaces for this boot cycle. */
      
     /* 中间进程加入容器的 Cgroup */
-    bool cg_ns_ok = access("/proc/self/ns/cgroup", F_OK) == 0 &&
-                    cgroup_host_is_v2() && !cfg->force_cgroupv1;
     if (cg_ns_ok) {
       char safe_name[256];
-      sanitize_container_name(cfg->container_name, safe_name, sizeof(safe_name));
+      sanitize_container_name(cfg->conf.container_name, safe_name, sizeof(safe_name));
       char cg_procs[PATH_MAX];
       snprintf(cg_procs, sizeof(cg_procs), "/sys/fs/cgroup/" PROJECT_NAME "/%s/cgroup.procs", safe_name);
       
@@ -181,7 +172,7 @@ reboot_loop:;
 
     /* 执行 Namespace 隔离 */
     int clone_flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC;
-    if (cfg->isolation_network)
+    if (cfg->conf.isolation_network)
       clone_flags |= CLONE_NEWNET;
     if (cg_ns_ok)
       clone_flags |= CLONE_NEWCGROUP;
@@ -210,7 +201,7 @@ reboot_loop:;
      * 调用都会被 /dev/null 默默吞噬。将重定向移到这里意味着只有中间进程
      * 本身保持静默；internal_boot() 会保留原始的终端文件描述符，
      * 直到在它自己的第 21 步将其重定向到 /dev/console。*/
-    if (!cfg->foreground) {
+    if (!cfg->rt.foreground) {
       auto_close int devnull = open("/dev/null", O_RDWR);
       if (devnull >= 0) {
         dup2(devnull, 0);
@@ -256,7 +247,7 @@ reboot_loop:;
   /* Capture PID namespace inode for virtualization PID-recycling guard.
    * container_pid may be 0 on HOST mode until pidfile is written - that's
    * fine; get_pid_ns_inode(0) returns 0 and update will skip safely. */
-  cfg->ns_inode = get_pid_ns_inode(cfg->container_pid);
+  cfg->rt.ns_inode = get_pid_ns_inode(cfg->rt.container_pid);
 
   /* Ensure monitor is not sitting inside any mount point */
   if (chdir("/") < 0) {
@@ -264,7 +255,7 @@ reboot_loop:;
   }
 
   /* Stdio handling for monitor in background mode (first boot only) */
-  if (!cfg->foreground && !stdio_redirected) {
+  if (!cfg->rt.foreground && !stdio_redirected) {
     auto_close int devnull = open("/dev/null", O_RDWR);
     if (devnull >= 0) {
       dup2(devnull, 0);
@@ -305,15 +296,15 @@ reboot_loop:;
 
       /* HOST mode: resolve container_pid via /proc scan using UUID.
        * Poll until we have a valid PID, then capture ns_inode once. */
-      if (cfg->container_pid <= 0 && cfg->uuid[0] != '\0') {
-        pid_t p = find_container_init_pid(cfg->uuid);
+      if (cfg->rt.container_pid <= 0 && cfg->conf.uuid[0] != '\0') {
+        pid_t p = find_container_init_pid(cfg->conf.uuid);
         if (p > 0) {
-          cfg->container_pid = p;
-          cfg->ns_inode = get_pid_ns_inode(p);
-          write_monitor_debug_log(cfg->container_name,
+          cfg->rt.container_pid = p;
+          cfg->rt.ns_inode = get_pid_ns_inode(p);
+          write_monitor_debug_log(cfg->conf.container_name,
                                   "[VIRT] resolved container_pid=%d "
                                   "ns_inode=%lu from /proc",
-                                  (int)p, cfg->ns_inode);
+                                  (int)p, cfg->rt.ns_inode);
         }
       }
 
@@ -339,13 +330,13 @@ reboot_loop:;
   if (WIFEXITED(status)) {
     int code = WEXITSTATUS(status);
     if (code == REBOOT_EXIT) {
-      write_monitor_debug_log(cfg->container_name, "Detected internal REBOOT");
+      write_monitor_debug_log(cfg->conf.container_name, "Detected internal REBOOT");
     } else {
-      write_monitor_debug_log(cfg->container_name,
+      write_monitor_debug_log(cfg->conf.container_name,
                               "Detected container SHUTDOWN (exit: %d)", code);
     }
   } else if (WIFSIGNALED(status)) {
-    write_monitor_debug_log(cfg->container_name,
+    write_monitor_debug_log(cfg->conf.container_name,
                             "Intermediate killed by signal: %d (%s)",
                             WTERMSIG(status), strsignal(WTERMSIG(status)));
   }
@@ -354,81 +345,81 @@ reboot_loop:;
   if (WIFEXITED(status) && WEXITSTATUS(status) == REBOOT_EXIT) {
     /* Check for external lock - if exists, abort reboot and let CLI handle it
      */
-    if (is_external_lock_active(cfg->container_name)) {
+    if (is_external_lock_active(cfg->conf.container_name)) {
       write_monitor_debug_log(
-          cfg->container_name,
+          cfg->conf.container_name,
           "External command lock detected - aborting internal reboot");
       goto monitor_cleanup_and_exit;
     }
 
-    if (cfg->foreground) {
-      printf("\nContainer %s is now Rebooting\n", cfg->container_name);
+    if (cfg->rt.foreground) {
+      printf("\nContainer %s is now Rebooting\n", cfg->conf.container_name);
       fflush(stdout);
     }
 
     /* Synchronize container_pid in Monitor via /proc scan */
-    if (cfg->uuid[0] != '\0') {
-      pid_t new_pid = find_container_init_pid(cfg->uuid);
+    if (cfg->conf.uuid[0] != '\0') {
+      pid_t new_pid = find_container_init_pid(cfg->conf.uuid);
       if (new_pid > 0)
-        cfg->container_pid = new_pid;
+        cfg->rt.container_pid = new_pid;
     }
 
     /* Write UUID to container /run (via procfs) so internal_boot can read it
      * across the pivot_root boundary without touching user's rootfs. */
-    if (!cfg->volatile_mode && cfg->container_pid > 0) {
+    if (!cfg->conf.volatile_mode && cfg->rt.container_pid > 0) {
       char run_dir[PATH_MAX];
       snprintf(run_dir, sizeof(run_dir), "/proc/%d/root/run",
-               cfg->container_pid);
+               cfg->rt.container_pid);
       mkdir(run_dir, 0755);
-      auto_close int fd = safe_openat_proc(cfg->container_pid, "run/.boot-uuid",
+      auto_close int fd = safe_openat_proc(cfg->rt.container_pid, "run/.boot-uuid",
                                 O_WRONLY | O_CREAT | O_TRUNC, 0644);
       if (fd >= 0) {
-        size_t ulen = strlen(cfg->uuid);
-        write_all(fd, cfg->uuid, ulen);
+        size_t ulen = strlen(cfg->conf.uuid);
+        write_all(fd, cfg->conf.uuid, ulen);
       }
     }
 
     /* Reload from workspace (canonical path the user edits) */
     {
-      bool old_force_cgv1 = cfg->force_cgroupv1;
+      bool old_force_cgv1 = cfg->conf.force_cgroupv1;
 
       cfg_t reboot_cfg = *cfg;
-      if (config_load_by_name(cfg->container_name, &reboot_cfg) == 0) {
+      if (config_load_by_name(cfg->conf.container_name, &reboot_cfg) == 0) {
         /* Cgroup namespace is locked at monitor startup - can't change */
-        if (reboot_cfg.force_cgroupv1 != old_force_cgv1) {
+        if (reboot_cfg.conf.force_cgroupv1 != old_force_cgv1) {
           printf("\nforce_cgroupv1 changed but requires a full stop/start to take effect\n");
-          reboot_cfg.force_cgroupv1 = old_force_cgv1;
+          reboot_cfg.conf.force_cgroupv1 = old_force_cgv1;
         }
         *cfg = reboot_cfg;
         /* Restore mount point for img-based containers */
-        if (cfg->img_mount_point[0]) {
+        if (cfg->conf.img_mount_point[0]) {
         }
       }
     }
 
-    cfg->reboot_cycle = true;
-    clock_gettime(CLOCK_BOOTTIME, &cfg->start_time);
+    cfg->rt.reboot_cycle = true;
+    clock_gettime(CLOCK_BOOTTIME, &cfg->rt.start_time);
 
     /* Refresh ns_inode: new container has a new PID namespace inode.
      * Without this, virtualize_update's PID-recycling guard rejects
      * all writes after the first reboot cycle (stale inode != new pid ns). */
-    cfg->ns_inode = get_pid_ns_inode(cfg->container_pid);
-    if (cfg->foreground)
+    cfg->rt.ns_inode = get_pid_ns_inode(cfg->rt.container_pid);
+    if (cfg->rt.foreground)
       log_silent = 1;
 
     goto reboot_loop;
   }
 
   /* Not a reboot - check if external command is handling cleanup */
-  if (is_external_lock_active(cfg->container_name)) {
-    write_monitor_debug_log(cfg->container_name,
+  if (is_external_lock_active(cfg->conf.container_name)) {
+    write_monitor_debug_log(cfg->conf.container_name,
                             "External command lock detected - yielding "
                             "cleanup to CLI");
     goto monitor_cleanup_and_exit;
   }
 
   /* Normal exit - monitor does cleanup */
-  write_monitor_debug_log(cfg->container_name, "Monitor performing cleanup");
+  write_monitor_debug_log(cfg->conf.container_name, "Monitor performing cleanup");
 
   cleanup_container_resources(cfg, false, false);
 

@@ -333,9 +333,9 @@ void cgroup_cleanup_container(const char *container_name) {
 }
 
 void print_cgroup_status(const cfg_t *cfg) {
-  const bool limits_set = cfg->memory_limit || cfg->cpu_quota || cfg->pids_limit;
+  const bool limits_set = cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit;
 
-  if (cfg->force_cgroupv1) {
+  if (cfg->conf.force_cgroupv1) {
     log_warn("Using legacy Cgroup V1 hierarchy (forced by --force-cgroupv1)");
     if (limits_set) {
       log_warn("Resource limits (--memory/--cpus/--pids-limit) require "
@@ -403,21 +403,21 @@ static long long parse_cgroup_ll(const char *buf) {
 }
 
 int cgroup_apply_limits(cfg_t *cfg) {
-  if (!cfg->memory_limit && !cfg->cpu_quota && !cfg->pids_limit)
+  if (!cfg->conf.memory_limit && !cfg->conf.cpu_quota && !cfg->conf.pids_limit)
     return 0;
 
   /* Resource limits require cgroup v2. v1 hierarchies are often pre-claimed
    * by the host systemd and cannot be reliably delegated. Skip with a
    * warning when --force-cgroupv1 is active or the host has no v2 mount. */
-  if (cfg->force_cgroupv1 || !cgroup_host_is_v2()) {
-    cfg->memory_limit = 0;
-    cfg->cpu_quota = 0;
-    cfg->pids_limit = 0;
+  if (cfg->conf.force_cgroupv1 || !cgroup_host_is_v2()) {
+    cfg->conf.memory_limit = 0;
+    cfg->conf.cpu_quota = 0;
+    cfg->conf.pids_limit = 0;
     return 0;
   }
 
   char safe_name[256];
-  sanitize_container_name(cfg->container_name, safe_name, sizeof(safe_name));
+  sanitize_container_name(cfg->conf.container_name, safe_name, sizeof(safe_name));
 
   char cg[PATH_MAX - 64];
   char path[PATH_MAX + 64], val[64];
@@ -430,47 +430,47 @@ int cgroup_apply_limits(cfg_t *cfg) {
   }
   /* Check the delegated cgroup's controllers, not the root. Controllers
    * must be enabled in subtree_control of each parent to be usable here. */
-  if (cfg->memory_limit) {
+  if (cfg->conf.memory_limit) {
     if (ctrl_supported_v2(cg, "memory")) {
       snprintf(path, sizeof(path), "%s/memory.max", cg);
-      snprintf(val, sizeof(val), "%lld", cfg->memory_limit);
+      snprintf(val, sizeof(val), "%lld", cfg->conf.memory_limit);
       if (write_file(path, val) < 0) {
         log_warn("[CGROUP] memory.max: %s", strerror(errno));
-        cfg->memory_limit = 0;
+        cfg->conf.memory_limit = 0;
         err++;
       }
     } else {
       log_warn("[CGROUP] 'memory' controller not supported, limit skipped.");
-      cfg->memory_limit = 0;
+      cfg->conf.memory_limit = 0;
     }
   }
-  if (cfg->cpu_quota) {
+  if (cfg->conf.cpu_quota) {
     if (ctrl_supported_v2(cg, "cpu")) {
-      const long long period = cfg->cpu_period > 0 ? cfg->cpu_period : 100000;
+      const long long period = cfg->conf.cpu_period > 0 ? cfg->conf.cpu_period : 100000;
       snprintf(path, sizeof(path), "%s/cpu.max", cg);
-      snprintf(val, sizeof(val), "%lld %lld", cfg->cpu_quota, period);
+      snprintf(val, sizeof(val), "%lld %lld", cfg->conf.cpu_quota, period);
       if (write_file(path, val) < 0) {
         log_warn("[CGROUP] cpu.max: %s", strerror(errno));
-        cfg->cpu_quota = 0;
+        cfg->conf.cpu_quota = 0;
         err++;
       }
     } else {
       log_warn("[CGROUP] 'cpu' controller not supported, limit skipped.");
-      cfg->cpu_quota = 0;
+      cfg->conf.cpu_quota = 0;
     }
   }
-  if (cfg->pids_limit) {
+  if (cfg->conf.pids_limit) {
     if (ctrl_supported_v2(cg, "pids")) {
       snprintf(path, sizeof(path), "%s/pids.max", cg);
-      snprintf(val, sizeof(val), "%lld", cfg->pids_limit);
+      snprintf(val, sizeof(val), "%lld", cfg->conf.pids_limit);
       if (write_file(path, val) < 0) {
         log_warn("[CGROUP] pids.max: %s", strerror(errno));
-        cfg->pids_limit = 0;
+        cfg->conf.pids_limit = 0;
         err++;
       }
     } else {
       log_warn("[CGROUP] 'pids' controller not supported, limit skipped.");
-      cfg->pids_limit = 0;
+      cfg->conf.pids_limit = 0;
     }
   }
   return err ? -1 : 0;
@@ -486,7 +486,7 @@ int cgroup_get_usage(const cfg_t *cfg, long long *mem, long long *cpu_us,
     *pids = -1;
 
   char safe_name[256];
-  sanitize_container_name(cfg->container_name, safe_name, sizeof(safe_name));
+  sanitize_container_name(cfg->conf.container_name, safe_name, sizeof(safe_name));
 
   const bool v2 = cgroup_host_is_v2();
   /* Keep cg strictly within PATH_MAX-64 so the suffix appended

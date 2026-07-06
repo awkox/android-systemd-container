@@ -112,7 +112,7 @@ int bind_mount(const char *src, const char *tgt) {
  * ---------------------------------------------------------------------------*/
 
 int check_volatile_mode(cfg_t *cfg) {
-  if (!cfg->volatile_mode)
+  if (!cfg->conf.volatile_mode)
     return 0;
 
   if (grep_file("/proc/filesystems", "overlay") != 1) {
@@ -123,7 +123,7 @@ int check_volatile_mode(cfg_t *cfg) {
 
   /* Pre-flight: reject f2fs lowerdir - known Android kernel limitation */
   struct statfs sfs;
-  if (statfs(cfg->img_mount_point, &sfs) == 0 && sfs.f_type == 0xF2F52010) {
+  if (statfs(cfg->conf.img_mount_point, &sfs) == 0 && sfs.f_type == 0xF2F52010) {
     log_error("Volatile mode cannot be used: Your rootfs is on f2fs, which is "
               "not supported as an OverlayFS lower layer on most Android "
               "kernels.");
@@ -139,12 +139,12 @@ int setup_volatile_overlay(cfg_t *cfg) {
   /* 1. 在 /tmp/asc/volatile/<name> 中创建临时工作区 */
   char base[PATH_MAX];
   snprintf(base, sizeof(base), "%s/" RUNTIME_VOLATILE_SUBDIR "/%s",
-           get_runtime_dir(), cfg->container_name);
+           get_runtime_dir(), cfg->conf.container_name);
   if (mkdir_p(base, 0755) < 0) {
     log_error("Failed to create volatile workspace: %s", base);
     return -1;
   }
-  safe_strncpy(cfg->volatile_dir, base, sizeof(cfg->volatile_dir));
+  safe_strncpy(cfg->rt.volatile_dir, base, sizeof(cfg->rt.volatile_dir));
 
   /* 2. Mount tmpfs as the backing store for upper/work */
   if (domount("none", base, "tmpfs", 0, "size=50%,mode=755") < 0)
@@ -163,7 +163,7 @@ int setup_volatile_overlay(cfg_t *cfg) {
   char opts[32768];
   const int n = snprintf(opts, sizeof(opts),
     "lowerdir=%s,upperdir=%s/upper,workdir=%s/work,context=\""
-    ANDROID_TMPFS_CONTEXT "\"", cfg->img_mount_point, base, base);
+    ANDROID_TMPFS_CONTEXT "\"", cfg->conf.img_mount_point, base, base);
 
   if (n < 0 || (size_t)n >= sizeof(opts)) {
     log_error("OverlayFS options too long");
@@ -180,8 +180,8 @@ int setup_volatile_overlay(cfg_t *cfg) {
     return -1;
   }
 
-  /* 9. Update cfg->img_mount_point to the merged view */
-  safe_strncpy(cfg->img_mount_point, merged, sizeof(cfg->img_mount_point));
+  /* 9. Update cfg->conf.img_mount_point to the merged view */
+  safe_strncpy(cfg->conf.img_mount_point, merged, sizeof(cfg->conf.img_mount_point));
 
   return 0;
 }
@@ -239,17 +239,17 @@ static bool is_mount_in_namespace(const char *path) {
  * we try to unmount it normally before deleting the workspace directory.
  */
 int cleanup_volatile_overlay(cfg_t *cfg) {
-  if (cfg->volatile_dir[0] == '\0')
+  if (cfg->rt.volatile_dir[0] == '\0')
     return 0;
 
   char merged[PATH_MAX + 32];
-  snprintf(merged, sizeof(merged), "%s/merged", cfg->volatile_dir);
+  snprintf(merged, sizeof(merged), "%s/merged", cfg->rt.volatile_dir);
 
   /* Skip logging for clean exits - nothing prints after 'Powering off.' */
 
   /* 1. Fast path: check if mounts already vanished (normal case) */
   if (!is_mount_in_namespace(merged) &&
-      !is_mount_in_namespace(cfg->volatile_dir)) {
+      !is_mount_in_namespace(cfg->rt.volatile_dir)) {
     goto done;
   }
 
@@ -257,13 +257,13 @@ int cleanup_volatile_overlay(cfg_t *cfg) {
    */
   sync();
   umount(merged);
-  umount(cfg->volatile_dir);
+  umount(cfg->rt.volatile_dir);
 
 done:
   /* settle time for kernel to release backing store info */
   usleep(RETRY_DELAY_US / 2);
-  const int r = remove_recursive(cfg->volatile_dir);
-  cfg->volatile_dir[0] = '\0';
+  const int r = remove_recursive(cfg->rt.volatile_dir);
+  cfg->rt.volatile_dir[0] = '\0';
   return r;
 }
 

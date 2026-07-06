@@ -13,7 +13,7 @@ void internal_boot(cfg_t *cfg) {
   open_container_log(cfg);
 
   /* NET_NONE: bring up loopback in the isolated network namespace */
-  if (cfg->isolation_network) {
+  if (cfg->conf.isolation_network) {
     auto_free nl_ctx_t *nlctx = nl_open();
     if (nlctx) {
       nl_link_up(nlctx, "lo");
@@ -25,7 +25,7 @@ void internal_boot(cfg_t *cfg) {
   /* 0. Boot Guard: Ensure name is present and unique.
    * This is a critical security check to prevent anonymous or conflicting
    * containers from booting, even if the CLI checks were bypassed. */
-  if (!cfg->container_name[0]) {
+  if (!cfg->conf.container_name[0]) {
     log_error("CRITICAL: Boot aborted — container name is empty.");
     goto boot_fail;
   }
@@ -37,7 +37,7 @@ void internal_boot(cfg_t *cfg) {
     if (existing_pid != getpid()) {
       log_error(
           "CRITICAL: Boot aborted — name '%s' is already in use by PID %d.",
-          cfg->container_name, existing_pid);
+          cfg->conf.container_name, existing_pid);
       goto boot_fail;
     }
   }
@@ -60,7 +60,7 @@ void internal_boot(cfg_t *cfg) {
   /* 3. Setup volatile overlay INSIDE the container's mount namespace.
    * This MUST happen here (not in parent) so the overlay's connection to
    * its lowerdir (e.g. a loop-mounted image) survives mount privatization. */
-  if (cfg->volatile_mode) {
+  if (cfg->conf.volatile_mode) {
     if (setup_volatile_overlay(cfg) < 0) {
       log_error("Failed to setup volatile overlay.");
       goto boot_fail;
@@ -68,22 +68,22 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* 4. Bind mount rootfs to itself (required for pivot_root) */
-  if (mount(cfg->img_mount_point, cfg->img_mount_point, nullptr,
+  if (mount(cfg->conf.img_mount_point, cfg->conf.img_mount_point, nullptr,
             MS_BIND | MS_REC, nullptr) < 0) {
     log_error("Failed to bind mount rootfs: %s", strerror(errno));
     goto boot_fail;
   }
 
   /* 5. Set working directory to rootfs (required before pivot_root) */
-  if (chdir(cfg->img_mount_point) < 0) {
-    log_error("Failed to chdir to '%s': %s", cfg->img_mount_point,
+  if (chdir(cfg->conf.img_mount_point) < 0) {
+    log_error("Failed to chdir to '%s': %s", cfg->conf.img_mount_point,
               strerror(errno));
     goto boot_fail;
   }
 
   /* 6. Read UUID from /run/.boot-uuid (written by monitor via procfs) */
-  if (cfg->uuid[0] == '\0') {
-    read_file("run/.boot-uuid", cfg->uuid, sizeof(cfg->uuid));
+  if (cfg->conf.uuid[0] == '\0') {
+    read_file("run/.boot-uuid", cfg->conf.uuid, sizeof(cfg->conf.uuid));
   }
   unlink("run/.boot-uuid");
 
@@ -106,16 +106,16 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* 8. Setup /dev (device nodes, devtmpfs) */
-  if (setup_dev(".", cfg->hw_access, cfg->gpu_mode, cfg->privileged_mask) < 0) {
+  if (setup_dev(".", cfg->conf.hw_access, cfg->conf.gpu_mode, cfg->conf.privileged_mask) < 0) {
     log_error("Failed to setup /dev.");
     goto boot_fail;
   }
 
   /* 9. Log hardware access mode (BEFORE pivot_root) */
-  if (!cfg->reboot_cycle) {
-    if (cfg->hw_access)
+  if (!cfg->rt.reboot_cycle) {
+    if (cfg->conf.hw_access)
       log_info("Setting up hardware access...");
-    else if (cfg->gpu_mode)
+    else if (cfg->conf.gpu_mode)
       log_info("Setting up GPU-only access...");
     else
       log_info("Hardware access disabled: using isolated tmpfs...");
@@ -139,7 +139,7 @@ void internal_boot(cfg_t *cfg) {
    * This allows us to mount cgroups onto it later even after /sys is RO. */
   mkdir_p("sys/fs/cgroup", 0755);
 
-  if (cfg->hw_access && cfg->foreground) {
+  if (cfg->conf.hw_access && cfg->rt.foreground) {
     /* DYNAMIC HARDWARE HOLES: Instead of hardcoding, we iterate through
      * everything in /sys and 'pin' subdirectories as independent RW mounts.
      * This ensures 100% hardware visibility (devices, bus, class, block, etc)
@@ -162,7 +162,7 @@ void internal_boot(cfg_t *cfg) {
         }
       }
     }
-  } else if (!cfg->hw_access) {
+  } else if (!cfg->conf.hw_access) {
     /* Hardware isolation: network only mixed mode */
     if (mkdir("sys/devices", 0755) < 0 && errno != EEXIST) {
       log_warn("Failed to create sys/devices directory: %s", strerror(errno));
@@ -192,7 +192,7 @@ void internal_boot(cfg_t *cfg) {
    * foreground mode + systemd (where we used pinned sub-mounts) or if
    * hw_access is disabled entirely. In background mode or non-systemd
    * hw_access mode, we leave /sys RW. */
-  if (!cfg->hw_access || cfg->foreground) {
+  if (!cfg->conf.hw_access || cfg->rt.foreground) {
     if (mount(nullptr, "sys", nullptr, MS_REMOUNT | MS_BIND | MS_RDONLY, nullptr) < 0) {
       log_warn("Failed to remount /sys as read-only: %s", strerror(errno));
     }
@@ -201,7 +201,7 @@ void internal_boot(cfg_t *cfg) {
   /* 11. Setup Cgroups AFTER locking down /sys.
    * Mounting onto a directory on a RO parent is allowed for root, and it
    * ensures the sub-mount (tmpfs) is RW and independent of the parent's RO. */
-  if (setup_cgroups(cfg->force_cgroupv1) < 0) {
+  if (setup_cgroups(cfg->conf.force_cgroupv1) < 0) {
     log_error("Failed to setup container cgroups.");
     goto boot_fail;
   }
@@ -218,8 +218,8 @@ void internal_boot(cfg_t *cfg) {
     log_warn("Failed to mount tmpfs at /tmp: %s", strerror(errno));
 
   /* 14. Bind-mount console BEFORE pivot_root (host pts still visible). */
-  if (mount(cfg->console.name, "dev/console", nullptr, MS_BIND, nullptr) < 0)
-    log_warn("Failed to bind mount console '%s': %s", cfg->console.name,
+  if (mount(cfg->rt.console.name, "dev/console", nullptr, MS_BIND, nullptr) < 0)
+    log_warn("Failed to bind mount console '%s': %s", cfg->rt.console.name,
              strerror(errno));
 
   /* 15. pivot_root with MS_MOVE+chroot fallback for ramfs/rootfs environments
@@ -253,7 +253,7 @@ void internal_boot(cfg_t *cfg) {
 
   /* 15b. Apply deferred mount propagation settings.
    * Switch to MS_SHARED only after relocation is complete. */
-  if (cfg->privileged_mask & PRIV_SHARED) {
+  if (cfg->conf.privileged_mask & PRIV_SHARED) {
     if (mount(nullptr, "/", nullptr, MS_REC | MS_SHARED, nullptr) < 0) {
       log_warn("[SEC] Failed to apply MS_SHARED propagation: %s",
                strerror(errno));
@@ -263,10 +263,10 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* 16. Setup devpts (must be after pivot_root for newinstance) */
-  setup_devpts(cfg->hw_access);
+  setup_devpts(cfg->conf.hw_access);
 
   /* Apply jail mask after pivot_root for correct path resolution */
-  apply_jail_mask(cfg->hw_access, cfg->privileged_mask);
+  apply_jail_mask(cfg->conf.hw_access, cfg->conf.privileged_mask);
 
   /* 16b. Resource Visibility Virtualization
    * Always runs: uptime/loadavg are fundamental container features.
@@ -284,17 +284,17 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* Log boot (after hw-access logs for clean ordering) */
-  if (!cfg->reboot_cycle) {
-    log_info("Booting '%s' (init: %s)...", cfg->container_name,
-             cfg->custom_init[0] ? cfg->custom_init : DEFAULT_INIT);
+  if (!cfg->rt.reboot_cycle) {
+    log_info("Booting '%s' (init: %s)...", cfg->conf.container_name,
+             cfg->conf.custom_init[0] ? cfg->conf.custom_init : DEFAULT_INIT);
   }
 
   /* 17. Write identity markers for PID discovery (AFTER logs to ensure CLI
    * parent sees them before exiting background mode). */
   mkdir(FORK_MARKER, 0755);
-  if (cfg->uuid[0] != '\0') {
+  if (cfg->conf.uuid[0] != '\0') {
     char uuid_path[PATH_MAX];
-    snprintf(uuid_path, sizeof(uuid_path), FORK_MARKER "/%s", cfg->uuid);
+    snprintf(uuid_path, sizeof(uuid_path), FORK_MARKER "/%s", cfg->conf.uuid);
     write_file(uuid_path, ""); /* empty UUID marker */
   }
 
@@ -303,14 +303,14 @@ void internal_boot(cfg_t *cfg) {
     log_warn("Boot: Failed to save internal configuration backup");
   }
 
-  write_file(FORK_MARKER "/name", cfg->container_name);
+  write_file(FORK_MARKER "/name", cfg->conf.container_name);
 
-  if (cfg->img_mount_point[0])
-    write_file(FORK_MARKER "/mount", cfg->img_mount_point);
+  if (cfg->conf.img_mount_point[0])
+    write_file(FORK_MARKER "/mount", cfg->conf.img_mount_point);
 
   /* Legacy compatibility: write version to the marker directory root */
   write_file(FORK_MARKER "/version", PROJECT_VERSION);
-  if (cfg->foreground) {
+  if (cfg->rt.foreground) {
     printf("\r\n(to exit from the foreground mode, press CTRL+ALT+Q)\r\n");
     fflush(stdout);
   }
@@ -331,19 +331,19 @@ void internal_boot(cfg_t *cfg) {
   /* 19. Clear environment and set container defaults */
   clearenv();
   setenv("container", PROJECT_NAME, 1);
-  if (cfg->img_mount_point[0])
-    setenv("RUNTIME_MOUNT_PATH", cfg->img_mount_point, 1);
+  if (cfg->conf.img_mount_point[0])
+    setenv("RUNTIME_MOUNT_PATH", cfg->conf.img_mount_point, 1);
 
   /* 19b. Apply security hardening (capabilities)
    * Apply security hardening (capabilities and seccomp)
    * This is done at the very end to ensure all setup tasks that might need
    * privileges (like chown/chmod or mknod) are finished. */
-  seccomp_apply_minimal(cfg->privileged_mask);
-  android_seccomp_setup(cfg->block_nested_ns &&
-      !(cfg->privileged_mask & PRIV_NOSEC),
-      cfg->privileged_mask);
+  seccomp_apply_minimal(cfg->conf.privileged_mask);
+  android_seccomp_setup(cfg->conf.block_nested_ns &&
+      !(cfg->conf.privileged_mask & PRIV_NOSEC),
+      cfg->conf.privileged_mask);
 
-  apply_capability_hardening(cfg->hw_access, cfg->privileged_mask);
+  apply_capability_hardening(cfg->conf.hw_access, cfg->conf.privileged_mask);
 
   /* 20. Redirect standard I/O to /dev/console */
   const int console_fd = open("/dev/console", O_RDWR);
@@ -382,7 +382,7 @@ void internal_boot(cfg_t *cfg) {
 
   /* 21. EXEC INIT */
   char *init_bin =
-      cfg->custom_init[0] ? cfg->custom_init : (char *)DEFAULT_INIT;
+      cfg->conf.custom_init[0] ? cfg->conf.custom_init : (char *)DEFAULT_INIT;
   char *init_args[16];
   int argc = 0;
   init_args[argc++] = init_bin;

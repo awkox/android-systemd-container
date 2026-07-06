@@ -118,7 +118,9 @@ static void daemon_log_tee(const char *prefix, const char *fmt, ...) {
  * without restarting the daemon.
  */
 static char g_self_path[PATH_MAX];
+
 static volatile sig_atomic_t g_sigusr2_received = 0;
+static volatile sig_atomic_t g_terminate = 0;
 
 /* wire protocol helpers */
 
@@ -704,6 +706,20 @@ static void handle_conn(const int conn) {
     _exit(1);
   }
 
+  /* 拦截 daemon-stop 命令：主动退出 */
+  if (req.argc > 0 && strcmp(req.argv[0], "daemon-stop") == 0) {
+    const char *msg = "Daemon is gracefully shutting down...\n";
+    send_frame(conn, MSG_OUT, msg, (uint32_t)strlen(msg));
+    send_exit(conn, 0);
+
+    /* 杀死父进程（即 Daemon 的 accept4 主循环） */
+    kill(getppid(), SIGTERM);
+
+    free_req(&req);
+    close(conn);
+    _exit(0);
+  }
+
   /*
    * Block recursive daemon/client invocations.
    * We skip any argv[i] whose predecessor starts with '-', because that arg
@@ -818,6 +834,10 @@ static void sigusr2_handler([[maybe_unused]] int sig) {
   g_sigusr2_received = 1;
 }
 
+static void sigterm_handler([[maybe_unused]] int sig) {
+  g_terminate = 1;
+}
+
 int daemon_run(const bool foreground) {
   ensure_runtime();
 
@@ -846,6 +866,12 @@ int daemon_run(const bool foreground) {
 
   /* SIGUSR2: app sends this after a live binary swap as an acknowledgment */
   signal(SIGUSR2, sigusr2_handler);
+
+  /* 注册 SIGTERM 处理函数，不使用 SA_RESTART 以便打断 accept4 */
+  struct sigaction sa = {
+   .sa_handler = sigterm_handler,
+  };
+  sigaction(SIGTERM, &sa, nullptr);
 
   auto_close const int srv = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (srv < 0) {
@@ -886,6 +912,13 @@ int daemon_run(const bool foreground) {
     }
 
     auto_close const int conn = accept4(srv, nullptr, nullptr, SOCK_CLOEXEC);
+
+    /* 检查是否收到退出信号 */
+    if (g_terminate) {
+      log_info("Daemon stopped by user request. Exiting cleanly...");
+      break; /* 跳出循环，触发 RAII 清理 */
+    }
+
     if (conn < 0) {
       if (errno == EINTR || errno == EAGAIN)
         continue;

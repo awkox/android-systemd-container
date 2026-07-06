@@ -140,12 +140,12 @@ void print_privileged_warning(const int privileged_mask) {
 }
 
 void open_container_log(cfg_t *cfg) {
-  if (!cfg || !cfg->container_name[0])
+  if (!cfg || !cfg->conf.container_name[0])
     return;
 
   char log_dir[PATH_MAX];
   char safe_log_name[256];
-  sanitize_container_name(cfg->container_name, safe_log_name,
+  sanitize_container_name(cfg->conf.container_name, safe_log_name,
                           sizeof(safe_log_name));
   snprintf(log_dir, sizeof(log_dir), "%.2048s/" RUNTIME_LOGS_SUBDIR "/%.256s",
            get_runtime_dir(), safe_log_name);

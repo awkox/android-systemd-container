@@ -39,9 +39,9 @@ static int container_cpus(const cfg_t *cfg) {
   int host = (int)sysconf(_SC_NPROCESSORS_ONLN);
   if (host < 1)
     host = 1;
-  if (cfg->cpu_quota <= 0 || cfg->cpu_period <= 0)
+  if (cfg->conf.cpu_quota <= 0 || cfg->conf.cpu_period <= 0)
     return host;
-  int n = (int)((cfg->cpu_quota + cfg->cpu_period - 1) / cfg->cpu_period);
+  int n = (int)((cfg->conf.cpu_quota + cfg->conf.cpu_period - 1) / cfg->conf.cpu_period);
   if (n < 1)
     n = 1;
   if (n > host)
@@ -73,8 +73,8 @@ static long long read_cg_ll(const char *container_name, const char *file) {
 
 /* /proc/meminfo - virtualized when memory_limit > 0 */
 static char *gen_meminfo(const cfg_t *cfg, size_t *out_len) {
-  const long long mem_limit = cfg->memory_limit; /* bytes */
-  long long mem_used = read_cg_ll(cfg->container_name, "memory.current");
+  const long long mem_limit = cfg->conf.memory_limit; /* bytes */
+  long long mem_used = read_cg_ll(cfg->conf.container_name, "memory.current");
   if (mem_used < 0)
     mem_used = 0;
 
@@ -99,7 +99,7 @@ static char *gen_meminfo(const cfg_t *cfg, size_t *out_len) {
   long long cg_anon = -1, cg_file = -1, cg_slab = -1;
   {
     char safe_name[256];
-    sanitize_container_name(cfg->container_name, safe_name, sizeof(safe_name));
+    sanitize_container_name(cfg->conf.container_name, safe_name, sizeof(safe_name));
     char path[PATH_MAX], sbuf[4096];
     snprintf(path, sizeof(path),
              "/sys/fs/cgroup/" PROJECT_NAME "/%s/memory.stat", safe_name);
@@ -346,27 +346,27 @@ static double container_start_time_secs(const pid_t pid) {
 
 /* /proc/uptime - lxcfs-style: uptime = CLOCK_BOOTTIME - container_init_start.
  * idle = up*ncpus - cpu_busy (from cgv2 cpu.stat).
- * Falls back to cfg->start_time only if container_pid is not yet available. */
+ * Falls back to cfg->rt.start_time only if container_pid is not yet available. */
 static char *gen_uptime(const cfg_t *cfg, size_t *out_len) {
   struct timespec boot;
   clock_gettime(CLOCK_BOOTTIME, &boot);
   const double boottime = (double)boot.tv_sec + (double)boot.tv_nsec / 1e9;
 
   double up = -1.0;
-  if (cfg->container_pid > 0) {
-    const double proc_start = container_start_time_secs(cfg->container_pid);
+  if (cfg->rt.container_pid > 0) {
+    const double proc_start = container_start_time_secs(cfg->rt.container_pid);
     if (proc_start > 0.0)
       up = boottime - proc_start;
   }
   if (up < 0.0) {
-    up = boottime - ((double)cfg->start_time.tv_sec +
-                     (double)cfg->start_time.tv_nsec / 1e9);
+    up = boottime - ((double)cfg->rt.start_time.tv_sec +
+                     (double)cfg->rt.start_time.tv_nsec / 1e9);
   }
   if (up < 0.0)
     up = 0.0;
 
   const int ccpus = container_cpus(cfg);
-  const double busy = cg_cpu_busy_secs(cfg->container_name);
+  const double busy = cg_cpu_busy_secs(cfg->conf.container_name);
   double idle = busy >= 0.0 ? up * ccpus - busy : up * ccpus * 0.1;
   if (idle < 0.0)
     idle = 0.0;
@@ -480,8 +480,8 @@ static void virtualize_affinity(const cfg_t *cfg) {
 }
 
 int virtualize_init(const cfg_t *cfg) {
-  const bool has_mem = cfg->memory_limit > 0;
-  const bool has_cpu = cfg->cpu_quota > 0;
+  const bool has_mem = cfg->conf.memory_limit > 0;
+  const bool has_cpu = cfg->conf.cpu_quota > 0;
 
   /* Apply CPU affinity masking so syscall-based tools (nproc) are fooled */
   if (has_cpu)
@@ -574,17 +574,17 @@ int virtualize_init(const cfg_t *cfg) {
 }
 
 void virtualize_update(const cfg_t *cfg) {
-  if (cfg->container_pid <= 0)
+  if (cfg->rt.container_pid <= 0)
     return;
 
   /* PID-recycling guard: verify container identity before touching its fs */
-  if (cfg->ns_inode) {
-    const unsigned long live = get_pid_ns_inode(cfg->container_pid);
-    if (live != cfg->ns_inode) {
-      write_monitor_debug_log(cfg->container_name,
+  if (cfg->rt.ns_inode) {
+    const unsigned long live = get_pid_ns_inode(cfg->rt.container_pid);
+    if (live != cfg->rt.ns_inode) {
+      write_monitor_debug_log(cfg->conf.container_name,
                               "[VIRT] update skipped: ns_inode mismatch "
                               "(expected %lu, got %lu) pid=%d",
-                              cfg->ns_inode, live, (int)cfg->container_pid);
+                              cfg->rt.ns_inode, live, (int)cfg->rt.container_pid);
       return;
     }
   }
@@ -594,14 +594,14 @@ void virtualize_update(const cfg_t *cfg) {
    * redundant generation overhead. */
   char vproc_dir[PATH_MAX];
   snprintf(vproc_dir, sizeof(vproc_dir), PROC_ROOT_FMT VPROC_PATH,
-           (int)cfg->container_pid);
+           (int)cfg->rt.container_pid);
   struct stat st_dir;
   if (stat(vproc_dir, &st_dir) != 0 || !S_ISDIR(st_dir.st_mode)) {
     return;
   }
 
-  const bool has_mem = cfg->memory_limit > 0;
-  const bool has_cpu = cfg->cpu_quota > 0;
+  const bool has_mem = cfg->conf.memory_limit > 0;
+  const bool has_cpu = cfg->conf.cpu_quota > 0;
 
   /* Dynamic files only (cpuinfo is static after boot, skip it) */
   const struct {
@@ -621,7 +621,7 @@ void virtualize_update(const cfg_t *cfg) {
     size_t len = 0;
     auto_free char *buf = dyn[i].gen(cfg, &len);
     if (!buf) {
-      write_monitor_debug_log(cfg->container_name,
+      write_monitor_debug_log(cfg->conf.container_name,
                               "[VIRT] gen_%s returned NULL", dyn[i].name);
       continue;
     }
@@ -631,17 +631,17 @@ void virtualize_update(const cfg_t *cfg) {
 
     struct stat st;
     char path[PATH_MAX];
-    snprintf(path, sizeof(path), PROC_ROOT_FMT "/%s", (int)cfg->container_pid,
+    snprintf(path, sizeof(path), PROC_ROOT_FMT "/%s", (int)cfg->rt.container_pid,
              subpath);
     if (stat(path, &st) != 0) {
-      write_monitor_debug_log(cfg->container_name,
+      write_monitor_debug_log(cfg->conf.container_name,
                               "[VIRT] vfile missing: %s (%s)", path,
                               strerror(errno));
       continue;
     }
 
-    if (write_inplace(cfg->container_pid, subpath, buf, len) < 0)
-      write_monitor_debug_log(cfg->container_name,
+    if (write_inplace(cfg->rt.container_pid, subpath, buf, len) < 0)
+      write_monitor_debug_log(cfg->conf.container_name,
                               "[VIRT] write_inplace failed: %s (%s)", path,
                               strerror(errno));
   }
