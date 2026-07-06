@@ -822,7 +822,6 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
       printf("\n");
     }
 
-    printf("BIND_MOUNT_COUNT=%d\n", cfg->bind_count);
     show_container_usage(cfg);
   } else {
     /* Human-readable output */
@@ -920,13 +919,7 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
       feat_count++;
     }
 
-    /* 7. Bind Mounts */
-    if (cfg->bind_count > 0) {
-      printf("  Bind mounts: %d active\n", cfg->bind_count);
-      feat_count++;
-    }
-
-    /* 8. Custom Init */
+    /* 7. Custom Init */
     if (cfg->custom_init[0]) {
       printf("  Custom Init: %s\n", cfg->custom_init);
       feat_count++;

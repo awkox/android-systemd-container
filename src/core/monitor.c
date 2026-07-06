@@ -402,7 +402,6 @@ reboot_loop:;
 
     /* Reload from workspace (canonical path the user edits) */
     {
-      free_config_binds(cfg);
       bool old_force_cgv1 = cfg->force_cgroupv1;
 
       cfg_t reboot_cfg = *cfg;

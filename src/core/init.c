@@ -222,10 +222,7 @@ void internal_boot(cfg_t *cfg) {
     log_warn("Failed to bind mount console '%s': %s", cfg->console.name,
              strerror(errno));
 
-  /* 15. Custom bind mounts */
-  setup_custom_binds(cfg, ".");
-
-  /* 16. pivot_root with MS_MOVE+chroot fallback for ramfs/rootfs environments
+  /* 15. pivot_root with MS_MOVE+chroot fallback for ramfs/rootfs environments
    * (e.g. Android recovery) where pivot_root(2) always returns EINVAL because
    * the kernel refuses to pivot when new_root is on the same underlying fs as
    * the current root (ramfs has no backing device, self-bind doesn't help).
@@ -254,7 +251,7 @@ void internal_boot(cfg_t *cfg) {
     goto boot_fail;
   }
 
-  /* 16b. Apply deferred mount propagation settings.
+  /* 15b. Apply deferred mount propagation settings.
    * Switch to MS_SHARED only after relocation is complete. */
   if (cfg->privileged_mask & PRIV_SHARED) {
     if (mount(nullptr, "/", nullptr, MS_REC | MS_SHARED, nullptr) < 0) {
@@ -265,13 +262,13 @@ void internal_boot(cfg_t *cfg) {
     }
   }
 
-  /* 17. Setup devpts (must be after pivot_root for newinstance) */
+  /* 16. Setup devpts (must be after pivot_root for newinstance) */
   setup_devpts(cfg->hw_access);
 
   /* Apply jail mask after pivot_root for correct path resolution */
   apply_jail_mask(cfg->hw_access, cfg->privileged_mask);
 
-  /* 17b. Resource Visibility Virtualization
+  /* 16b. Resource Visibility Virtualization
    * Always runs: uptime/loadavg are fundamental container features.
    * CPU/RAM spoofing is selectively enabled only when cgroup limits are set. */
   if (is_mountpoint("/proc")) {
@@ -286,15 +283,13 @@ void internal_boot(cfg_t *cfg) {
     log_warn("Failed to reset hostname: %s", strerror(errno));
   }
 
-  /* Log bind mounts and boot (after hw-access logs for clean ordering) */
+  /* Log boot (after hw-access logs for clean ordering) */
   if (!cfg->reboot_cycle) {
-    if (cfg->bind_count > 0)
-      log_info("Setting up %d custom bind mount(s)...", cfg->bind_count);
     log_info("Booting '%s' (init: %s)...", cfg->container_name,
              cfg->custom_init[0] ? cfg->custom_init : DEFAULT_INIT);
   }
 
-  /* 18. Write identity markers for PID discovery (AFTER logs to ensure CLI
+  /* 17. Write identity markers for PID discovery (AFTER logs to ensure CLI
    * parent sees them before exiting background mode). */
   mkdir(FORK_MARKER, 0755);
   if (cfg->uuid[0] != '\0') {
@@ -322,7 +317,7 @@ void internal_boot(cfg_t *cfg) {
   printf("\r\n");
   fflush(stdout);
 
-  /* 19. Cleanup .old_root (skip when MS_MOVE fallback was used - there is no
+  /* 18. Cleanup .old_root (skip when MS_MOVE fallback was used - there is no
    * old root mountpoint to detach in that path). */
   if (!used_ms_move) {
     if (umount2("/.old_root", MNT_DETACH) < 0)
@@ -333,13 +328,13 @@ void internal_boot(cfg_t *cfg) {
     rmdir("/.old_root");
   }
 
-  /* 20. Clear environment and set container defaults */
+  /* 19. Clear environment and set container defaults */
   clearenv();
   setenv("container", PROJECT_NAME, 1);
   if (cfg->img_mount_point[0])
     setenv("RUNTIME_MOUNT_PATH", cfg->img_mount_point, 1);
 
-  /* 20b. Apply security hardening (capabilities)
+  /* 19b. Apply security hardening (capabilities)
    * Apply security hardening (capabilities and seccomp)
    * This is done at the very end to ensure all setup tasks that might need
    * privileges (like chown/chmod or mknod) are finished. */
@@ -350,7 +345,7 @@ void internal_boot(cfg_t *cfg) {
 
   apply_capability_hardening(cfg->hw_access, cfg->privileged_mask);
 
-  /* 21. Redirect standard I/O to /dev/console */
+  /* 20. Redirect standard I/O to /dev/console */
   const int console_fd = open("/dev/console", O_RDWR);
   if (console_fd >= 0) {
     if (terminal_set_stdfds(console_fd) < 0) {
@@ -385,7 +380,7 @@ void internal_boot(cfg_t *cfg) {
     }
   }
 
-  /* 22. EXEC INIT */
+  /* 21. EXEC INIT */
   char *init_bin =
       cfg->custom_init[0] ? cfg->custom_init : (char *)DEFAULT_INIT;
   char *init_args[16];

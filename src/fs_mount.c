@@ -285,62 +285,6 @@ done:
   return r;
 }
 
-void setup_custom_binds(cfg_t *cfg, const char *rootfs) {
-  if (cfg->bind_count == 0 || !cfg->binds)
-    return;
-
-  /* Ensure mounts are processed in alphabetical order of destination
-   * so parent directories are always mounted before children. */
-  sort_bind_mounts(cfg);
-
-  for (int i = 0; i < cfg->bind_count; i++) {
-    char tgt[PATH_MAX * 2];
-    const int n = snprintf(tgt, sizeof(tgt), "%s%s", rootfs, cfg->binds[i].dest);
-    if (n < 0 || (size_t)n >= sizeof(tgt)) {
-      log_warn("Bind mount target path too long, skipping: %s",
-               cfg->binds[i].dest);
-      continue;
-    }
-
-    /* Ensure parent directory exists.
-     * Reject paths containing symlinks: an untrusted rootfs could contain
-     * symlinks (e.g. mnt/hack -> /root) that redirect mkdir to host paths. */
-    char parent[PATH_MAX];
-    safe_strncpy(parent, tgt, sizeof(parent));
-    char *slash = strrchr(parent, '/');
-    if (slash) {
-      *slash = '\0';
-      if (path_has_symlink(parent)) {
-        log_error("Security Violation: symlink in bind target path %s", parent);
-        continue;
-      }
-      mkdir_p(parent, 0755);
-    }
-
-    /* Perform bind mount (handles source/target symlink checks securely) */
-    if (bind_mount(cfg->binds[i].src, tgt) < 0) {
-      log_warn("Failed to bind mount %s on %s (skipping)", cfg->binds[i].src,
-               tgt);
-      continue;
-    }
-
-    /* Verify isolation: Ensure we didn't accidentally mount over a host path
-     * if the container rootfs had a complex malicious structure. */
-    if (!is_subpath(rootfs, tgt)) {
-      log_error("Security Violation: Bind destination %s escapes rootfs %s!",
-                tgt, rootfs);
-      umount2(tgt, MNT_DETACH);
-      continue;
-    }
-
-    /* Remount RO if requested (bind always lands RW first) */
-    if (cfg->binds[i].ro) {
-      if (mount(nullptr, tgt, nullptr, MS_REMOUNT | MS_BIND | MS_RDONLY, nullptr) < 0)
-        log_warn("Failed to remount %s read-only: %s", tgt, strerror(errno));
-    }
-  }
-}
-
 /* ---------------------------------------------------------------------------
  * Rootfs Image Handling - Pure C loop device management (no host tools)
  * ---------------------------------------------------------------------------*/

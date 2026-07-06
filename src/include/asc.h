@@ -111,13 +111,6 @@ struct nl_ctx {
 /* Opaque RTNETLINK context - defined in netlink.c */
 typedef struct nl_ctx nl_ctx_t;
 
-/* Bind mount entry */
-struct bind_mount {
-  char src[PATH_MAX];
-  char dest[PATH_MAX];
-  bool ro; /* 1 = remount read-only after bind */
-};
-
 struct config_line {
   char line[2048];
   struct config_line *next;
@@ -164,11 +157,6 @@ struct config {
   pid_t intermediate_pid;         /* intermediate fork pid */
   char img_mount_point[PATH_MAX]; /* where the .img was mounted */
   char custom_init[PATH_MAX]; /* --init=PATH override (default: /sbin/init) */
-
-  /* Custom bind mounts (dynamically allocated) */
-  struct bind_mount *binds;
-  int bind_count;
-  int bind_capacity;
 
   /* Configuration persistence */
   char config_file[PATH_MAX];
@@ -231,14 +219,12 @@ void cleanup_container_resources(cfg_t *cfg,
                                  bool skip_unmount, bool force_cleanup);
 void open_container_log(cfg_t *cfg);
 void close_container_log(void);
-void sort_bind_mounts(cfg_t *cfg);
 void sanitize_container_name(const char *name, char *out, size_t size);
 int validate_container_name(const char *name);
 int reject_container_name(const char *name);
 int parse_and_validate_names(const char *arg, char *out_buf,
                              size_t out_size);
 int multi_stop(const char *raw_names);
-int validate_bind_destination(const char *dest);
 int count_folders(const char *path);
 
 /* Daemon lifecycle helpers */
@@ -249,7 +235,6 @@ int config_load(const char *config_path, cfg_t *cfg);
 int config_load_by_name(const char *name, cfg_t *cfg);
 int config_save(const char *config_path, cfg_t *cfg);
 int config_save_by_name(const char *name, cfg_t *cfg);
-void free_config_binds(cfg_t *cfg);
 void config_free(cfg_t *cfg);
 char *config_auto_path(const char *rootfs_path);
 
@@ -269,7 +254,6 @@ int setup_volatile_overlay(cfg_t *cfg);
 int cleanup_volatile_overlay(cfg_t *cfg);
 int check_volatile_mode(cfg_t *cfg);
 
-void setup_custom_binds(cfg_t *cfg, const char *rootfs);
 int mount_rootfs_img(const char *img_path, char *mount_point, size_t mp_size,
                      const char *name);
 

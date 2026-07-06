@@ -674,21 +674,6 @@ int show_container_usage(cfg_t *cfg) {
 /* ---------------------------------------------------------------------------
  * Bind Mount Sorting
  * ---------------------------------------------------------------------------*/
-
-static int compare_bind_mounts(const void *a, const void *b) {
-  const struct bind_mount *ma = a;
-  const struct bind_mount *mb = b;
-  return strcmp(ma->dest, mb->dest);
-}
-
-void sort_bind_mounts(cfg_t *cfg) {
-  if (!cfg || cfg->bind_count <= 1 || !cfg->binds)
-    return;
-
-  qsort(cfg->binds, cfg->bind_count, sizeof(struct bind_mount),
-        compare_bind_mounts);
-}
-
 int validate_container_name(const char *name) {
   if (!name || !name[0])
     return 0;
@@ -717,35 +702,6 @@ int reject_container_name(const char *name) {
     return -1;
   }
   return 0;
-}
-
-int validate_bind_destination(const char *dest) {
-  if (!dest || dest[0] != '/' || dest[1] == '\0')
-    return 0;
-
-  if (strlen(dest) >= PATH_MAX)
-    return 0;
-
-  const char *p = dest;
-  while (*p) {
-    while (*p == '/')
-      p++;
-    const char *start = p;
-    while (*p && *p != '/')
-      p++;
-    const size_t len = (size_t)(p - start);
-    if (len == 0)
-      continue;
-    if ((len == 1 && start[0] == '.') ||
-        (len == 2 && start[0] == '.' && start[1] == '.'))
-      return 0;
-    for (size_t i = 0; i < len; i++) {
-      if (iscntrl((unsigned char)start[i]))
-        return 0;
-    }
-  }
-
-  return 1;
 }
 
 /*

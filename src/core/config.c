@@ -2,8 +2,6 @@
 
 /* Forward declarations */
 static void add_unknown_line(cfg_t *cfg, const char *line);
-static int config_add_bind(cfg_t *cfg, const char *src, const char *dest,
-                           const bool ro);
 static void free_config_unknown_lines(cfg_t *cfg);
 
 static char *trim_whitespace(char *str) {
@@ -77,120 +75,6 @@ static void parse_privileged(const char *value, cfg_t *cfg) {
 
     token = strtok_r(nullptr, ",", &saveptr);
   }
-}
-
-static void parse_bind_mounts(const char *value, cfg_t *cfg) {
-  if (!value)
-    return;
-
-  char copy[4096];
-  safe_strncpy(copy, value, sizeof(copy));
-
-  char *saveptr;
-  char *token = strtok_r(copy, ",", &saveptr);
-
-  while (token) {
-    char *sep = strchr(token, ':');
-    if (sep) {
-      *sep = '\0';
-      char *rest = sep + 1;
-
-      /* Check for optional :ro suffix after dest */
-      bool ro = false;
-      char *flag_sep = strchr(rest, ':');
-      if (flag_sep) {
-        *flag_sep = '\0';
-        ro = strcmp(trim_whitespace(flag_sep + 1), "ro") == 0;
-      }
-
-      const char *src_raw = trim_whitespace(token);
-      const char *dest_raw = trim_whitespace(rest);
-      auto_free char *src_exp = resolve_path_arg(src_raw);
-      auto_free char *dest_exp = resolve_path_arg(dest_raw);
-      const char *src = src_exp ? src_exp : src_raw;
-      const char *dest = dest_exp ? dest_exp : dest_raw;
-
-      /* Validate before storing - caller's responsibility, same as CLI path */
-      if (!validate_bind_destination(dest)) {
-        log_warn("Skipping unsafe bind destination '%s' from config.", dest);
-      } else {
-        config_add_bind(cfg, src, dest, ro);
-      }
-    }
-    token = strtok_r(nullptr, ",", &saveptr);
-  }
-}
-
-static int config_add_bind(cfg_t *cfg, const char *src, const char *dest,
-                    const bool ro) {
-  if (!src || !dest || src[0] == '\0' || dest[0] == '\0')
-    return 0;
-  /* Defensive: callers must pre-validate; this is a last-resort assert */
-  if (!validate_bind_destination(dest))
-    return -1;
-
-  /* Check for duplication */
-  for (int i = 0; i < cfg->bind_count; i++) {
-    if (strcmp(cfg->binds[i].src, src) == 0 &&
-        strcmp(cfg->binds[i].dest, dest) == 0) {
-      return 0; /* Already exists, skip */
-    }
-  }
-
-  /* Grow the array if needed */
-  if (cfg->bind_count >= cfg->bind_capacity) {
-    const int old_cap = cfg->bind_capacity;
-    int new_cap;
-
-    if (old_cap == 0) {
-      new_cap = BIND_INITIAL_CAP;
-    } else {
-      /* Check for integer overflow */
-      if (old_cap > INT_MAX / 2)
-        return -1;
-      new_cap = old_cap * 2;
-    }
-
-    /* Check allocation size won't overflow */
-    const size_t alloc_size = (size_t)new_cap * sizeof(*cfg->binds);
-    if (alloc_size / sizeof(*cfg->binds) != (size_t)new_cap)
-      return -1;
-
-    struct bind_mount *new_binds = realloc(cfg->binds, alloc_size);
-    if (!new_binds)
-      return -1;
-
-    /* Zero the newly allocated portion */
-    memset(new_binds + old_cap, 0,
-           (size_t)(new_cap - old_cap) * sizeof(*new_binds));
-
-    cfg->binds = new_binds;
-    cfg->bind_capacity = new_cap;
-  }
-
-  safe_strncpy(cfg->binds[cfg->bind_count].src, src,
-               sizeof(cfg->binds[cfg->bind_count].src));
-  safe_strncpy(cfg->binds[cfg->bind_count].dest, dest,
-               sizeof(cfg->binds[cfg->bind_count].dest));
-  cfg->binds[cfg->bind_count].ro = ro;
-  cfg->bind_count++;
-  return 1;
-}
-
-/*
- * IMPORTANT: free_config_binds 绝不能释放未知配置行。
- * 配置重载逻辑（如 monitor.c 中的重启流程）依赖于保留这些指针。
- * 如果我们在这里释放未知配置行，重载时的恢复指针将会悬空 → 导致 SIGSEGV。
- *
- * 未知配置行将通过 free_config_unknown_lines() 单独释放。
- */
-void free_config_binds(cfg_t *cfg) {
-  if (!cfg->binds)
-    return;
-  free(cfg->binds);
-  cfg->binds = nullptr;
-  cfg->bind_count = 0;
-  cfg->bind_capacity = 0;
 }
 
 int config_load(const char *config_path, cfg_t *cfg) {
@@ -279,8 +163,6 @@ int config_load(const char *config_path, cfg_t *cfg) {
         log_warn("config: ignoring custom_init path with spaces '%s'", val);
       else
         safe_strncpy(cfg->custom_init, val, sizeof(cfg->custom_init));
-    } else if (strcmp(key, "bind_mounts") == 0) {
-      parse_bind_mounts(val, cfg);
     } else if (strcmp(key, "uuid") == 0) {
       safe_strncpy(cfg->uuid, val, sizeof(cfg->uuid));
     } else if (strcmp(key, "isolation_network") == 0) {
@@ -322,7 +204,6 @@ static void free_config_unknown_lines(cfg_t *cfg) {
 }
 
 void config_free(cfg_t *cfg) {
-  free_config_binds(cfg);
   free_config_unknown_lines(cfg);
 }
 
@@ -395,33 +276,15 @@ static void config_serialize_known(FILE *f, cfg_t *cfg) {
     auto_free char *abs_path = resolve_path_arg(cfg->custom_init);
     fprintf(f, "custom_init=%s\n", abs_path ? abs_path : cfg->custom_init);
   }
-
-  if (cfg->bind_count > 0) {
-    fprintf(f, "bind_mounts=");
-    for (int i = 0; i < cfg->bind_count; i++) {
-      auto_free char *abs_src = resolve_path_arg(cfg->binds[i].src);
-      auto_free char *abs_dest = resolve_path_arg(cfg->binds[i].dest);
-      fprintf(f, "%s:%s%s%s", abs_src ? abs_src : cfg->binds[i].src,
-              abs_dest ? abs_dest : cfg->binds[i].dest,
-              cfg->binds[i].ro ? ":ro" : "",
-              i < cfg->bind_count - 1 ? "," : "");
-    }
-    fprintf(f, "\n");
-  }
 }
 
 int config_save(const char *config_path, cfg_t *cfg) {
-  /* Sort bind mounts before saving so they are persisted in a sane order. */
-  sort_bind_mounts(cfg);
-
   /* Compare new config with existing disk configuration to avoid redundant
    * writes */
   struct stat st;
   if (stat(config_path, &st) == 0) {
     cfg_t disk_cfg = {};
     if (config_load(config_path, &disk_cfg) == 0) {
-      sort_bind_mounts(&disk_cfg);
-
       auto_free char *buf_cfg = nullptr;
       auto_free char *buf_disk = nullptr;
       size_t size_cfg = 0;
@@ -437,7 +300,6 @@ int config_save(const char *config_path, cfg_t *cfg) {
           is_equal = true;
         }
       }
-      free_config_binds(&disk_cfg);
       free_config_unknown_lines(&disk_cfg);
 
       if (is_equal) {
