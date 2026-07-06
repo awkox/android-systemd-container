@@ -154,35 +154,3 @@ pid_t find_container_init_pid(const char *uuid) {
 
   return 0;
 }
-
-int count_running_containers(char *first_name, const size_t size) {
-  auto_free pid_t *pids = nullptr;
-  size_t pcount = 0;
-  char path[PATH_MAX];
-  int running = 0;
-
-  if (collect_pids(&pids, &pcount) < 0)
-    return 0;
-
-  for (size_t i = 0; i < pcount; i++) {
-    if (build_proc_root_path(pids[i], FORK_MARKER, path, sizeof(path)) < 0)
-      continue;
-    if (access(path, F_OK) != 0)
-      continue;
-
-    if (!is_valid_container_pid(pids[i]))
-      continue;
-
-    char cname[256] = {0};
-    if (build_proc_root_path(pids[i], FORK_MARKER "/name", path,
-                             sizeof(path)) >= 0 &&
-        read_file(path, cname, sizeof(cname)) > 0) {
-      cname[strcspn(cname, "\n")] = '\0';
-      if (running == 0 && first_name && size > 0)
-        safe_strncpy(first_name, cname, size);
-      running++;
-    }
-  }
-
-  return running;
-}

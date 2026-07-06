@@ -92,9 +92,6 @@ constexpr int MAX_TRACKED_ENTRIES = 512;
 #define FORK_MARKER "/run/asc"
 #define VPROC_PATH "/run/asc/vproc"
 
-/* File Extensions */
-#define EXT_LOCK ".lock"
-
 constexpr int PRIV_NOMASK = 1 << 0; /* No jail masks (/proc, /sys) */
 constexpr int PRIV_NOCAPS = 1 << 1; /* No capability drops */
 constexpr int PRIV_NOSEC  = 1 << 2; /* Minimal seccomp only */
@@ -130,7 +127,6 @@ typedef struct {
   /* Paths */
   char rootfs_img_path[PATH_MAX]; /* --rootfs-img= */
   char container_name[256];       /* --name= (mandatory) */
-  bool isolation_network;          /* --isolation_network */
 
   /* UUID for PID discovery */
   char uuid[UUID_LEN + 1];
@@ -142,18 +138,17 @@ typedef struct {
   bool volatile_mode;   /* --volatile */
   bool reboot_cycle;    /* 1 if we are in a reboot loop */
   bool force_cgroupv1;  /* --force-cgroupv1: use v1 even if v2 is available */
+  bool isolation_network; /* --isolation_network */
+  bool format_output;   /* --format: machine-parseable output (KEY=VALUE) */
   bool block_nested_ns; /* --block-nested-namespaces: fix VFS deadlock by
                             blocking nested namespace creation */
   int privileged_mask;  /* --privileged bitmask */
-  bool format_output;   /* --format: machine-parseable output (KEY=VALUE) */
-  char prog_name[64];   /* argv[0] for logging */
 
   /* Runtime state */
   char volatile_dir[PATH_MAX];    /* temporary overlay dir */
   pid_t container_pid;            /* PID 1 of the container (host view) */
-  pid_t intermediate_pid;         /* intermediate fork pid */
   char img_mount_point[PATH_MAX]; /* where the .img was mounted */
-  char custom_init[PATH_MAX]; /* --init=PATH override (default: /sbin/init) */
+  char custom_init[PATH_MAX];     /* --init=PATH override */
 
   /* Configuration persistence */
   char config_file[PATH_MAX];
@@ -169,9 +164,9 @@ typedef struct {
 
   /* Resource limits (0 = unlimited) */
   long long memory_limit; /* bytes */
+  long long pids_limit;
   long long cpu_quota;    /* us per period */
   long long cpu_period;   /* us (default 100000) */
-  long long pids_limit;
 
   /* Resource virtualization (auto-enabled when limits are set) */
   struct timespec start_time; /* container start time (CLOCK_MONOTONIC) */
@@ -245,12 +240,10 @@ int run_command_quiet(char *const argv[]);
 int get_kernel_version(int *major,int *minor);
 long get_container_uptime(const pid_t pid);
 void format_uptime(const long uptime_sec,char *buf,const size_t size);
-int show_container_usage(cfg_t *cfg);
 int validate_container_name(const char *name);
 int reject_container_name(const char *name);
 int count_folders(const char *path);
 int parse_and_validate_names(const char *arg,char *out_buf,const size_t out_size);
-int multi_stop(const char *raw_names);
 void oom_protect(void);
 bool is_mountpoint(const char *path);
 int domount(const char *src,const char *tgt,const char *fstype,const unsigned long flags,const char *data);
@@ -287,6 +280,5 @@ int collect_pids(pid_t **pids_out,size_t *count_out);
 int build_proc_root_path(const pid_t pid,const char *suffix,char *buf,const size_t size);
 bool is_container_init(const pid_t pid);
 pid_t find_container_init_pid(const char *uuid);
-int count_running_containers(char *first_name,const size_t size);
 
 #endif /* ASC_H */

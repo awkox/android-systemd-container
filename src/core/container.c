@@ -10,7 +10,7 @@
 
 /* 保存当前进程持有的锁 FD 和路径，解决进程内多次申请锁的重入问题 */
 static int active_lock_fd = -1;
-static char active_lock_path[PATH_MAX] = {0};
+static char active_lock_path[PATH_MAX] = "";
 
 /* 构建锁路径并进行防御性截断。精度：
  * 2048 (lock_dir) + 256 (name) + 5 (.lock) = 2309 < PATH_MAX (4096)
@@ -22,7 +22,7 @@ static int get_lock_path(const char *name, char *buf, const size_t size) {
   char safe_name[256];
   sanitize_container_name(name, safe_name, sizeof(safe_name));
   const int r =
-      snprintf(buf, size, "%.2048s/%.256s" EXT_LOCK, get_lock_dir(), safe_name);
+      snprintf(buf, size, "%.2048s/%.256s.lock", get_lock_dir(), safe_name);
   return r > 0 && (size_t)r < size ? 0 : -1;
 }
 
@@ -704,29 +704,8 @@ static void get_os_pretty(const char *osrelease_path, char *buf, const size_t si
 int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
   /* Case 1: No container name specified - try auto-resolution or listing */
   if (cfg->container_name[0] == '\0') {
-    char first_name[256];
-    const int count = count_running_containers(first_name, sizeof(first_name));
-
-    if (count == 0) {
-      const char *arch = get_architecture();
-      printf("Host: %s\n", arch);
-      printf("\nContainer: No containers running.\n\n");
-      return 0;
-    }
-
-    if (count == 1) {
-      /* Auto-resolve to the only running container */
-      safe_strncpy(cfg->container_name, first_name,
-                   sizeof(cfg->container_name));
-    } else {
-      /* Multiple containers running, show Host info and list */
-      const char *arch = get_architecture();
-      printf("Host: %s\n", arch);
-      printf("\nMultiple containers running:\n");
-      show_containers(cfg);
-      printf("\nUse '--name <NAME> info' for detailed information.\n\n");
-      return 0;
-    }
+    log_error("Container name is missing.");
+    return 0;
   }
 
   /* Now we have a container name. Ensure its config is loaded from the source
@@ -761,7 +740,7 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
 
     char pretty[256];
     char osr_path[PATH_MAX];
-    if (build_proc_root_path(pid, "/etc/os-release", osr_path,
+    if (build_proc_root_path(pid, OS_RELEASE, osr_path,
                              sizeof(osr_path)) == 0) {
       get_os_pretty(osr_path, pretty, sizeof(pretty));
       if (pretty[0])
@@ -774,7 +753,6 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
         char uptime_str[128];
         format_uptime(uptime_sec, uptime_str, sizeof(uptime_str));
         printf("CONTAINER_UPTIME=%s\n", uptime_str);
-        printf("CONTAINER_UPTIME_SEC=%ld\n", uptime_sec);
       }
     }
 
@@ -790,7 +768,6 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
     printf("VOLATILE_MODE=%d\n", cfg->volatile_mode);
     printf("FORCE_CGROUP_V1=%d\n", cfg->force_cgroupv1);
     printf("DEADLOCK_SHIELD=%d\n", cfg->block_nested_ns);
-    printf("FOREGROUND_MODE=%d\n", cfg->foreground);
 
     if (cfg->privileged_mask > 0) {
       printf("PRIVILEGED_MODE=");
@@ -821,8 +798,6 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
       }
       printf("\n");
     }
-
-    show_container_usage(cfg);
   } else {
     /* Human-readable output */
     const char *arch = get_architecture();
@@ -916,12 +891,6 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
         }
       }
       printf("\n");
-      feat_count++;
-    }
-
-    /* 7. Custom Init */
-    if (cfg->custom_init[0]) {
-      printf("  Custom Init: %s\n", cfg->custom_init);
       feat_count++;
     }
 

@@ -1,9 +1,5 @@
 #include "asc.h"
 
-/* ---------------------------------------------------------------------------
- * Usage / Help
- * ---------------------------------------------------------------------------*/
-
 static void print_usage(void) {
   printf(
       "Usage: " PROJECT_NAME " [options] <command> [args]\n\n"
@@ -11,7 +7,6 @@ static void print_usage(void) {
       "  start                     Start a new container\n"
       "  stop                      Stop one or more containers\n"
       "  restart                   Restart a container\n"
-      "  usage                     Show container uptime, CPU and RAM usage\n"
       "  info                      Show detailed container info\n"
       "  pid                       Show the live PID of the container init\n"
       "  show                      List all running containers\n"
@@ -31,104 +26,49 @@ static void print_usage(void) {
       "      --help                Show this help message\n\n");
 }
 
-/* ---------------------------------------------------------------------------
- * Validation Helpers
- * ---------------------------------------------------------------------------*/
-
-static int validate_kernel_version(void) {
-  int major = 0, minor = 0;
-  if (get_kernel_version(&major, &minor) < 0) {
-    log_error("Failed to detect kernel version.");
-    return -1;
-  }
-
-  if (major < MIN_KERNEL_MAJOR ||
-      (major == MIN_KERNEL_MAJOR && minor < MIN_KERNEL_MINOR)) {
-    printf("\n[ FATAL: UNSUPPORTED KERNEL ]\n\n");
-    log_error(PROJECT_NAME " requires at least Linux %d.%d.0.",
-              MIN_KERNEL_MAJOR, MIN_KERNEL_MINOR);
-    log_info("Detected kernel: %d.%d", major, minor);
-    return -1;
-  }
-
-  return 0;
-}
-
 /**
  * CLI-level configuration validation with professional error reporting.
  * Deters configuration errors early before entering the runtime.
  */
 static int validate_configuration_cli(cfg_t *cfg) {
-  int errors = 0;
+  bool error = false;
 
   if (!cfg->container_name[0]) {
     log_error("Container name is mandatory (--name).");
-    errors++;
+    error = true;
   } else if (reject_container_name(cfg->container_name) < 0) {
-    errors++;
+    error = true;
   }
 
   if (!cfg->rootfs_img_path[0]) {
     log_error("No rootfs image specified in configuration.");
-    errors++;
+    error = true;
   }
 
   /* Existence checks */
   if (cfg->rootfs_img_path[0] && access(cfg->rootfs_img_path, F_OK) != 0) {
     log_error("Rootfs image not found: '%s' (%s)", cfg->rootfs_img_path,
               strerror(errno));
-    errors++;
+    error = true;
   }
 
   /* Image mode requires a name for the mount point */
   if (cfg->rootfs_img_path[0] && !cfg->container_name[0]) {
     log_error("Rootfs image requires a container name (--name).");
-    errors++;
+    error = true;
   }
 
   if (cfg->custom_init[0]) {
     if (cfg->custom_init[0] != '/') {
       log_error("Custom init path must be absolute: %s", cfg->custom_init);
-      errors++;
+      error = true;
     } else if (strchr(cfg->custom_init, ' ')) {
       log_error("Custom init path cannot contain spaces: %s", cfg->custom_init);
-      errors++;
+      error = true;
     }
   }
 
-  return errors > 0 ? -1 : 0;
-}
-
-static int auto_resolve_container_name(cfg_t *cfg) {
-  if (cfg->container_name[0] != '\0')
-    return 0;
-
-  char first_name[256];
-  int count = count_running_containers(first_name, sizeof(first_name));
-
-  /* If 0 containers found, try a scan once if we aren't already silent
-   * (prevents infinite scan loops) */
-  if (count == 0 && !log_silent) {
-    log_silent = true;
-    scan_containers();
-    log_silent = false;
-    count = count_running_containers(first_name, sizeof(first_name));
-  }
-
-  /* If still not found after scan, fail */
-  if (count == 0) {
-    log_error("No containers are currently running.");
-    return -1;
-  }
-
-  if (count > 1) {
-    log_error("Multiple containers running. Please specify --name.");
-    show_containers(cfg);
-    return -1;
-  }
-
-  safe_strncpy(cfg->container_name, first_name, sizeof(cfg->container_name));
-  return 0;
+  return error ? -1 : 0;
 }
 
 int main(const int argc, char **argv) {
@@ -136,8 +76,6 @@ int main(const int argc, char **argv) {
   /* CRITICAL: Zero all fields to avoid garbage pointer in dynamic arrays */
   cfg_t cfg = {};
   char raw_names[4096] = "";
-
-  safe_strncpy(cfg.prog_name, argv[0], sizeof(cfg.prog_name));
 
   static const struct option long_options[] = {
     {"name", required_argument, nullptr, 'n'},
@@ -165,13 +103,12 @@ int main(const int argc, char **argv) {
    * 3. Override Pass: Apply CLI overrides on top of loaded config.
    */
   const char *discovered_cmd = nullptr;
-  constexpr char temp_i[PATH_MAX] = {0};
+  constexpr char temp_i[PATH_MAX] = "";
   int opt;
 
   /* 1. Discovery Pass: Capture identity and command without permuting argv.
    * Using '-' at the start of optstring returns non-options as '1'. */
-  while ((opt = getopt_long(argc, argv, "-n:fC:", long_options,
-                            nullptr)) != -1) {
+  while ((opt = getopt_long(argc, argv, "-n:fC:", long_options, nullptr)) != -1) {
     if (opt == 1) { /* Non-option argument */
       if (!discovered_cmd) {
         discovered_cmd = optarg;
@@ -233,8 +170,7 @@ int main(const int argc, char **argv) {
       discovered_cmd && (strcmp(discovered_cmd, "stop") == 0 ||
                          strcmp(discovered_cmd, "restart") == 0 ||
                          strcmp(discovered_cmd, "pid") == 0 ||
-                         strcmp(discovered_cmd, "info") == 0 ||
-                         strcmp(discovered_cmd, "usage") == 0);
+                         strcmp(discovered_cmd, "info") == 0);
 
   bool loaded = false;
   if (cfg.config_file_specified) {
@@ -261,10 +197,10 @@ int main(const int argc, char **argv) {
   /* For stateful commands, we absolutely need a container name.
    * If we don't have one by now, try to guess the active container. */
   if (is_stateful && cfg.container_name[0] == '\0') {
-    if (auto_resolve_container_name(&cfg) < 0) {
-      ret = 1;
-      goto cleanup;
-    }
+    log_error("Container name is required for this command.");
+    log_info("Please specify the container using '-n' or '--name'.");
+    ret = 1;
+    goto cleanup;
   }
 
   /* If we have a name but haven't successfully loaded a config file yet, load
@@ -326,7 +262,7 @@ int main(const int argc, char **argv) {
 
   if (optind >= argc) {
     log_error("Missing command");
-    log_info("Run '%s help' for usage information.", cfg.prog_name);
+    log_info("Run '%s help' for usage information.", argv[0]);
     ret = 1;
     goto cleanup;
   }
@@ -380,10 +316,6 @@ int main(const int argc, char **argv) {
       ret = 1;
       goto cleanup;
     }
-    if (validate_kernel_version() < 0) {
-      ret = 1;
-      goto cleanup;
-    }
     if (check_requirements_hw(cfg.hw_access) < 0) {
       ret = 1;
       goto cleanup;
@@ -401,7 +333,7 @@ int main(const int argc, char **argv) {
   }
 
   if (strcmp(cmd, "stop") == 0) {
-    ret = strchr(raw_names, ',') ? multi_stop(raw_names) : stop_rootfs(&cfg, false);
+    ret = stop_rootfs(&cfg, false);
     goto cleanup;
   }
 
@@ -441,18 +373,13 @@ int main(const int argc, char **argv) {
     goto cleanup;
   }
 
-  if (strcmp(cmd, "usage") == 0) {
-    ret = show_container_usage(&cfg);
-    goto cleanup;
-  }
-
   if (strcmp(cmd, "daemon") == 0) {
     ret = daemon_run(cfg.foreground);
     goto cleanup;
   }
 
   log_error("Unknown command: '%s'", cmd);
-  log_info("Run '%s help' for usage information.", cfg.prog_name);
+  log_info("Run '%s help' for usage information.", argv[0]);
   ret = 1;
 
 cleanup:
