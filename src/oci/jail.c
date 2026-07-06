@@ -1,10 +1,57 @@
 #include "asc.h"
 
+/* Universal masks - dangerous for ANY container regardless of HW mode */
+static const char *universal_masks[] = {
+  "/proc/sysrq-trigger",
+  "/proc/kcore",
+  "/proc/timer_list",
+  nullptr
+};
+
+/* Universal nullify - paths where read access itself must be blocked
+ * (bind-mount /dev/null over them). */
+static const char *universal_nullify[] = {
+  "/proc/partitions",
+  nullptr
+};
+
+/* Kernel log paths blocked with FIFO instead of /dev/null:
+ * rsyslogd imklog spins at 100% CPU when /dev/null returns immediate
+ * EOF.  A FIFO with a persistent writer blocks read() indefinitely,
+ * preventing both CPU spin and host kernel log leakage. */
+static const char *kmsg_block_paths[] = {
+  "/dev/kmsg",
+  "/proc/kmsg",
+  nullptr
+};
+
+/* Standard mode read-only remounts - preserves paths, blocks writes.
+ * Covers both sensitive proc subtrees and dangerous sys interfaces. */
+static const char *standard_ro[] = {
+  "/proc/irq",
+  "/sys/firmware",
+  "/sys/kernel/security",
+  "/sys/kernel/debug",
+  "/sys/kernel/tracing",
+  "/sys/block",
+  nullptr
+};
+
+/* /proc/sys/net intentionally excluded: in host mode it's a
+ * destructive host network modification channel.  In isolated
+ * (none) mode there is no network, so writable net sysctls
+ * are unnecessary. */
+static const char *rw_holes[] = {
+  "/proc/sys/kernel/hostname",
+  "/proc/sys/kernel/domainname",
+  nullptr
+};
+
 /* Mask a sensitive path by self-binding and remounting read-only.
  * Silently skips if the path doesn't exist.  The resulting mount entry
  * preserves the parent filesystem type (e.g. "proc on /proc/kcore type
  * proc (ro)") - matching LXC's clean approach. */
-void mask_path(const char *path) {
+static void mask_path(const char *path) {
   if (access(path, F_OK) != 0)
     return;
   mount(path, path, nullptr, MS_BIND, nullptr);
@@ -46,9 +93,9 @@ static void block_read_path(const char *path) {
   /* Fork a child to hold the FIFO write end open; otherwise readers get
    * immediate EOF (or ENXIO with O_NONBLOCK).  The child does nothing — it
    * just exists to keep the write end alive. */
-  pid_t child = fork();
+  const pid_t child = fork();
   if (child == 0) {
-    int wfd = open(fifo_path, O_WRONLY);
+    const int wfd = open(fifo_path, O_WRONLY);
     if (wfd >= 0)
       pause();
     _exit(0);
@@ -73,36 +120,12 @@ static void block_read_path(const char *path) {
  * In Hardware Mode (hw_access=1), we preserve most paths to fulfill the
  * "everything possible" requirement for low-level hardware tools.
  */
-int apply_jail_mask(bool hw_access, int privileged_mask) {
+void apply_jail_mask(const bool hw_access, const int privileged_mask) {
   if (privileged_mask & PRIV_NOMASK) {
     log_info(
         "[SEC] --privileged=nomask: skipping jail masks for /proc and /sys.");
-    return 0;
+    return;
   }
-
-  /* Universal masks - dangerous for ANY container regardless of HW mode */
-  const char *universal_masks[] = {"/proc/sysrq-trigger", "/proc/kcore",
-                                   "/proc/timer_list", nullptr};
-
-  /* Universal nullify - paths where read access itself must be blocked
-   * (bind-mount /dev/null over them). */
-  const char *universal_nullify[] = {"/proc/partitions", nullptr};
-
-  /* Kernel log paths blocked with FIFO instead of /dev/null:
-   * rsyslogd imklog spins at 100% CPU when /dev/null returns immediate
-   * EOF.  A FIFO with a persistent writer blocks read() indefinitely,
-   * preventing both CPU spin and host kernel log leakage. */
-  const char *kmsg_block_paths[] = {"/dev/kmsg", "/proc/kmsg", nullptr};
-
-  /* Standard mode read-only remounts - preserves paths, blocks writes.
-   * Covers both sensitive proc subtrees and dangerous sys interfaces. */
-  const char *standard_ro[] = {"/proc/irq",
-                               "/sys/firmware",
-                               "/sys/kernel/security",
-                               "/sys/kernel/debug",
-                               "/sys/kernel/tracing",
-                               "/sys/block",
-                               nullptr};
 
   /* Apply universal masks */
   for (int i = 0; universal_masks[i]; i++) {
@@ -177,12 +200,6 @@ int apply_jail_mask(bool hw_access, int privileged_mask) {
 
     /* Step 2: Stack RW bind mounts on top of the now-RO /proc/sys.
      * Bind inherits RO from parent, so explicitly remount RW after. */
-    /* /proc/sys/net intentionally excluded: in host mode it's a
-     * destructive host network modification channel.  In isolated
-     * (none) mode there is no network, so writable net sysctls
-     * are unnecessary. */
-    const char *rw_holes[] = {"/proc/sys/kernel/hostname",
-                              "/proc/sys/kernel/domainname", nullptr};
     for (int i = 0; rw_holes[i]; i++) {
       if (access(rw_holes[i], F_OK) != 0)
         continue;
@@ -202,7 +219,7 @@ int apply_jail_mask(bool hw_access, int privileged_mask) {
 
   if (hw_access) {
     log_info("[SEC] Hardware Mode: preserved sensitive /proc and /sys paths.");
-    return 0;
+    return;
   }
 
   /* Apply standard mode read-only remounts */
@@ -211,5 +228,4 @@ int apply_jail_mask(bool hw_access, int privileged_mask) {
   }
 
   log_info("[SEC] Jail mask applied (hardened /proc and /sys).");
-  return 0;
 }

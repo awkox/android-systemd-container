@@ -26,19 +26,17 @@ int ensure_runtime(void) {
   return 0;
 }
 
-int generate_container_name(const char *rootfs_path, char *name, size_t size) {
+void generate_container_name(const char *rootfs_path, char *name, const size_t size) {
   char id[64], version[64];
 
   if (parse_os_release(rootfs_path, id, version, sizeof(id)) < 0) {
     /* Fallback if os-release is missing */
     safe_strncpy(name, "linux-container", size);
-    return 0;
+    return;
   }
 
   if (version[0])
     snprintf(name, size, "%s-%s", id, version);
   else
     safe_strncpy(name, id, size);
-
-  return 0;
 }

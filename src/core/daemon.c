@@ -1,9 +1,4 @@
 /*
- * ds-fork v6 daemon & client mode
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- *
  * magisk and apatch run root processes under u:r:magisk:s0 with seccomp
  * filters that block namespace syscalls. grapheneos does similar hardening.
  *
@@ -30,15 +25,14 @@
 #define MAX_ARGC 64
 #define MAX_ARG 8192
 #define IOBUF 8192
-#define PTY_WBUF_MAX (256 * 1024)  /* absolute buffer cap for PTY master input \
-                                    */
-#define PTY_WBUF_HIGH (192 * 1024) /* suspend conn EPOLLIN above this */
-#define PTY_WBUF_LOW (64 * 1024)   /* resume  conn EPOLLIN below this */
+constexpr size_t PTY_WBUF_MAX = (256 * 1024);  /* absolute buffer cap for PTY master input */
+constexpr size_t PTY_WBUF_HIGH = (192 * 1024); /* suspend conn EPOLLIN above this */
+constexpr size_t PTY_WBUF_LOW = (64 * 1024);   /* resume  conn EPOLLIN below this */
 
-#define MSG_OUT ((uint8_t)0x01)
-#define MSG_ERR ((uint8_t)0x02)
-#define MSG_WINCH ((uint8_t)0x03)
-#define MSG_EXIT ((uint8_t)0xFF)
+constexpr uint8_t MSG_OUT = 0x01;
+constexpr uint8_t MSG_ERR = 0x02;
+constexpr uint8_t MSG_WINCH = 0x03;
+constexpr uint8_t MSG_EXIT = 0xFF;
 
 #define REQ_FLAG_PTY (1u << 0)
 #define EXIT_PENDING (-1)
@@ -67,7 +61,7 @@ static void rotate_daemon_log_if_needed(void) {
     g_daemon_log_fp = fopen(g_daemon_log_path, "ae");
   } else {
     /* background: reopen and re-dup2 stdout/stderr */
-    int lfd = open(g_daemon_log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC,
+    const int lfd = open(g_daemon_log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC,
                    0644);
     if (lfd >= 0) {
       dup2(lfd, STDOUT_FILENO);
@@ -98,21 +92,21 @@ static void daemon_log_tee(const char *prefix, const char *fmt, ...) {
 #undef log_info
 #define log_info(fmt, ...)                                                     \
   do {                                                                         \
-    log_internal("+", C_GREEN, false, fmt __VA_OPT__(,) __VA_ARGS__);              \
+    log_internal("+", false, fmt __VA_OPT__(,) __VA_ARGS__);                   \
     daemon_log_tee("+", fmt __VA_OPT__(,) __VA_ARGS__);                        \
   } while (0)
 
 #undef log_warn
 #define log_warn(fmt, ...)                                                     \
   do {                                                                         \
-    log_internal("!", C_YELLOW, true, fmt __VA_OPT__(,) __VA_ARGS__);             \
+    log_internal("!", true, fmt __VA_OPT__(,) __VA_ARGS__);                    \
     daemon_log_tee("!", fmt __VA_OPT__(,) __VA_ARGS__);                        \
   } while (0)
 
 #undef log_error
 #define log_error(fmt, ...)                                                    \
   do {                                                                         \
-    log_internal("-", C_RED, true, fmt __VA_OPT__(,) __VA_ARGS__);                \
+    log_internal("-", true, fmt __VA_OPT__(,) __VA_ARGS__);                    \
     daemon_log_tee("-", fmt __VA_OPT__(,) __VA_ARGS__);                        \
   } while (0)
 
@@ -128,10 +122,10 @@ static volatile sig_atomic_t g_sigusr2_received = 0;
 
 /* wire protocol helpers */
 
-static int read_exact(int fd, void *buf, size_t n) {
-  uint8_t *p = (uint8_t *)buf;
+static int read_exact(const int fd, void *buf, size_t n) {
+  uint8_t *p = buf;
   while (n) {
-    ssize_t r = read(fd, p, n);
+    const ssize_t r = read(fd, p, n);
     if (r <= 0)
       return -1;
     p += r;
@@ -140,9 +134,9 @@ static int read_exact(int fd, void *buf, size_t n) {
   return 0;
 }
 
-static int send_frame(int fd, uint8_t type, const void *data, uint32_t len) {
+static int send_frame(const int fd, const uint8_t type, const void *data, const uint32_t len) {
   uint8_t hdr[5];
-  uint32_t nl = htonl(len);
+  const uint32_t nl = htonl(len);
   hdr[0] = type;
   memcpy(hdr + 1, &nl, 4);
   if (write_all(fd, hdr, 5) < 0)
@@ -152,7 +146,7 @@ static int send_frame(int fd, uint8_t type, const void *data, uint32_t len) {
   return 0;
 }
 
-static int recv_frame_hdr(int fd, uint8_t *type_out, uint32_t *len_out) {
+static int recv_frame_hdr(const int fd, uint8_t *type_out, uint32_t *len_out) {
   uint8_t hdr[5];
   if (read_exact(fd, hdr, 5) < 0)
     return -1;
@@ -163,8 +157,8 @@ static int recv_frame_hdr(int fd, uint8_t *type_out, uint32_t *len_out) {
   return 0;
 }
 
-static void send_exit(int fd, int code) {
-  uint32_t nc = htonl((uint32_t)code);
+static void send_exit(const int fd, const int code) {
+  const uint32_t nc = htonl((uint32_t)code);
   send_frame(fd, MSG_EXIT, &nc, 4);
 }
 
@@ -173,7 +167,7 @@ static void send_exit(int fd, int code) {
 static socklen_t make_addr(struct sockaddr_un *addr) {
   memset(addr, 0, sizeof(*addr));
   addr->sun_family = AF_UNIX;
-  size_t nlen = strlen(SOCK_NAME);
+  const size_t nlen = strlen(SOCK_NAME);
   memcpy(addr->sun_path + 1, SOCK_NAME, nlen);
   return (socklen_t)(offsetof(struct sockaddr_un, sun_path) + 1 + nlen);
 }
@@ -196,13 +190,13 @@ static void free_req(req_t *r) {
   }
 }
 
-static int recv_req(int fd, req_t *r) {
+static int recv_req(const int fd, req_t *r) {
   memset(r, 0, sizeof(*r));
   uint32_t nf, na;
   if (read_exact(fd, &nf, 4) < 0 || read_exact(fd, &na, 4) < 0)
     return -1;
   r->flags = ntohl(nf);
-  uint32_t argc = ntohl(na);
+  const uint32_t argc = ntohl(na);
   if (!argc || argc > MAX_ARGC)
     return -1;
 
@@ -210,7 +204,7 @@ static int recv_req(int fd, req_t *r) {
     uint32_t nl;
     if (read_exact(fd, &nl, 4) < 0)
       return -1;
-    uint32_t al = ntohl(nl);
+    const uint32_t al = ntohl(nl);
     if (al > MAX_ARG)
       return -1;
     r->argv[i] = (char *)malloc((size_t)al + 1);
@@ -246,13 +240,13 @@ static void reexec(char **argv) {
    * reason it was never set, fall back to the symlink (which may have
    * (deleted) but is better than nothing).
    */
-  const char *path = (g_self_path[0] != '\0') ? g_self_path : "/proc/self/exe";
+  const char *path = g_self_path[0] != '\0' ? g_self_path : "/proc/self/exe";
   execv(path, argv);
   _exit(127);
 }
 
-static char **make_exec_argv(req_t *r) {
-  char **av = (char **)malloc((size_t)(r->argc + 2) * sizeof(char *));
+static char **make_exec_argv(const req_t *r) {
+  char **av = malloc((size_t)(r->argc + 2) * sizeof(char *));
   if (!av)
     return nullptr;
   av[0] = (char *)PROJECT_NAME;
@@ -262,12 +256,12 @@ static char **make_exec_argv(req_t *r) {
   return av;
 }
 
-static void drain_fd(int fd, int conn, uint8_t type) {
+static void drain_fd(const int fd, const int conn, const uint8_t type) {
   char buf[IOBUF];
-  int fl = fcntl(fd, F_GETFL);
+  const int fl = fcntl(fd, F_GETFL);
   fcntl(fd, F_SETFL, fl | O_NONBLOCK);
   for (;;) {
-    ssize_t n = read(fd, buf, sizeof(buf));
+    const ssize_t n = read(fd, buf, sizeof(buf));
     if (n <= 0)
       break;
     send_frame(conn, type, buf, (uint32_t)n);
@@ -278,7 +272,7 @@ static void drain_fd(int fd, int conn, uint8_t type) {
 /* unified session handler for both pty and pipe modes */
 
 static void handle_session(int conn, req_t *r) {
-  int is_pty = (r->flags & REQ_FLAG_PTY);
+  int is_pty = r->flags & REQ_FLAG_PTY;
   int master = -1, slave = -1;
   int out[2] = {-1, -1}, err[2] = {-1, -1};
   char buf[IOBUF];
@@ -491,7 +485,7 @@ static void handle_session(int conn, req_t *r) {
           waitpid(child, nullptr, 0);
           goto session_end;
         }
-        if (is_pty && (events[i].events & EPOLLIN)) {
+        if (is_pty && events[i].events & EPOLLIN) {
           uint8_t type;
           uint32_t mlen;
           if (recv_frame_hdr(conn, &type, &mlen) < 0) {
@@ -569,14 +563,14 @@ static void handle_session(int conn, req_t *r) {
             uint32_t rem = mlen;
             while (rem) {
               uint32_t c =
-                  (rem < (uint32_t)sizeof(buf)) ? rem : (uint32_t)sizeof(buf);
+                  rem < (uint32_t)sizeof(buf) ? rem : (uint32_t)sizeof(buf);
               if (read_exact(conn, buf, c) < 0)
                 goto session_end;
               rem -= c;
             }
           }
         }
-      } else if (is_pty && fd == master && (events[i].events & EPOLLOUT)) {
+      } else if (is_pty && fd == master && events[i].events & EPOLLOUT) {
         /* Flush pending wbuf to PTY master. */
         while (pty_wbuf_len > 0) {
           ssize_t w = write(master, pty_wbuf, pty_wbuf_len);
@@ -627,7 +621,7 @@ static void handle_session(int conn, req_t *r) {
           for (;;) {
             ssize_t n = read(fd, buf, sizeof(buf));
             if (n > 0) {
-              uint8_t t = (fd == err[0]) ? MSG_ERR : MSG_OUT;
+              uint8_t t = fd == err[0] ? MSG_ERR : MSG_OUT;
               if (send_frame(conn, t, buf, (uint32_t)n) < 0) {
                 kill(child, is_pty ? SIGHUP : SIGTERM);
                 waitpid(child, nullptr, 0);
@@ -701,7 +695,7 @@ session_end:
 
 /* handle incoming client connections */
 
-static void handle_conn(int conn) {
+static void handle_conn(const int conn) {
   req_t req;
   if (recv_req(conn, &req) < 0) {
     send_frame(conn, MSG_ERR, "daemon: bad request\n", 20);
@@ -736,7 +730,7 @@ static void handle_conn(int conn) {
     char cmdline[512];
     size_t off = 0;
     for (int i = 0; i < req.argc && off < sizeof(cmdline) - 1; i++) {
-      int n = snprintf(cmdline + off, sizeof(cmdline) - off, "%s%s",
+      const int n = snprintf(cmdline + off, sizeof(cmdline) - off, "%s%s",
                        i > 0 ? " " : "", req.argv[i]);
       if (n > 0)
         off += (size_t)n;
@@ -757,7 +751,7 @@ static void handle_conn(int conn) {
 /* main daemon loop */
 
 /* daemonize the process: detach from terminal and protect from OOM killer */
-static void daemonize(bool foreground) {
+static void daemonize(const bool foreground) {
   if (!foreground) {
     pid_t pid = fork();
     if (pid < 0)
@@ -784,7 +778,7 @@ static void daemonize(bool foreground) {
 
   if (!foreground) {
     /* redirect standard streams */
-    int dn = open("/dev/null", O_RDONLY);
+    const int dn = open("/dev/null", O_RDONLY);
     if (dn >= 0) {
       dup2(dn, STDIN_FILENO);
       if (dn > STDERR_FILENO)
@@ -801,7 +795,7 @@ static void daemonize(bool foreground) {
     if (!foreground) {
       /* Background: dup2 stdout/stderr to log file; g_daemon_log_fp stays
        * NULL so the tee macros don't double-write. */
-      int lfd = open(log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+      const int lfd = open(log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
       if (lfd >= 0) {
         dup2(lfd, STDOUT_FILENO);
         dup2(lfd, STDERR_FILENO);
@@ -824,7 +818,7 @@ static void sigusr2_handler([[maybe_unused]] int sig) {
   g_sigusr2_received = 1;
 }
 
-int daemon_run(bool foreground) {
+int daemon_run(const bool foreground) {
   ensure_runtime();
 
   if (daemon_probe()) {
@@ -842,7 +836,7 @@ int daemon_run(bool foreground) {
    * this point on will automatically exec the updated binary.
    */
   {
-    ssize_t n =
+    const ssize_t n =
         readlink("/proc/self/exe", g_self_path, sizeof(g_self_path) - 1);
     if (n > 0)
       g_self_path[n] = '\0';
@@ -853,14 +847,14 @@ int daemon_run(bool foreground) {
   /* SIGUSR2: app sends this after a live binary swap as an acknowledgment */
   signal(SIGUSR2, sigusr2_handler);
 
-  auto_close int srv = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  auto_close const int srv = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (srv < 0) {
     log_error("daemon: socket: %s", strerror(errno));
     return 1;
   }
 
   struct sockaddr_un addr;
-  socklen_t alen = make_addr(&addr);
+  const socklen_t alen = make_addr(&addr);
   if (bind(srv, (struct sockaddr *)&addr, alen) < 0) {
     log_error("daemon: bind(@%s): %s", SOCK_NAME, strerror(errno));
     if (errno == EADDRINUSE) {
@@ -891,7 +885,7 @@ int daemon_run(bool foreground) {
           "binary automatically.");
     }
 
-    int conn = accept4(srv, nullptr, nullptr, SOCK_CLOEXEC);
+    const int conn = accept4(srv, nullptr, nullptr, SOCK_CLOEXEC);
     if (conn < 0) {
       if (errno == EINTR || errno == EAGAIN)
         continue;
@@ -922,7 +916,7 @@ int daemon_run(bool foreground) {
       }
     }
 
-    pid_t h = fork();
+    const pid_t h = fork();
     if (h < 0) {
       close(conn);
       continue;
@@ -947,8 +941,8 @@ int daemon_run(bool foreground) {
  */
 bool daemon_probe(void) {
   struct sockaddr_un addr;
-  socklen_t alen = make_addr(&addr);
-  auto_close int s = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+  const socklen_t alen = make_addr(&addr);
+  auto_close const int s = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (s < 0)
     return 0;
   return connect(s, (struct sockaddr *)&addr, alen) == 0;
@@ -1126,11 +1120,11 @@ int client_run(int argc, char **argv) {
               break;
             }
 
-            FILE *dest = (type == MSG_ERR) ? stderr : stdout;
+            FILE *dest = type == MSG_ERR ? stderr : stdout;
             uint32_t rem = mlen;
             while (rem) {
               uint32_t c =
-                  (rem < (uint32_t)sizeof(buf)) ? rem : (uint32_t)sizeof(buf);
+                  rem < (uint32_t)sizeof(buf) ? rem : (uint32_t)sizeof(buf);
               if (read_exact(sock, buf, c) < 0) {
                 done = true;
                 break;
@@ -1149,7 +1143,7 @@ int client_run(int argc, char **argv) {
           }
         }
 
-        if (!done && (events[i].events & (EPOLLHUP | EPOLLERR))) {
+        if (!done && events[i].events & (EPOLLHUP | EPOLLERR)) {
           done = true;
           break;
         }

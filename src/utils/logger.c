@@ -1,6 +1,10 @@
 #include "asc.h"
 
-void rotate_log(const char *path, size_t max_size) {
+bool log_silent = false;
+char log_container_name[256] = "";
+int log_container_fd = -1;
+
+void rotate_log(const char *path, const size_t max_size) {
   struct stat st;
   if (stat(path, &st) == 0 && (size_t)st.st_size >= max_size) {
     char old_path[PATH_MAX + 8];
@@ -10,7 +14,7 @@ void rotate_log(const char *path, size_t max_size) {
 }
 
 static void write_to_log_file(const char *name, const char *component,
-                              const char *raw_msg, int pre_opened_fd) {
+                              const char *raw_msg, const int pre_opened_fd) {
   if (!name || !name[0])
     return;
 
@@ -63,9 +67,8 @@ static void write_to_log_file(const char *name, const char *component,
           tm.tm_sec, ts.tv_nsec / 1000000, component, raw_msg);
 }
 
-[[gnu::format(printf, 4, 5)]]
-void log_internal(const char *prefix, const char *color,
-                  bool is_err, const char *fmt, ...) {
+[[gnu::format(printf, 3, 4)]]
+void log_internal(const char *prefix, const bool is_err, const char *fmt, ...) {
   char raw_msg[8192];
   va_list ap;
   va_start(ap, fmt);
@@ -94,11 +97,7 @@ void log_internal(const char *prefix, const char *color,
   }
 
   FILE *out = is_err ? stderr : stdout;
-  fprintf(out,
-          "["
-          "%s"
-          "%s" C_RESET "] %s\r\n",
-          color, prefix, raw_msg);
+  fprintf(out, "[%s] %s\r\n", prefix, raw_msg);
   fflush(out);
 }
 
@@ -114,7 +113,7 @@ void die_internal(const char *fmt, ...) {
     write_to_log_file(log_container_name, "fatal", raw_msg, log_container_fd);
   }
 
-  fprintf(stderr, "[" C_RED "-" C_RESET "] %s\r\n", raw_msg);
+  fprintf(stderr, "[-] %s\r\n", raw_msg);
   fflush(stderr);
   exit(EXIT_FAILURE);
 }
@@ -132,12 +131,11 @@ void write_monitor_debug_log(const char *name, const char *fmt, ...) {
   write_to_log_file(name, "monitor", raw_msg, -1);
 }
 
-void print_privileged_warning(int privileged_mask) {
+void print_privileged_warning(const int privileged_mask) {
   if (privileged_mask <= 0)
     return;
 
-  printf(C_BOLD C_RED "WARNING: PRIVILEGED MODE ACTIVE - DEVICE SECURITY "
-                      "COMPROMISED" C_RESET "\r\n\r\n");
+  printf("WARNING: PRIVILEGED MODE ACTIVE - DEVICE SECURITY COMPROMISED\r\n\r\n");
   fflush(stdout);
 }
 
@@ -158,7 +156,7 @@ void open_container_log(cfg_t *cfg) {
 
   rotate_log(log_path, 2 * 1024 * 1024);
 
-  int fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+  const int fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
   if (fd >= 0)
     log_container_fd = fd;
 }

@@ -1,23 +1,21 @@
 #include "asc.h"
 
-int mkdir_p(const char *path, mode_t mode) {
+int mkdir_p(const char *path, const mode_t mode) {
   char tmp[PATH_MAX];
-  char *p = nullptr;
-  size_t len;
 
-  int r = snprintf(tmp, sizeof(tmp), "%s", path);
+  const int r = snprintf(tmp, sizeof(tmp), "%s", path);
   if (r < 0 || (size_t)r >= sizeof(tmp)) {
     errno = ENAMETOOLONG;
     return -1;
   }
 
-  len = strlen(tmp);
+  const size_t len = strlen(tmp);
   if (len == 0)
     return 0;
   if (tmp[len - 1] == '/')
     tmp[len - 1] = '\0';
 
-  for (p = tmp + 1; *p; p++) {
+  for (char *p = tmp + 1; *p; p++) {
     if (*p == '/') {
       *p = '\0';
       if (mkdir(tmp, mode) < 0 && errno != EEXIST)
@@ -31,23 +29,23 @@ int mkdir_p(const char *path, mode_t mode) {
 }
 
 int write_file(const char *path, const char *content) {
-  auto_close int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+  auto_close const int fd =
+    open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
   if (fd < 0)
     return -1;
 
-  size_t len = strlen(content);
-  ssize_t w = write_all(fd, content, len);
-  int close_ret = close(fd);
-  fd = -1;
+  const size_t len = strlen(content);
+  const ssize_t w = write_all(fd, content, len);
+  const int close_ret = close(fd);
 
-  return (w == (ssize_t)len && close_ret == 0) ? 0 : -1;
+  return w == (ssize_t)len && close_ret == 0 ? 0 : -1;
 }
 
-ssize_t write_all(int fd, const void *buf, size_t count) {
+ssize_t write_all(const int fd, const void *buf, const size_t count) {
   const char *p = buf;
   size_t remaining = count;
   while (remaining > 0) {
-    ssize_t w = write(fd, p, remaining);
+    const ssize_t w = write(fd, p, remaining);
     if (w < 0) {
       if (errno == EINTR)
         continue;
@@ -59,11 +57,11 @@ ssize_t write_all(int fd, const void *buf, size_t count) {
   return (ssize_t)count;
 }
 
-int read_file(const char *path, char *buf, size_t size) {
+int read_file(const char *path, char *buf, const size_t size) {
   if (size == 0)
     return -1;
 
-  auto_close int fd = open(path, O_RDONLY | O_CLOEXEC);
+  auto_close const int fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0)
     return -1;
 
@@ -94,7 +92,7 @@ static int remove_recursive_handler(
   int tflag [[maybe_unused]],
   struct FTW *ftwbuf [[maybe_unused]]
 ) {
-  int r = remove(fpath);
+  const int r = remove(fpath);
   if (r)
     perror(fpath);
   return r;
@@ -118,8 +116,7 @@ int grep_file(const char *path, const char *pattern) {
 bool path_has_symlink(const char *path) {
   char tmp[PATH_MAX];
   safe_strncpy(tmp, path, sizeof(tmp));
-  size_t len = strlen(tmp);
-  if (len == 0)
+  if (strlen(tmp) == 0)
     return false;
 
   /* Walk each '/' boundary and lstat the prefix */
@@ -147,7 +144,7 @@ bool is_subpath(const char *parent, const char *child) {
   if (!real_parent || !real_child || !real_parent[0] || !real_child[0])
     return false;
 
-  size_t len = strlen(real_parent);
+  const size_t len = strlen(real_parent);
 
   /* Special case for the root directory */
   if (len == 1 && real_parent[0] == '/')

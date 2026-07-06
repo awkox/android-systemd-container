@@ -26,7 +26,7 @@ int collect_pids(pid_t **pids_out, size_t *count_out) {
 
     char *end;
     errno = 0;
-    long val = strtol(ent->d_name, &end, 10);
+    const long val = strtol(ent->d_name, &end, 10);
 
     /* Must be a pure positive number */
     if (errno != 0 || *end != '\0' || val <= 0)
@@ -50,17 +50,17 @@ int collect_pids(pid_t **pids_out, size_t *count_out) {
   return 0;
 }
 
-int build_proc_root_path(pid_t pid, const char *suffix, char *buf,
-                         size_t size) {
+int build_proc_root_path(const pid_t pid, const char *suffix, char *buf,
+                         const size_t size) {
   int r;
   if (suffix && suffix[0])
     r = snprintf(buf, size, PROC_ROOT_FMT "%s", pid, suffix);
   else
     r = snprintf(buf, size, PROC_ROOT_FMT, pid);
-  return (r > 0 && (size_t)r < size) ? 0 : -1;
+  return r > 0 && (size_t)r < size ? 0 : -1;
 }
 
-bool is_container_init(pid_t pid) {
+bool is_container_init(const pid_t pid) {
   char path[PATH_MAX];
   snprintf(path, sizeof(path), "/proc/%d/status", pid);
   auto_fclose FILE *f = fopen(path, "re");
@@ -79,9 +79,9 @@ bool is_container_init(pid_t pid) {
        * this line is absent and we fall back to the ns/pid inode check. */
       nspid_found = true;
       char *p = line + 6;
-      char *last_val = nullptr;
+      const char *last_val = nullptr;
       char *saveptr;
-      char *token = strtok_r(p, " \t\n\r", &saveptr);
+      const char *token = strtok_r(p, " \t\n\r", &saveptr);
       while (token) {
         last_val = token;
         token = strtok_r(nullptr, " \t\n\r", &saveptr);
@@ -145,7 +145,7 @@ pid_t find_container_init_pid(const char *uuid) {
       build_proc_root_path(pids[i], marker, path, sizeof(path));
       if (access(path, F_OK) == 0) {
         if (is_valid_container_pid(pids[i])) {
-          pid_t found = pids[i];
+          const pid_t found = pids[i];
           return found;
         }
       }
@@ -155,7 +155,7 @@ pid_t find_container_init_pid(const char *uuid) {
   return 0;
 }
 
-int count_running_containers(char *first_name, size_t size) {
+int count_running_containers(char *first_name, const size_t size) {
   auto_free pid_t *pids = nullptr;
   size_t pcount = 0;
   char path[PATH_MAX];

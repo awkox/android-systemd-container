@@ -1,10 +1,3 @@
-/*
- * ds-fork v6 - High-performance Container Runtime
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 #include "asc.h"
 
 /* ---------------------------------------------------------------------------
@@ -29,7 +22,7 @@ bool is_mountpoint(const char *path) {
  * If a mount point already exists for this name but is not associated
  * with an active container (stale), it will be cleaned up. */
 static int find_available_mountpoint(const char *name, char *mount_path,
-                                     size_t size) {
+                                     const size_t size) {
   const char *base_dir = IMG_MOUNT_ROOT;
 
   /* Create base directory if it doesn't exist */
@@ -72,7 +65,7 @@ static int find_available_mountpoint(const char *name, char *mount_path,
  * ---------------------------------------------------------------------------*/
 
 int domount(const char *src, const char *tgt, const char *fstype,
-            unsigned long flags, const char *data) {
+            const unsigned long flags, const char *data) {
   if (mount(src, tgt, fstype, flags, data) < 0) {
     /* Don't log if it's already mounted (EBUSY) */
     if (errno != EBUSY) {
@@ -85,7 +78,7 @@ int domount(const char *src, const char *tgt, const char *fstype,
 }
 
 int bind_mount(const char *src, const char *tgt) {
-  auto_close int src_fd = open(src, O_PATH | O_NOFOLLOW | O_CLOEXEC);
+  auto_close const int src_fd = open(src, O_PATH | O_NOFOLLOW | O_CLOEXEC);
   if (src_fd < 0) {
     /* If it failed because of ELOOP, it's a symlink we should reject anyway */
     return -1;
@@ -186,7 +179,7 @@ int setup_volatile_overlay(cfg_t *cfg) {
 
   /* 4. Perform Overlay mount */
   char opts[32768];
-  int n = snprintf(opts, sizeof(opts),
+  const int n = snprintf(opts, sizeof(opts),
     "lowerdir=%s,upperdir=%s/upper,workdir=%s/work,context=\""
     ANDROID_TMPFS_CONTEXT "\"", cfg->img_mount_point, base, base);
 
@@ -232,7 +225,7 @@ static bool is_mount_in_namespace(const char *path) {
   setvbuf(f, io_buf, _IOFBF, sizeof(io_buf));
 
   char line[4096];
-  size_t path_len = strlen(path);
+  const size_t path_len = strlen(path);
 
   while (fgets(line, sizeof(line), f)) {
     /* mountinfo format: id parent_id major:minor root mount_point ... */
@@ -287,14 +280,14 @@ int cleanup_volatile_overlay(cfg_t *cfg) {
 done:
   /* settle time for kernel to release backing store info */
   usleep(RETRY_DELAY_US / 2);
-  int r = remove_recursive(cfg->volatile_dir);
+  const int r = remove_recursive(cfg->volatile_dir);
   cfg->volatile_dir[0] = '\0';
   return r;
 }
 
-int setup_custom_binds(cfg_t *cfg, const char *rootfs) {
+void setup_custom_binds(cfg_t *cfg, const char *rootfs) {
   if (cfg->bind_count == 0 || !cfg->binds)
-    return 0;
+    return;
 
   /* Ensure mounts are processed in alphabetical order of destination
    * so parent directories are always mounted before children. */
@@ -302,7 +295,7 @@ int setup_custom_binds(cfg_t *cfg, const char *rootfs) {
 
   for (int i = 0; i < cfg->bind_count; i++) {
     char tgt[PATH_MAX * 2];
-    int n = snprintf(tgt, sizeof(tgt), "%s%s", rootfs, cfg->binds[i].dest);
+    const int n = snprintf(tgt, sizeof(tgt), "%s%s", rootfs, cfg->binds[i].dest);
     if (n < 0 || (size_t)n >= sizeof(tgt)) {
       log_warn("Bind mount target path too long, skipping: %s",
                cfg->binds[i].dest);
@@ -346,15 +339,13 @@ int setup_custom_binds(cfg_t *cfg, const char *rootfs) {
         log_warn("Failed to remount %s read-only: %s", tgt, strerror(errno));
     }
   }
-
-  return 0;
 }
 
 /* ---------------------------------------------------------------------------
  * Rootfs Image Handling - Pure C loop device management (no host tools)
  * ---------------------------------------------------------------------------*/
 
-int mount_rootfs_img(const char *img_path, char *mount_point, size_t mp_size,
+int mount_rootfs_img(const char *img_path, char *mount_point, const size_t mp_size,
                      const char *name) {
   if (find_available_mountpoint(name, mount_point, mp_size) < 0) {
     log_error("Failed to find available mount point for %s", name);
@@ -377,7 +368,7 @@ int mount_rootfs_img(const char *img_path, char *mount_point, size_t mp_size,
    * Build mount flags: base VFS flags + any fstype-specific extras.
    * pivot_root requires a writable mount to create .old_root, so no MS_RDONLY.
    */
-  unsigned long mnt_flags = MS_NOATIME | MS_NODIRATIME;
+  constexpr unsigned long mnt_flags = MS_NOATIME | MS_NODIRATIME;
   const char *mnt_data = nullptr;
 
   if (strcmp(fstype, "ext4") == 0) {
@@ -396,7 +387,7 @@ int mount_rootfs_img(const char *img_path, char *mount_point, size_t mp_size,
                img_path, mount_point, attempt + 1);
 
     struct stat st;
-    bool is_blk = (stat(img_path, &st) == 0 && S_ISBLK(st.st_mode));
+    const bool is_blk = stat(img_path, &st) == 0 && S_ISBLK(st.st_mode);
     char final_src[PATH_MAX];
     auto_close int loop_fd = -1;
 
@@ -408,7 +399,7 @@ int mount_rootfs_img(const char *img_path, char *mount_point, size_t mp_size,
         goto retry;
     }
 
-    int ret = mount(final_src, mount_point, fstype, mnt_flags, mnt_data);
+    const int ret = mount(final_src, mount_point, fstype, mnt_flags, mnt_data);
     /* AUTOCLEAR handles cleanup if mount failed */
 
     if (ret == 0) {
@@ -437,9 +428,9 @@ int mount_rootfs_img(const char *img_path, char *mount_point, size_t mp_size,
   return -1;
 }
 
-int unmount_rootfs_img(const char *mount_point, bool silent) {
+void unmount_rootfs_img(const char *mount_point, const bool silent) {
   if (!mount_point || !mount_point[0])
-    return 0;
+    return;
 
   /* Grab the backing loop device before we unmount (it disappears after) */
   char loop_dev[256] = {0};
@@ -463,7 +454,7 @@ int unmount_rootfs_img(const char *mount_point, bool silent) {
   }
 
   /* 4. Cleanup and log */
-  bool still_mounted = is_mountpoint(mount_point);
+  const bool still_mounted = is_mountpoint(mount_point);
   if (rmdir(mount_point) == 0 || !still_mounted) {
     if (!silent)
       log_info("Unmounted rootfs image from %s.", mount_point);
@@ -471,6 +462,4 @@ int unmount_rootfs_img(const char *mount_point, bool silent) {
     if (!silent)
       log_warn("Cleanup warning: %s is still busy/mounted.", mount_point);
   }
-
-  return 0;
 }

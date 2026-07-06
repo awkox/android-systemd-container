@@ -8,14 +8,14 @@
  * (Docker-in-Docker, LXC-in-LXC) need mknod to create /dev nodes for
  * their own containers.  /proc/partitions is nullified in the jail mask
  * to prevent host block-device enumeration. */
-const int universal_drops[] = {
+static constexpr int universal_drops[] = {
   CAP_SYS_MODULE,
   -1,
 };
 
 /* Standard Hardening Tier: drop capabilities that affect host stability
  * or allow escaping the container's isolation. */
-const int caps_to_drop[] = {
+static constexpr int caps_to_drop[] = {
   CAP_SYS_RAWIO,       /* Raw hardware access (I/O ports, memory) */
   CAP_SYS_PTRACE,      /* Process tracing/injection across namespaces */
   CAP_SYS_PACCT,       /* Process accounting */
@@ -42,7 +42,7 @@ const int caps_to_drop[] = {
  * In Hardware Mode (hw_access=1), we preserve most to ensure full
  * low-level hardware access (USB, Serial, Bluetooth, Flashing).
  */
-void apply_capability_hardening(bool hw_access, int privileged_mask) {
+void apply_capability_hardening(const bool hw_access, const int privileged_mask) {
   int total_dropped = 0;
 
   if (privileged_mask & PRIV_NOCAPS) {

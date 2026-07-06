@@ -1,10 +1,3 @@
-/*
- * ds-fork v6 - Resource Visibility Virtualization
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 #include "asc.h"
 
 /* ---------------------------------------------------------------------------
@@ -14,9 +7,9 @@
 /* In-place overwrite: preserves the bind-mount inode (rename(2) breaks it).
  * Opens via safe_openat_proc() which rejects symlinks at ALL path levels,
  * not just the final component (O_NOFOLLOW alone is insufficient). */
-static int write_inplace(pid_t pid, const char *subpath, const char *buf,
-                         size_t len) {
-  auto_close int fd = safe_openat_proc(pid, subpath, O_WRONLY, 0);
+static int write_inplace(const pid_t pid, const char *subpath, const char *buf,
+                         const size_t len) {
+  auto_close const int fd = safe_openat_proc(pid, subpath, O_WRONLY, 0);
   if (fd < 0)
     return -1;
 
@@ -31,7 +24,7 @@ static int write_inplace(pid_t pid, const char *subpath, const char *buf,
   if (fstatfs(fd, &sfs) < 0 || sfs.f_type != TMPFS_MAGIC)
     return -1;
 
-  ssize_t w = write_all(fd, buf, len);
+  const ssize_t w = write_all(fd, buf, len);
   if (w == (ssize_t)len) {
     /* Ignore ftruncate failure as we already wrote the data;
      * it might fail if the file is already the correct size. */
@@ -39,11 +32,11 @@ static int write_inplace(pid_t pid, const char *subpath, const char *buf,
       /* ignore */
     }
   }
-  return (w == (ssize_t)len) ? 0 : -1;
+  return w == (ssize_t)len ? 0 : -1;
 }
 
 /* Compute container CPU count from quota/period, capped at host CPUs. */
-static int container_cpus(cfg_t *cfg) {
+static int container_cpus(const cfg_t *cfg) {
   int host = (int)sysconf(_SC_NPROCESSORS_ONLN);
   if (host < 1)
     host = 1;
@@ -70,8 +63,8 @@ static long long read_cg_ll(const char *container_name, const char *file) {
   if (strncmp(buf, "max", 3) == 0)
     return -1; /* unlimited */
   char *end;
-  long long v = strtoll(buf, &end, 10);
-  return (end == buf) ? -1 : v;
+  const long long v = strtoll(buf, &end, 10);
+  return end == buf ? -1 : v;
 }
 
 /* ---------------------------------------------------------------------------
@@ -80,8 +73,8 @@ static long long read_cg_ll(const char *container_name, const char *file) {
  * ---------------------------------------------------------------------------*/
 
 /* /proc/meminfo - virtualized when memory_limit > 0 */
-static char *gen_meminfo(cfg_t *cfg, size_t *out_len) {
-  long long mem_limit = cfg->memory_limit; /* bytes */
+static char *gen_meminfo(const cfg_t *cfg, size_t *out_len) {
+  const long long mem_limit = cfg->memory_limit; /* bytes */
   long long mem_used = read_cg_ll(cfg->container_name, "memory.current");
   if (mem_used < 0)
     mem_used = 0;
@@ -141,10 +134,10 @@ static char *gen_meminfo(cfg_t *cfg, size_t *out_len) {
 
     char key[128];
     long long val;
-    int has_kb = (strstr(line, " kB") != nullptr);
+    const int has_kb = strstr(line, " kB") != nullptr;
 
     if (sscanf(line, "%127[^:]: %lld", key, &val) == 2 && mem_limit > 0) {
-      long long lim_kb = mem_limit / 1024;
+      const long long lim_kb = mem_limit / 1024;
 
       if (!strcmp(key, "MemTotal"))
         val = lim_kb;
@@ -179,13 +172,13 @@ static char *gen_meminfo(cfg_t *cfg, size_t *out_len) {
 
       char fkey[130];
       snprintf(fkey, sizeof(fkey), "%s:", key);
-      int n = snprintf(buf + off, cap - off, "%-16s%11lld kB\n", fkey, val);
+      const int n = snprintf(buf + off, cap - off, "%-16s%11lld kB\n", fkey, val);
       if (n > 0)
         off += (size_t)n;
       continue;
     }
 
-    size_t len = strlen(line);
+    const size_t len = strlen(line);
     if (off + len < cap) {
       memcpy(buf + off, line, len);
       off += len;
@@ -197,8 +190,8 @@ static char *gen_meminfo(cfg_t *cfg, size_t *out_len) {
 }
 
 /* /proc/cpuinfo - truncated to container_cpus() entries */
-static char *gen_cpuinfo(cfg_t *cfg, size_t *out_len) {
-  int max_cpus = container_cpus(cfg);
+static char *gen_cpuinfo(const cfg_t *cfg, size_t *out_len) {
+  const int max_cpus = container_cpus(cfg);
   auto_fclose FILE *f = fopen("/proc/cpuinfo", "r");
   if (!f)
     return nullptr;
@@ -217,7 +210,7 @@ static char *gen_cpuinfo(cfg_t *cfg, size_t *out_len) {
       cur_cpu = id;
     if (cur_cpu >= max_cpus)
       break;
-    size_t len = strlen(line);
+    const size_t len = strlen(line);
     if (off + len + 1 >= cap) {
       cap *= 2;
       char *nb = realloc(buf, cap);
@@ -236,8 +229,8 @@ static char *gen_cpuinfo(cfg_t *cfg, size_t *out_len) {
 }
 
 /* /proc/stat - recomputed aggregate + only max_cpus cpuN lines */
-static char *gen_stat(cfg_t *cfg, size_t *out_len) {
-  int max_cpus = container_cpus(cfg);
+static char *gen_stat(const cfg_t *cfg, size_t *out_len) {
+  const int max_cpus = container_cpus(cfg);
   auto_fclose FILE *f = fopen("/proc/stat", "r");
   if (!f)
     return nullptr;
@@ -287,7 +280,7 @@ static char *gen_stat(cfg_t *cfg, size_t *out_len) {
     }
     if (strncmp(line, "cpu ", 4) == 0) {
       if (!agg_done) {
-        int n =
+        const int n =
             snprintf(buf + off, cap - off,
                      "cpu  %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu\n",
                      su, sn, ss, si, sio, sir, ssoft, sst, sgu, sgn);
@@ -300,7 +293,7 @@ static char *gen_stat(cfg_t *cfg, size_t *out_len) {
     int id;
     if (sscanf(line, "cpu%d", &id) == 1 && id >= max_cpus)
       continue;
-    size_t len = strlen(line);
+    const size_t len = strlen(line);
     memcpy(buf + off, line, len);
     off += len;
   }
@@ -324,14 +317,14 @@ static double cg_cpu_busy_secs(const char *container_name) {
   if (!p)
     return -1.0;
   char *end;
-  long long usec = strtoll(p + 11, &end, 10);
-  return (end == p + 11) ? -1.0 : (double)usec / 1e6;
+  const long long usec = strtoll(p + 11, &end, 10);
+  return end == p + 11 ? -1.0 : (double)usec / 1e6;
 }
 
 /* Read container init PID's start time from /proc/<pid>/stat field 22.
  * Returns seconds-since-boot (same reference as CLOCK_BOOTTIME).
  * Ported from lxcfs get_reaper_start_time_in_sec(). */
-static double container_start_time_secs(pid_t pid) {
+static double container_start_time_secs(const pid_t pid) {
   char path[64];
   snprintf(path, sizeof(path), "/proc/%d/stat", (int)pid);
   auto_fclose FILE *f = fopen(path, "r");
@@ -339,14 +332,14 @@ static double container_start_time_secs(pid_t pid) {
     return -1.0;
   unsigned long long starttime = 0;
   /* skip fields 1-21, read field 22 (starttime) */
-  int r = fscanf(f,
+  const int r = fscanf(f,
                  "%*d %*s %*c %*d %*d %*d %*d %*d %*u " /* 1-9  */
                  "%*u %*u %*u %*u %*u %*u %*d %*d "     /* 10-17 */
                  "%*d %*d %*d %*d %llu",                /* 18-22 */
                  &starttime);
   if (r != 1 || starttime == 0)
     return -1.0;
-  long ticks = sysconf(_SC_CLK_TCK);
+  const long ticks = sysconf(_SC_CLK_TCK);
   if (ticks <= 0)
     return -1.0;
   return (double)starttime / (double)ticks;
@@ -355,14 +348,14 @@ static double container_start_time_secs(pid_t pid) {
 /* /proc/uptime - lxcfs-style: uptime = CLOCK_BOOTTIME - container_init_start.
  * idle = up*ncpus - cpu_busy (from cgv2 cpu.stat).
  * Falls back to cfg->start_time only if container_pid is not yet available. */
-static char *gen_uptime(cfg_t *cfg, size_t *out_len) {
+static char *gen_uptime(const cfg_t *cfg, size_t *out_len) {
   struct timespec boot;
   clock_gettime(CLOCK_BOOTTIME, &boot);
-  double boottime = (double)boot.tv_sec + (double)boot.tv_nsec / 1e9;
+  const double boottime = (double)boot.tv_sec + (double)boot.tv_nsec / 1e9;
 
   double up = -1.0;
   if (cfg->container_pid > 0) {
-    double proc_start = container_start_time_secs(cfg->container_pid);
+    const double proc_start = container_start_time_secs(cfg->container_pid);
     if (proc_start > 0.0)
       up = boottime - proc_start;
   }
@@ -373,9 +366,9 @@ static char *gen_uptime(cfg_t *cfg, size_t *out_len) {
   if (up < 0.0)
     up = 0.0;
 
-  int ccpus = container_cpus(cfg);
-  double busy = cg_cpu_busy_secs(cfg->container_name);
-  double idle = (busy >= 0.0) ? (up * ccpus - busy) : (up * ccpus * 0.1);
+  const int ccpus = container_cpus(cfg);
+  const double busy = cg_cpu_busy_secs(cfg->container_name);
+  double idle = busy >= 0.0 ? up * ccpus - busy : up * ccpus * 0.1;
   if (idle < 0.0)
     idle = 0.0;
 
@@ -387,7 +380,7 @@ static char *gen_uptime(cfg_t *cfg, size_t *out_len) {
 }
 
 /* /proc/loadavg - CPU-ratio scaled */
-static char *gen_loadavg(cfg_t *cfg, size_t *out_len) {
+static char *gen_loadavg(const cfg_t *cfg, size_t *out_len) {
   auto_fclose FILE *f = fopen("/proc/loadavg", "r");
   if (!f)
     return nullptr;
@@ -396,9 +389,9 @@ static char *gen_loadavg(cfg_t *cfg, size_t *out_len) {
   if (fscanf(f, "%lf %lf %lf %d/%d %*d", &l1, &l5, &l15, &run, &tot) != 5)
     return nullptr;
 
-  int hcpus = (int)sysconf(_SC_NPROCESSORS_ONLN);
-  int ccpus = container_cpus(cfg);
-  double r = (double)ccpus / (double)hcpus;
+  const int hcpus = (int)sysconf(_SC_NPROCESSORS_ONLN);
+  const int ccpus = container_cpus(cfg);
+  const double r = (double)ccpus / (double)hcpus;
 
   int srun = (int)(run * r);
   if (srun < 1 && run > 0)
@@ -416,8 +409,8 @@ static char *gen_loadavg(cfg_t *cfg, size_t *out_len) {
 }
 
 /* /sys/devices/system/cpu/{online,possible,present} - for nproc */
-static char *gen_cpu_sysfs(cfg_t *cfg, size_t *out_len) {
-  int n = container_cpus(cfg);
+static char *gen_cpu_sysfs(const cfg_t *cfg, size_t *out_len) {
+  const int n = container_cpus(cfg);
   char *buf = malloc(32);
   if (!buf)
     return nullptr;
@@ -430,11 +423,11 @@ static char *gen_cpu_sysfs(cfg_t *cfg, size_t *out_len) {
  * Public API
  * ---------------------------------------------------------------------------*/
 
-unsigned long get_pid_ns_inode(pid_t pid) {
+unsigned long get_pid_ns_inode(const pid_t pid) {
   char path[64];
   struct stat st;
   snprintf(path, sizeof(path), "/proc/%d/ns/pid", (int)pid);
-  return (stat(path, &st) == 0) ? (unsigned long)st.st_ino : 0UL;
+  return stat(path, &st) == 0 ? st.st_ino : 0UL;
 }
 
 /* Write content to a tmpfs file, then bind-mount it over the real proc entry.
@@ -446,7 +439,7 @@ static void bind_vfile(const char *vpath, const char *target,
     return;
   /* Ensure the target exists as a regular file for bind_mount */
   if (access(target, F_OK) != 0) {
-    int fd = open(target, O_WRONLY | O_CREAT | O_CLOEXEC, 0444);
+    const int fd = open(target, O_WRONLY | O_CREAT | O_CLOEXEC, 0444);
     if (fd >= 0)
       close(fd);
   }
@@ -457,9 +450,9 @@ static void bind_vfile(const char *vpath, const char *target,
 /* Set process CPU affinity to match the virtualized CPU count.
  * This ensures tools like nproc and htop that use sched_getaffinity()
  * see the correct number of available cores. */
-static void virtualize_affinity(cfg_t *cfg) {
-  int n = container_cpus(cfg);
-  int host = (int)sysconf(_SC_NPROCESSORS_ONLN);
+static void virtualize_affinity(const cfg_t *cfg) {
+  const int n = container_cpus(cfg);
+  const int host = (int)sysconf(_SC_NPROCESSORS_ONLN);
   if (n >= host || n <= 0)
     return;
 
@@ -487,9 +480,9 @@ static void virtualize_affinity(cfg_t *cfg) {
   }
 }
 
-int virtualize_init(cfg_t *cfg) {
-  bool has_mem = (cfg->memory_limit > 0);
-  bool has_cpu = (cfg->cpu_quota > 0);
+int virtualize_init(const cfg_t *cfg) {
+  const bool has_mem = cfg->memory_limit > 0;
+  const bool has_cpu = cfg->cpu_quota > 0;
 
   /* Apply CPU affinity masking so syscall-based tools (nproc) are fooled */
   if (has_cpu)
@@ -507,16 +500,16 @@ int virtualize_init(cfg_t *cfg) {
   }
 
   /* Struct-of-arrays for proc files: name, generator, condition */
-  struct {
+  const struct {
     const char *name;
-    char *(*gen)(cfg_t *, size_t *);
+    char *(*gen)(const cfg_t *, size_t *);
     bool enabled;
   } proc_files[] = {
-      {"meminfo", gen_meminfo, has_mem},
-      {"cpuinfo", gen_cpuinfo, has_cpu},
-      {"stat", gen_stat, has_cpu},
-      {"uptime", gen_uptime, true},
-      {"loadavg", gen_loadavg, true},
+    {"meminfo", gen_meminfo, has_mem},
+    {"cpuinfo", gen_cpuinfo, has_cpu},
+    {"stat", gen_stat, has_cpu},
+    {"uptime", gen_uptime, true},
+    {"loadavg", gen_loadavg, true},
   };
 
   for (size_t i = 0; i < ARRAY_SIZE(proc_files); i++) {
@@ -541,7 +534,7 @@ int virtualize_init(cfg_t *cfg) {
       /* 1. Populate the virtual /sys/devices/system/cpu with masked cpuX dirs.
        * We bind-mount the real allowed cpuN directories into our virtual
        * sysfs base. This preserves all sub-files (cpufreq, topology, etc). */
-      int n = container_cpus(cfg);
+      const int n = container_cpus(cfg);
       for (int i = 0; i < n; i++) {
         char vcpu[PATH_MAX + 32], realcpu[PATH_MAX];
         snprintf(vcpu, sizeof(vcpu), "%s/cpu%d", sysfs_base, i);
@@ -581,13 +574,13 @@ int virtualize_init(cfg_t *cfg) {
   return 0;
 }
 
-void virtualize_update(cfg_t *cfg) {
+void virtualize_update(const cfg_t *cfg) {
   if (cfg->container_pid <= 0)
     return;
 
   /* PID-recycling guard: verify container identity before touching its fs */
   if (cfg->ns_inode) {
-    unsigned long live = get_pid_ns_inode(cfg->container_pid);
+    const unsigned long live = get_pid_ns_inode(cfg->container_pid);
     if (live != cfg->ns_inode) {
       write_monitor_debug_log(cfg->container_name,
                               "[VIRT] update skipped: ns_inode mismatch "
@@ -608,19 +601,19 @@ void virtualize_update(cfg_t *cfg) {
     return;
   }
 
-  bool has_mem = (cfg->memory_limit > 0);
-  bool has_cpu = (cfg->cpu_quota > 0);
+  const bool has_mem = cfg->memory_limit > 0;
+  const bool has_cpu = cfg->cpu_quota > 0;
 
   /* Dynamic files only (cpuinfo is static after boot, skip it) */
-  struct {
+  const struct {
     const char *name;
-    char *(*gen)(cfg_t *, size_t *);
+    char *(*gen)(const cfg_t *, size_t *);
     bool enabled;
   } dyn[] = {
-      {"meminfo", gen_meminfo, has_mem},
-      {"stat", gen_stat, has_cpu},
-      {"uptime", gen_uptime, true},
-      {"loadavg", gen_loadavg, true},
+    {"meminfo", gen_meminfo, has_mem},
+    {"stat", gen_stat, has_cpu},
+    {"uptime", gen_uptime, true},
+    {"loadavg", gen_loadavg, true},
   };
 
   for (size_t i = 0; i < ARRAY_SIZE(dyn); i++) {

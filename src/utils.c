@@ -1,10 +1,3 @@
-/*
- * ds-fork v6 - High-performance Container Runtime
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 #include "asc.h"
 
 /* ---------------------------------------------------------------------------
@@ -22,16 +15,16 @@ bool is_ramfs(const char *path) {
  * UUID generation  - 32 hex chars from /dev/urandom
  * ---------------------------------------------------------------------------*/
 
-int generate_uuid(char *buf, size_t size) {
+int generate_uuid(char *buf, const size_t size) {
   if (!buf || size < UUID_LEN + 1)
     return -1;
 
   unsigned char raw[UUID_LEN / 2];
 
   /* Primary path: /dev/urandom */
-  auto_close int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+  auto_close const int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
   if (fd >= 0) {
-    ssize_t r = read(fd, raw, sizeof(raw));
+    const ssize_t r = read(fd, raw, sizeof(raw));
 
     if (r == (ssize_t)sizeof(raw)) {
       for (int i = 0; i < (int)sizeof(raw); i++)
@@ -48,7 +41,7 @@ int generate_uuid(char *buf, size_t size) {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
 
-    unsigned int seed =
+    const unsigned int seed =
         (unsigned int)(ts.tv_nsec ^ ts.tv_sec ^ getpid() ^ getppid());
 
     srand(seed);
@@ -70,7 +63,7 @@ int generate_uuid(char *buf, size_t size) {
  * ---------------------------------------------------------------------------*/
 
 int parse_os_release(const char *rootfs_path, char *id_out, char *ver_out,
-                     size_t out_size) {
+                     const size_t out_size) {
   char path[PATH_MAX];
   snprintf(path, sizeof(path), "%.4000s" OS_RELEASE, rootfs_path);
 
@@ -125,7 +118,7 @@ int parse_os_release(const char *rootfs_path, char *id_out, char *ver_out,
  * /proc/<pid>/environ reader
  * ---------------------------------------------------------------------------*/
 
-int read_proc_environ(pid_t pid, const char *key, char *value, size_t size) {
+int read_proc_environ(const pid_t pid, const char *key, char *value, const size_t size) {
   if (!key || !value || size == 0 || pid <= 0)
     return -1;
 
@@ -136,7 +129,7 @@ int read_proc_environ(pid_t pid, const char *key, char *value, size_t size) {
   if (!f)
     return -1;
 
-  int keylen = strlen(key);
+  const int keylen = strlen(key);
   int found = -1;
 
   while (1) {
@@ -145,14 +138,14 @@ int read_proc_environ(pid_t pid, const char *key, char *value, size_t size) {
       break;
 
     if (c == key[0]) {
-      long pos = ftell(f);
+      const long pos = ftell(f);
       if (pos < 0)
         break;
       fseek(f, pos - 1, SEEK_SET);
 
       bool matched = true;
       for (int i = 0; i < keylen; i++) {
-        int kc = fgetc(f);
+        const int kc = fgetc(f);
         if (kc != (unsigned char)key[i]) {
           matched = false;
           break;
@@ -161,7 +154,7 @@ int read_proc_environ(pid_t pid, const char *key, char *value, size_t size) {
       if (matched && fgetc(f) == '=') {
         int vi = 0;
         while (vi < (int)size - 1) {
-          int vc = fgetc(f);
+          const int vc = fgetc(f);
           if (vc == EOF || vc == '\0')
             break;
           value[vi++] = (char)vc;
@@ -188,7 +181,7 @@ int read_proc_environ(pid_t pid, const char *key, char *value, size_t size) {
  * openat(O_NOFOLLOW), failing if any intermediate path is a symlink.
  * ---------------------------------------------------------------------------*/
 
-int safe_openat_proc(pid_t pid, const char *subpath, int flags, mode_t mode) {
+int safe_openat_proc(const pid_t pid, const char *subpath, const int flags, const mode_t mode) {
   if (pid <= 0 || !subpath || subpath[0] == '\0')
     return -1;
 
@@ -206,11 +199,11 @@ int safe_openat_proc(pid_t pid, const char *subpath, int flags, mode_t mode) {
   safe_strncpy(tmp, subpath, sizeof(tmp));
 
   char *save = nullptr;
-  char *comp = strtok_r(tmp, "/", &save);
-  char *next = strtok_r(nullptr, "/", &save);
+  const char *comp = strtok_r(tmp, "/", &save);
+  const char *next = strtok_r(nullptr, "/", &save);
 
   while (comp && next) {
-    int nextfd =
+    const int nextfd =
         openat(dirfd, comp, O_PATH | O_NOFOLLOW | O_DIRECTORY | O_CLOEXEC);
     close(dirfd);
     if (nextfd < 0)
@@ -254,22 +247,22 @@ int safe_openat_proc(pid_t pid, const char *subpath, int flags, mode_t mode) {
  * Returns the length of the rebuilt string (0 = only entry, do not write).
  */
 static int fw_remove_token(const char *buf, const char *token, char *out,
-                           size_t out_size) {
-  size_t token_len = strlen(token);
+                           const size_t out_size) {
+  const size_t token_len = strlen(token);
   const char *p = buf;
   bool first = true;
   out[0] = '\0';
 
   while (*p) {
     const char *comma = strchr(p, ',');
-    size_t seg_len = comma ? (size_t)(comma - p) : strlen(p);
+    const size_t seg_len = comma ? (size_t)(comma - p) : strlen(p);
 
     if (!(seg_len == token_len && memcmp(p, token, token_len) == 0)) {
       /* Not our token - keep it */
       if (!first)
         strncat(out, ",", out_size - strlen(out) - 1);
       strncat(out, p,
-              (seg_len < out_size - strlen(out) - 1)
+              seg_len < out_size - strlen(out) - 1
                   ? seg_len
                   : out_size - strlen(out) - 1);
       first = false;
@@ -295,11 +288,11 @@ void firmware_path_add(const char *fw_path) {
   read_file(FW_PATH_FILE, current, sizeof(current));
 
   /* Idempotent - don't add if already present as an exact token. */
-  size_t fw_len = strlen(fw_path);
+  const size_t fw_len = strlen(fw_path);
   const char *p = current;
   while (*p) {
     const char *comma = strchr(p, ',');
-    size_t seg_len = comma ? (size_t)(comma - p) : strlen(p);
+    const size_t seg_len = comma ? (size_t)(comma - p) : strlen(p);
     if (seg_len == fw_len && memcmp(p, fw_path, fw_len) == 0)
       return; /* already there */
     if (!comma)
@@ -312,7 +305,7 @@ void firmware_path_add(const char *fw_path) {
    * Pre-validate lengths so the compiler can confirm no truncation occurs. */
   char new_path[FW_PATH_BUF_SIZE] = {0};
   if (current[0]) {
-    size_t needed =
+    const size_t needed =
         strlen(fw_path) + 1 /* comma */ + strlen(current) + 1 /* NUL */;
     if (needed > sizeof(new_path)) {
       log_warn("[FW] firmware path too long to prepend '%s' - skipping",
@@ -338,7 +331,7 @@ void firmware_path_remove(const char *fw_path) {
     return;
 
   char new_path[FW_PATH_BUF_SIZE] = {0};
-  int new_len = fw_remove_token(current, fw_path, new_path, sizeof(new_path));
+  const int new_len = fw_remove_token(current, fw_path, new_path, sizeof(new_path));
 
   if (new_len == 0) {
     /* Our path was the only entry.  The Android kernel never allows a full
@@ -355,14 +348,14 @@ void firmware_path_remove(const char *fw_path) {
  * Safe Command Execution (fork + execvp)
  * ---------------------------------------------------------------------------*/
 
-static int internal_run(char *const argv[], bool quiet) {
-  pid_t pid = fork();
+static int internal_run(char *const argv[], const bool quiet) {
+  const pid_t pid = fork();
   if (pid < 0)
     return -1;
 
   if (pid == 0) {
     if (quiet) {
-      auto_close int devnull = open("/dev/null", O_RDWR);
+      auto_close const int devnull = open("/dev/null", O_RDWR);
       if (devnull >= 0) {
         dup2(devnull, 1);
         dup2(devnull, 2);
@@ -381,7 +374,9 @@ static int internal_run(char *const argv[], bool quiet) {
   return -1;
 }
 
-int run_command_quiet(char *const argv[]) { return internal_run(argv, true); }
+int run_command_quiet(char *const argv[]) {
+  return internal_run(argv, true);
+}
 
 /* ---------------------------------------------------------------------------
  * System helpers
@@ -424,7 +419,7 @@ int get_kernel_version(int *major, int *minor) {
  *   RAM_TOTAL_KB=<kb>
  *   CPU_PERMILL=<0-1000>
  * ---------------------------------------------------------------------------*/
-long get_container_uptime(pid_t pid) {
+long get_container_uptime(const pid_t pid) {
   if (pid <= 0)
     return -1;
 
@@ -458,21 +453,21 @@ long get_container_uptime(pid_t pid) {
     double host_uptime_sec = 0.0;
     if (fscanf(f, "%lf", &host_uptime_sec) != 1)
       host_uptime_sec = 0.0;
-    long uptime_sec = (long)(host_uptime_sec - (double)start_ticks / (double)clk_tck);
-    return (uptime_sec < 0) ? 0 : uptime_sec;
+    const long uptime_sec = (long)(host_uptime_sec - (double)start_ticks / (double)clk_tck);
+    return uptime_sec < 0 ? 0 : uptime_sec;
   }
 }
 
-void format_uptime(long uptime_sec, char *buf, size_t size) {
+void format_uptime(const long uptime_sec, char *buf, const size_t size) {
   if (uptime_sec < 0) {
     safe_strncpy(buf, "unknown", size);
     return;
   }
 
-  int days = uptime_sec / 86400;
-  int hours = (uptime_sec % 86400) / 3600;
-  int mins = (uptime_sec % 3600) / 60;
-  int secs = uptime_sec % 60;
+  const int days = uptime_sec / 86400;
+  const int hours = uptime_sec % 86400 / 3600;
+  const int mins = uptime_sec % 3600 / 60;
+  const int secs = uptime_sec % 60;
 
   char tmp[128] = {0};
   int pos = 0;
@@ -499,7 +494,7 @@ int show_container_usage(cfg_t *cfg) {
   /* -----------------------------------------------------------------------
    * UPTIME
    * -----------------------------------------------------------------------*/
-  long uptime_sec = get_container_uptime(pid);
+  const long uptime_sec = get_container_uptime(pid);
   char uptime_str[128];
   format_uptime(uptime_sec, uptime_str, sizeof(uptime_str));
 
@@ -509,7 +504,7 @@ int show_container_usage(cfg_t *cfg) {
   char ns_init_path[PATH_MAX];
   snprintf(ns_init_path, sizeof(ns_init_path), "/proc/%d/ns/pid", (int)pid);
   char container_ns[256] = {0};
-  ssize_t ns_len =
+  const ssize_t ns_len =
       readlink(ns_init_path, container_ns, sizeof(container_ns) - 1);
   if (ns_len <= 0) {
     log_error("Failed to read PID namespace of container init: %s",
@@ -539,7 +534,7 @@ int show_container_usage(cfg_t *cfg) {
     char ns_path[PATH_MAX];
     snprintf(ns_path, sizeof(ns_path), "/proc/%s/ns/pid", de->d_name);
     char ns_buf[256] = {0};
-    ssize_t r = readlink(ns_path, ns_buf, sizeof(ns_buf) - 1);
+    const ssize_t r = readlink(ns_path, ns_buf, sizeof(ns_buf) - 1);
     if (r <= 0)
       continue;
     ns_buf[r] = '\0';
@@ -605,7 +600,7 @@ int show_container_usage(cfg_t *cfg) {
   /* 250ms measurement window - short enough for a responsive UI,
    * long enough for a meaningful CPU delta (1 jiffie = 10ms at HZ=100,
    * so 250ms gives 25-jiffie resolution = ~0.4% minimum granularity). */
-  struct timespec ts = {0, 250000000L};
+  const struct timespec ts = {0, 250000000L};
   nanosleep(&ts, nullptr);
 
   /* -----------------------------------------------------------------------
@@ -623,7 +618,7 @@ int show_container_usage(cfg_t *cfg) {
         char ns_path[PATH_MAX];
         snprintf(ns_path, sizeof(ns_path), "/proc/%s/ns/pid", de->d_name);
         char ns_buf[256] = {0};
-        ssize_t r = readlink(ns_path, ns_buf, sizeof(ns_buf) - 1);
+        const ssize_t r = readlink(ns_path, ns_buf, sizeof(ns_buf) - 1);
         if (r <= 0)
           continue;
         ns_buf[r] = '\0';
@@ -656,11 +651,11 @@ int show_container_usage(cfg_t *cfg) {
   }
 
   long long delta_container = cpu_t2 - cpu_t1;
-  long long delta_host = cpu_host_t2 - cpu_host_t1;
+  const long long delta_host = cpu_host_t2 - cpu_host_t1;
   if (delta_container < 0)
     delta_container = 0;
   long cpu_permill =
-      (delta_host > 0) ? (long)(delta_container * 1000 / delta_host) : 0;
+      delta_host > 0 ? (long)(delta_container * 1000 / delta_host) : 0;
   if (cpu_permill > 1000)
     cpu_permill = 1000;
 
@@ -681,8 +676,8 @@ int show_container_usage(cfg_t *cfg) {
  * ---------------------------------------------------------------------------*/
 
 static int compare_bind_mounts(const void *a, const void *b) {
-  const struct bind_mount *ma = (const struct bind_mount *)a;
-  const struct bind_mount *mb = (const struct bind_mount *)b;
+  const struct bind_mount *ma = a;
+  const struct bind_mount *mb = b;
   return strcmp(ma->dest, mb->dest);
 }
 
@@ -701,12 +696,12 @@ int validate_container_name(const char *name) {
   if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
     return 0;
 
-  size_t len = strlen(name);
+  const size_t len = strlen(name);
   if (len >= 256)
     return 0;
 
   for (size_t i = 0; i < len; i++) {
-    unsigned char c = (unsigned char)name[i];
+    const unsigned char c = (unsigned char)name[i];
     if (!(isalnum(c) || c == '.' || c == '_' || c == '-' || c == ' '))
       return 0;
   }
@@ -738,7 +733,7 @@ int validate_bind_destination(const char *dest) {
     const char *start = p;
     while (*p && *p != '/')
       p++;
-    size_t len = (size_t)(p - start);
+    const size_t len = (size_t)(p - start);
     if (len == 0)
       continue;
     if ((len == 1 && start[0] == '.') ||
@@ -768,7 +763,7 @@ int count_folders(const char *path) {
   if (!dir)
     return 0;
 
-  size_t base_len = strlen(path);
+  const size_t base_len = strlen(path);
 
   while ((entry = readdir(dir)) != nullptr) {
 
@@ -790,10 +785,11 @@ int count_folders(const char *path) {
 
 /* Validate each comma-separated name in optarg; store raw value in out_buf. */
 int parse_and_validate_names(const char *arg, char *out_buf,
-                             size_t out_size) {
+                             const size_t out_size) {
   char tmp[4096];
   snprintf(tmp, sizeof(tmp), "%s", arg);
-  char *sp, *tok = strtok_r(tmp, ",", &sp);
+  char *sp;
+  const char *tok = strtok_r(tmp, ",", &sp);
   while (tok) {
     if (reject_container_name(tok) < 0)
       return -1;
@@ -814,7 +810,8 @@ int multi_stop(const char *raw_names) {
   char tmp[4096];
   snprintf(tmp, sizeof(tmp), "%s", raw_names);
   int ret = 0;
-  char *sp, *tok = strtok_r(tmp, ",", &sp);
+  char *sp;
+  const char *tok = strtok_r(tmp, ",", &sp);
   while (tok) {
     cfg_t c;
     init_iter_cfg(&c, nullptr);

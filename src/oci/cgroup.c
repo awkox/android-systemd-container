@@ -1,10 +1,3 @@
-/*
- * ds-fork v6 - High-performance Container Runtime
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 #include "asc.h"
 
 /**
@@ -58,15 +51,15 @@ bool cgroup_host_is_v2(void) {
 }
 
 /* Returns 1 if the kernel supports cgroup2 (check /proc/filesystems). */
-bool cgroup_kernel_supports_v2(void) {
-  return (grep_file("/proc/filesystems", "cgroup2") > 0);
+static bool cgroup_kernel_supports_v2(void) {
+  return grep_file("/proc/filesystems", "cgroup2") > 0;
 }
 
 /* Mount cgroup2 on /sys/fs/cgroup if the host hasn't done so.
  * Android recovery kernels support cgroup2 but only mount it at /dev/cg2_bpf;
  * systemd needs it at /sys/fs/cgroup. Sequence: mkdir -> tmpfs anchor ->
  * cgroup2. */
-void cgroup_host_bootstrap(bool force_cgroupv1) {
+void cgroup_host_bootstrap(const bool force_cgroupv1) {
   struct statfs sfs;
   if (force_cgroupv1)
     return;
@@ -132,7 +125,7 @@ static void mount_v1_controllers(void) {
   if (!f)
     return;
 
-  unsigned long flags = MS_NOSUID | MS_NODEV | MS_NOEXEC;
+  constexpr unsigned long flags = MS_NOSUID | MS_NODEV | MS_NOEXEC;
   char line[256];
   if (!fgets(line, sizeof(line), f)) { /* skip header */
     return;
@@ -166,7 +159,7 @@ static void mount_v1_controllers(void) {
   }
 }
 
-int setup_cgroups(bool force_cgroupv1) {
+int setup_cgroups(const bool force_cgroupv1) {
   cgroup_host_bootstrap(force_cgroupv1);
 
   if (access("sys/fs/cgroup", F_OK) != 0) {
@@ -179,7 +172,7 @@ int setup_cgroups(bool force_cgroupv1) {
               MS_NOSUID | MS_NODEV | MS_NOEXEC, "mode=755,size=16M") < 0)
     return -1;
 
-  bool v2_active = cgroup_host_is_v2() && !force_cgroupv1;
+  const bool v2_active = cgroup_host_is_v2() && !force_cgroupv1;
   bool systemd_setup_done = false;
 
   if (v2_active) {
@@ -194,12 +187,9 @@ int setup_cgroups(bool force_cgroupv1) {
   } else {
     /* V1 PATH (force_cgroupv1): Synthesize fresh mounts for all controllers. */
     mount_v1_controllers();
-    systemd_setup_done = true; /* handled via systemd named cgroup below */
-  }
 
-  /* Ensure a systemd cgroup hierarchy exists for systemd containers.
-   * On v1 this is a named cgroup; on v2 systemd uses the unified root. */
-  if (!v2_active) {
+    /* Ensure a systemd cgroup hierarchy exists for systemd containers.
+     * On v1 this is a named cgroup; on v2 systemd uses the unified root. */
     if (access("sys/fs/cgroup/systemd", F_OK) != 0) {
       mkdir("sys/fs/cgroup/systemd", 0755);
       if (mount("cgroup", "sys/fs/cgroup/systemd", "cgroup",
@@ -276,7 +266,7 @@ static void rmdir_cgroup_tree(const char *path) {
   safe_strncpy(kill_path, path, sizeof(kill_path));
   strncat(kill_path, "/cgroup.kill", sizeof(kill_path) - strlen(kill_path) - 1);
   if (access(kill_path, W_OK) == 0) {
-    auto_close int kfd = open(kill_path, O_WRONLY | O_CLOEXEC);
+    auto_close const int kfd = open(kill_path, O_WRONLY | O_CLOEXEC);
     if (kfd >= 0) {
       if (write(kfd, "1", 1) < 0) {
       }
@@ -342,8 +332,8 @@ void cgroup_cleanup_container(const char *container_name) {
   }
 }
 
-void print_cgroup_status(cfg_t *cfg) {
-  bool limits_set = (cfg->memory_limit || cfg->cpu_quota || cfg->pids_limit);
+void print_cgroup_status(const cfg_t *cfg) {
+  const bool limits_set = cfg->memory_limit || cfg->cpu_quota || cfg->pids_limit;
 
   if (cfg->force_cgroupv1) {
     log_warn("Using legacy Cgroup V1 hierarchy (forced by --force-cgroupv1)");
@@ -354,7 +344,7 @@ void print_cgroup_status(cfg_t *cfg) {
     return;
   }
 
-  bool host_supports_v2 = cgroup_kernel_supports_v2();
+  const bool host_supports_v2 = cgroup_kernel_supports_v2();
 
   if (!host_supports_v2) {
     log_warn("Host does not support Cgroup V2 (falling back to legacy V1)");
@@ -369,7 +359,7 @@ void print_cgroup_status(cfg_t *cfg) {
 /* Returns 1 if 'name' appears in a space/newline-separated controller list. */
 static bool ctrl_in_list(const char *list, const char *name) {
   const char *p = list;
-  size_t nlen = strlen(name);
+  const size_t nlen = strlen(name);
   while (*p) {
     while (*p == ' ' || *p == '\n')
       p++;
@@ -406,7 +396,7 @@ static long long parse_cgroup_ll(const char *buf) {
     return -1; /* unlimited */
   char *end;
   errno = 0;
-  long long v = strtoll(buf, &end, 10);
+  const long long v = strtoll(buf, &end, 10);
   if (errno || end == buf)
     return -1;
   return v;
@@ -456,7 +446,7 @@ int cgroup_apply_limits(cfg_t *cfg) {
   }
   if (cfg->cpu_quota) {
     if (ctrl_supported_v2(cg, "cpu")) {
-      long long period = cfg->cpu_period > 0 ? cfg->cpu_period : 100000;
+      const long long period = cfg->cpu_period > 0 ? cfg->cpu_period : 100000;
       snprintf(path, sizeof(path), "%s/cpu.max", cg);
       snprintf(val, sizeof(val), "%lld %lld", cfg->cpu_quota, period);
       if (write_file(path, val) < 0) {
@@ -486,7 +476,7 @@ int cgroup_apply_limits(cfg_t *cfg) {
   return err ? -1 : 0;
 }
 
-int cgroup_get_usage(cfg_t *cfg, long long *mem, long long *cpu_us,
+int cgroup_get_usage(const cfg_t *cfg, long long *mem, long long *cpu_us,
                      long long *pids) {
   if (mem)
     *mem = -1;
@@ -498,7 +488,7 @@ int cgroup_get_usage(cfg_t *cfg, long long *mem, long long *cpu_us,
   char safe_name[256];
   sanitize_container_name(cfg->container_name, safe_name, sizeof(safe_name));
 
-  bool v2 = cgroup_host_is_v2();
+  const bool v2 = cgroup_host_is_v2();
   /* Keep cg strictly within PATH_MAX-64 so the suffix appended
    * into path never overflows the PATH_MAX+64 path buffer. */
   char cg[PATH_MAX - 64];
@@ -518,7 +508,7 @@ int cgroup_get_usage(cfg_t *cfg, long long *mem, long long *cpu_us,
     if (cpu_us) {
       snprintf(path, sizeof(path), "%s/cpu.stat", cg);
       if (read_file(path, buf, sizeof(buf)) > 0) {
-        char *p = strstr(buf, "usage_usec ");
+        const char *p = strstr(buf, "usage_usec ");
         if (p)
           *cpu_us = parse_cgroup_ll(p + 11);
       }

@@ -1,17 +1,6 @@
-/*
- * ds-fork v6 - High-performance Container Runtime
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 #include "asc.h"
 
-/* ---------------------------------------------------------------------------
- * Console Monitor Loop
- * ---------------------------------------------------------------------------*/
-
-int console_monitor_loop(int master_fd, pid_t monitor_pid, cfg_t *cfg) {
+int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
   auto_close int epfd = -1, sfd = -1;
   sigset_t mask;
   struct signalfd_siginfo fdsi;
@@ -57,8 +46,8 @@ int console_monitor_loop(int master_fd, pid_t monitor_pid, cfg_t *cfg) {
 
   /* 2. Watch PTY master (IN + HUP/ERR; OUT added only when pending data) */
   ev.events = EPOLLIN | EPOLLHUP | EPOLLERR;
-  ev.data.fd = master_fd;
-  if (epoll_ctl(epfd, EPOLL_CTL_ADD, master_fd, &ev) < 0)
+  ev.data.fd = console_master_fd;
+  if (epoll_ctl(epfd, EPOLL_CTL_ADD, console_master_fd, &ev) < 0)
     log_warn("epoll_ctl(master_fd) failed: %s", strerror(errno));
 
   /* 3. Watch signalfd */
@@ -69,9 +58,9 @@ int console_monitor_loop(int master_fd, pid_t monitor_pid, cfg_t *cfg) {
 
   /* Make PTY master non-blocking — the foundation of the backpressure fix */
   {
-    int fl = fcntl(master_fd, F_GETFL);
+    int fl = fcntl(console_master_fd, F_GETFL);
     if (fl >= 0)
-      fcntl(master_fd, F_SETFL, fl | O_NONBLOCK);
+      fcntl(console_master_fd, F_SETFL, fl | O_NONBLOCK);
   }
 
   /* Set terminal to raw mode */
@@ -82,7 +71,7 @@ int console_monitor_loop(int master_fd, pid_t monitor_pid, cfg_t *cfg) {
   if (is_tty == 0) {
     struct winsize ws;
     if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
-      ioctl(master_fd, TIOCSWINSZ, &ws);
+      ioctl(console_master_fd, TIOCSWINSZ, &ws);
   }
 
   bool running = true;
@@ -122,23 +111,23 @@ int console_monitor_loop(int master_fd, pid_t monitor_pid, cfg_t *cfg) {
           /* Write to master_fd.  If the PTY buffer is full (container not
            * reading), buffer the data and register EPOLLOUT. */
           if (pending.fd < 0) {
-            ssize_t w = write(master_fd, buf, (size_t)n);
+            ssize_t w = write(console_master_fd, buf, (size_t)n);
             if (w >= 0 && (size_t)w < (size_t)n) {
-              pending.fd = master_fd;
+              pending.fd = console_master_fd;
               pending.len = (size_t)n - (size_t)w;
               pending.off = 0;
               memcpy(pending.data, buf + w, pending.len);
               ev.events = EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLERR;
-              ev.data.fd = master_fd;
-              epoll_ctl(epfd, EPOLL_CTL_MOD, master_fd, &ev);
+              ev.data.fd = console_master_fd;
+              epoll_ctl(epfd, EPOLL_CTL_MOD, console_master_fd, &ev);
             } else if (w < 0 && errno == EAGAIN) {
-              pending.fd = master_fd;
+              pending.fd = console_master_fd;
               pending.len = (size_t)n;
               pending.off = 0;
               memcpy(pending.data, buf, pending.len);
               ev.events = EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLERR;
-              ev.data.fd = master_fd;
-              epoll_ctl(epfd, EPOLL_CTL_MOD, master_fd, &ev);
+              ev.data.fd = console_master_fd;
+              epoll_ctl(epfd, EPOLL_CTL_MOD, console_master_fd, &ev);
             } else if (w < 0) {
               running = false;
               break;
@@ -148,15 +137,15 @@ int console_monitor_loop(int master_fd, pid_t monitor_pid, cfg_t *cfg) {
              * is not consuming fast enough. */
           }
         }
-      } else if (fd == master_fd) {
+      } else if (fd == console_master_fd) {
         if (events[i].events & (EPOLLHUP | EPOLLERR)) {
           running = false;
           break;
         }
 
         /* Drain pending writes first (EPOLLOUT) */
-        if (events[i].events & EPOLLOUT && pending.fd == master_fd) {
-          ssize_t w = write(master_fd, pending.data + pending.off, pending.len);
+        if (events[i].events & EPOLLOUT && pending.fd == console_master_fd) {
+          ssize_t w = write(console_master_fd, pending.data + pending.off, pending.len);
           if (w > 0) {
             pending.off += (size_t)w;
             pending.len -= (size_t)w;
@@ -164,14 +153,14 @@ int console_monitor_loop(int master_fd, pid_t monitor_pid, cfg_t *cfg) {
           if (pending.len == 0 || (w < 0 && errno != EAGAIN)) {
             pending.fd = -1;
             ev.events = EPOLLIN | EPOLLHUP | EPOLLERR;
-            ev.data.fd = master_fd;
-            epoll_ctl(epfd, EPOLL_CTL_MOD, master_fd, &ev);
+            ev.data.fd = console_master_fd;
+            epoll_ctl(epfd, EPOLL_CTL_MOD, console_master_fd, &ev);
           }
         }
 
         /* Container output -> User stdout (EPOLLIN) */
         if (events[i].events & EPOLLIN) {
-          n = read(master_fd, buf, sizeof(buf));
+          n = read(console_master_fd, buf, sizeof(buf));
           if (n > 0) {
             [[maybe_unused]] ssize_t w = write(STDOUT_FILENO, buf, (size_t)n);
             /* best-effort; partial is fine */
@@ -194,7 +183,7 @@ int console_monitor_loop(int master_fd, pid_t monitor_pid, cfg_t *cfg) {
         } else if (fdsi.ssi_signo == SIGWINCH) {
           struct winsize ws;
           if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
-            ioctl(master_fd, TIOCSWINSZ, &ws);
+            ioctl(console_master_fd, TIOCSWINSZ, &ws);
         } else if (fdsi.ssi_signo == SIGINT || fdsi.ssi_signo == SIGTERM) {
           pid_t live_pid = find_container_init_pid(cfg->uuid);
           if (live_pid > 0)

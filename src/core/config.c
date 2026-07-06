@@ -1,18 +1,10 @@
-/*
- * ds-fork v6 - High-performance Container Runtime
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 #include "asc.h"
 
 /* Forward declarations */
 static void add_unknown_line(cfg_t *cfg, const char *line);
-
-/* ---------------------------------------------------------------------------
- * Helpers
- * ---------------------------------------------------------------------------*/
+static int config_add_bind(cfg_t *cfg, const char *src, const char *dest,
+                           const bool ro);
+static void free_config_unknown_lines(cfg_t *cfg);
 
 static char *trim_whitespace(char *str) {
   while (isspace((unsigned char)*str))
@@ -49,13 +41,13 @@ static long long parse_ll_positive(const char *val) {
     return -1;
   char *end;
   errno = 0;
-  long long v = strtoll(val, &end, 10);
+  const long long v = strtoll(val, &end, 10);
   if (errno || end == val || *end != '\0' || v <= 0)
     return -1;
   return v;
 }
 
-void parse_privileged(const char *value, cfg_t *cfg) {
+static void parse_privileged(const char *value, cfg_t *cfg) {
   if (!value)
     return;
 
@@ -69,7 +61,7 @@ void parse_privileged(const char *value, cfg_t *cfg) {
   char *token = strtok_r(copy, ",", &saveptr);
 
   while (token) {
-    char *t = trim_whitespace(token);
+    const char *t = trim_whitespace(token);
     if (strcasecmp(t, "nomask") == 0)
       cfg->privileged_mask |= PRIV_NOMASK;
     else if (strcasecmp(t, "nocaps") == 0)
@@ -101,7 +93,6 @@ static void parse_bind_mounts(const char *value, cfg_t *cfg) {
     char *sep = strchr(token, ':');
     if (sep) {
       *sep = '\0';
-      const char *src_raw = trim_whitespace(token);
       char *rest = sep + 1;
 
       /* Check for optional :ro suffix after dest */
@@ -111,8 +102,9 @@ static void parse_bind_mounts(const char *value, cfg_t *cfg) {
         *flag_sep = '\0';
         ro = strcmp(trim_whitespace(flag_sep + 1), "ro") == 0;
       }
-      const char *dest_raw = trim_whitespace(rest);
 
+      const char *src_raw = trim_whitespace(token);
+      const char *dest_raw = trim_whitespace(rest);
       auto_free char *src_exp = resolve_path_arg(src_raw);
       auto_free char *dest_exp = resolve_path_arg(dest_raw);
       const char *src = src_exp ? src_exp : src_raw;
@@ -129,8 +121,8 @@ static void parse_bind_mounts(const char *value, cfg_t *cfg) {
   }
 }
 
-int config_add_bind(cfg_t *cfg, const char *src, const char *dest,
-                    bool ro) {
+static int config_add_bind(cfg_t *cfg, const char *src, const char *dest,
+                    const bool ro) {
   if (!src || !dest || src[0] == '\0' || dest[0] == '\0')
     return 0;
   /* Defensive: callers must pre-validate; this is a last-resort assert */
@@ -147,7 +139,7 @@ int config_add_bind(cfg_t *cfg, const char *src, const char *dest,
 
   /* Grow the array if needed */
   if (cfg->bind_count >= cfg->bind_capacity) {
-    int old_cap = cfg->bind_capacity;
+    const int old_cap = cfg->bind_capacity;
     int new_cap;
 
     if (old_cap == 0) {
@@ -160,7 +152,7 @@ int config_add_bind(cfg_t *cfg, const char *src, const char *dest,
     }
 
     /* Check allocation size won't overflow */
-    size_t alloc_size = (size_t)new_cap * sizeof(*cfg->binds);
+    const size_t alloc_size = (size_t)new_cap * sizeof(*cfg->binds);
     if (alloc_size / sizeof(*cfg->binds) != (size_t)new_cap)
       return -1;
 
@@ -195,7 +187,6 @@ int config_add_bind(cfg_t *cfg, const char *src, const char *dest,
  */
 
 void free_config_binds(cfg_t *cfg) {
-
   if (!cfg->binds)
     return;
   free(cfg->binds);
@@ -203,10 +194,6 @@ void free_config_binds(cfg_t *cfg) {
   cfg->bind_count = 0;
   cfg->bind_capacity = 0;
 }
-
-/* ---------------------------------------------------------------------------
- * Core Implementation
- * ---------------------------------------------------------------------------*/
 
 int config_load(const char *config_path, cfg_t *cfg) {
   auto_fclose FILE *f = fopen(config_path, "re");
@@ -239,8 +226,8 @@ int config_load(const char *config_path, cfg_t *cfg) {
     }
 
     *equals = '\0';
-    char *key = trim_whitespace(trimmed);
-    char *val = trim_whitespace(equals + 1);
+    const char *key = trim_whitespace(trimmed);
+    const char *val = trim_whitespace(equals + 1);
 
     if (strcmp(key, "name") == 0) {
       if (validate_container_name(val))
@@ -262,25 +249,25 @@ int config_load(const char *config_path, cfg_t *cfg) {
     } else if (strcmp(key, "block_nested_ns") == 0) {
       cfg->block_nested_ns = parse_bool(val);
     } else if (strcmp(key, "memory_limit") == 0) {
-      long long v = parse_ll_positive(val);
+      const long long v = parse_ll_positive(val);
       if (v > 0)
         cfg->memory_limit = v;
       else
         log_warn("config: ignoring invalid memory_limit '%s'", val);
     } else if (strcmp(key, "cpu_quota") == 0) {
-      long long v = parse_ll_positive(val);
+      const long long v = parse_ll_positive(val);
       if (v > 0)
         cfg->cpu_quota = v;
       else
         log_warn("config: ignoring invalid cpu_quota '%s'", val);
     } else if (strcmp(key, "cpu_period") == 0) {
-      long long v = parse_ll_positive(val);
+      const long long v = parse_ll_positive(val);
       if (v > 0)
         cfg->cpu_period = v;
       else
         log_warn("config: ignoring invalid cpu_period '%s'", val);
     } else if (strcmp(key, "pids_limit") == 0) {
-      long long v = parse_ll_positive(val);
+      const long long v = parse_ll_positive(val);
       if (v > 0)
         cfg->pids_limit = v;
       else
@@ -326,7 +313,7 @@ static void add_unknown_line(cfg_t *cfg, const char *line) {
   }
 }
 
-void free_config_unknown_lines(cfg_t *cfg) {
+static void free_config_unknown_lines(cfg_t *cfg) {
   struct config_line *curr = cfg->unknown_head;
   while (curr) {
     struct config_line *next = curr->next;
@@ -373,10 +360,10 @@ static void config_serialize_known(FILE *f, cfg_t *cfg) {
 
   if (cfg->privileged_mask > 0) {
     fprintf(f, "privileged=");
-    bool first = true;
     if (cfg->privileged_mask == PRIV_FULL) {
       fprintf(f, "full");
     } else {
+      bool first = true;
       if (cfg->privileged_mask & PRIV_NOMASK) {
         fprintf(f, "%snomask", first ? "" : ",");
         first = false;
@@ -419,7 +406,7 @@ static void config_serialize_known(FILE *f, cfg_t *cfg) {
       fprintf(f, "%s:%s%s%s", abs_src ? abs_src : cfg->binds[i].src,
               abs_dest ? abs_dest : cfg->binds[i].dest,
               cfg->binds[i].ro ? ":ro" : "",
-              (i < cfg->bind_count - 1) ? "," : "");
+              i < cfg->bind_count - 1 ? "," : "");
     }
     fprintf(f, "\n");
   }
@@ -431,15 +418,15 @@ int config_save(const char *config_path, cfg_t *cfg) {
 
   /* Compare new config with existing disk configuration to avoid redundant
    * writes */
-  cfg_t disk_cfg = {0};
   struct stat st;
   if (stat(config_path, &st) == 0) {
+    cfg_t disk_cfg = {};
     if (config_load(config_path, &disk_cfg) == 0) {
       sort_bind_mounts(&disk_cfg);
 
       auto_free char *buf_cfg = nullptr;
-      size_t size_cfg = 0;
       auto_free char *buf_disk = nullptr;
+      size_t size_cfg = 0;
       size_t size_disk = 0;
       auto_fclose FILE *f_cfg = open_memstream(&buf_cfg, &size_cfg);
       auto_fclose FILE *f_disk = open_memstream(&buf_disk, &size_disk);
@@ -542,7 +529,9 @@ int config_save_by_name(const char *name, cfg_t *cfg) {
 
   char container_dir[PATH_MAX];
   snprintf(container_dir, sizeof(container_dir),
-           "%s/" RUNTIME_CONFIG_SUBDIR "/%s", get_runtime_dir(), safe_name);
+           "%s/" RUNTIME_CONFIG_SUBDIR "/%s",
+           get_runtime_dir(), safe_name);
+
   mkdir_p(container_dir, 0755);
 
   char config_path[PATH_MAX];

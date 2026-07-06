@@ -1,17 +1,10 @@
-/*
- * ds-fork v6 - High-performance Container Runtime
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 #include "asc.h"
 
-int internal_boot(cfg_t *cfg) {
+void internal_boot(cfg_t *cfg) {
   /* Defensive check: ensure configuration is valid */
   if (!cfg) {
     log_error("internal_boot received NULL configuration.");
-    return -1;
+    return;
   }
 
   /* Pre-open the container log file before namespace isolation / pivot_root.
@@ -199,7 +192,7 @@ int internal_boot(cfg_t *cfg) {
    * foreground mode + systemd (where we used pinned sub-mounts) or if
    * hw_access is disabled entirely. In background mode or non-systemd
    * hw_access mode, we leave /sys RW. */
-  if (!cfg->hw_access || (cfg->foreground)) {
+  if (!cfg->hw_access || cfg->foreground) {
     if (mount(nullptr, "sys", nullptr, MS_REMOUNT | MS_BIND | MS_RDONLY, nullptr) < 0) {
       log_warn("Failed to remount /sys as read-only: %s", strerror(errno));
     }
@@ -323,8 +316,7 @@ int internal_boot(cfg_t *cfg) {
   /* Legacy compatibility: write version to the marker directory root */
   write_file(FORK_MARKER "/version", PROJECT_VERSION);
   if (cfg->foreground) {
-    printf(C_BOLD C_WHITE "\r\n(to exit from the foreground mode, press "
-                          "CTRL+ALT+Q)\r\n" C_RESET);
+    printf("\r\n(to exit from the foreground mode, press CTRL+ALT+Q)\r\n");
     fflush(stdout);
   }
   printf("\r\n");
@@ -359,7 +351,7 @@ int internal_boot(cfg_t *cfg) {
   apply_capability_hardening(cfg->hw_access, cfg->privileged_mask);
 
   /* 21. Redirect standard I/O to /dev/console */
-  int console_fd = open("/dev/console", O_RDWR);
+  const int console_fd = open("/dev/console", O_RDWR);
   if (console_fd >= 0) {
     if (terminal_set_stdfds(console_fd) < 0) {
       log_warn("Failed to redirect stdio to /dev/console");
@@ -430,5 +422,4 @@ int internal_boot(cfg_t *cfg) {
 
 boot_fail:
   close_container_log();
-  return -1;
 }

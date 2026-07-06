@@ -1,10 +1,3 @@
-/*
- * ds-fork v6 - High-performance Container Runtime
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 #include "asc.h"
 
 /* ---------------------------------------------------------------------------
@@ -55,8 +48,8 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
    * CGROUP SELECTION: Only enable cgroupns when V2 is active.
    * If --force-cgroupv1 is set, we skip cgroupns so setup_cgroups()
    * has full rights to create named V1 hierarchies from the host context. */
-  bool cg_ns_ok = (access("/proc/self/ns/cgroup", F_OK) == 0) &&
-                 (cgroup_host_is_v2() && !cfg->force_cgroupv1);
+  bool cg_ns_ok = access("/proc/self/ns/cgroup", F_OK) == 0 &&
+                 cgroup_host_is_v2() && !cfg->force_cgroupv1;
   if (cg_ns_ok) {
     /* To get isolation from a cgroup namespace, we must be in a sub-cgroup
      * BEFORE we unshare. If we are in the root '/', the namespace root
@@ -219,7 +212,8 @@ reboot_loop:;
     if (init_pid == 0) {
       /* CONTAINER INIT (PID 1 inside namespace) */
       close(sync_pipe[1]);
-      _exit(internal_boot(cfg));
+      internal_boot(cfg);
+      _exit(-1); // fail
     }
 
     /* Intermediate: redirect stdio to /dev/null NOW (after forking init).
@@ -386,9 +380,7 @@ reboot_loop:;
     }
 
     if (cfg->foreground) {
-      printf("\n" C_WHITE PROJECT_NAME " " PROJECT_VERSION " : "
-             "Container " C_GREEN "%s" C_RESET C_WHITE " is now Rebooting" C_RESET "\n",
-             cfg->container_name);
+      printf("\nContainer %s is now Rebooting\n", cfg->container_name);
       fflush(stdout);
     }
 
@@ -423,8 +415,7 @@ reboot_loop:;
       if (config_load_by_name(cfg->container_name, &reboot_cfg) == 0) {
         /* Cgroup namespace is locked at monitor startup - can't change */
         if (reboot_cfg.force_cgroupv1 != old_force_cgv1) {
-          printf("\n" C_BOLD C_YELLOW "force_cgroupv1 changed but "
-                 "requires a full stop/start to take effect" C_RESET "\n");
+          printf("\nforce_cgroupv1 changed but requires a full stop/start to take effect\n");
           reboot_cfg.force_cgroupv1 = old_force_cgv1;
         }
         *cfg = reboot_cfg;

@@ -1,24 +1,13 @@
-/*
- * ds-fork v6 - High-performance Container Runtime
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 #include "asc.h"
-
-bool log_silent = false;
-char log_container_name[256] = "";
-int log_container_fd = -1;
 
 /* ---------------------------------------------------------------------------
  * Usage / Help
  * ---------------------------------------------------------------------------*/
 
-void print_usage(void) {
+static void print_usage(void) {
   printf(
-      "Usage: " PROJECT_NAME " [options] <command> [args]\n\n" C_BOLD
-      "Commands:" C_RESET "\n"
+      "Usage: " PROJECT_NAME " [options] <command> [args]\n\n"
+      "Commands:\n"
       "  start                     Start a new container\n"
       "  stop                      Stop one or more containers\n"
       "  restart                   Restart a container\n"
@@ -32,11 +21,11 @@ void print_usage(void) {
       "  daemon                    Run daemon mode (use --foreground for "
       "foreground execution)\n\n"
 
-      C_BOLD "Options (Container Setup):" C_RESET "\n"
+      "Options (Container Setup):\n"
       "  -n, --name=NAME           Container name (mandatory)\n"
       "  -C, --conf=PATH           Load configuration from file\n\n"
 
-      C_BOLD "Options (Runtime):" C_RESET "\n"
+      "Options (Runtime):\n"
       "  -f, --foreground          Run in foreground (attach console)\n"
       "      --format              Machine-parseable output (KEY=VALUE)\n"
       "      --help                Show this help message\n\n");
@@ -55,7 +44,7 @@ static int validate_kernel_version(void) {
 
   if (major < MIN_KERNEL_MAJOR ||
       (major == MIN_KERNEL_MAJOR && minor < MIN_KERNEL_MINOR)) {
-    printf("\n" C_RED C_BOLD "[ FATAL: UNSUPPORTED KERNEL ]" C_RESET "\n\n");
+    printf("\n[ FATAL: UNSUPPORTED KERNEL ]\n\n");
     log_error(PROJECT_NAME " requires at least Linux %d.%d.0.",
               MIN_KERNEL_MAJOR, MIN_KERNEL_MINOR);
     log_info("Detected kernel: %d.%d", major, minor);
@@ -107,7 +96,7 @@ static int validate_configuration_cli(cfg_t *cfg) {
     }
   }
 
-  return (errors > 0) ? -1 : 0;
+  return errors > 0 ? -1 : 0;
 }
 
 static int auto_resolve_container_name(cfg_t *cfg) {
@@ -133,8 +122,7 @@ static int auto_resolve_container_name(cfg_t *cfg) {
   }
 
   if (count > 1) {
-    log_error("Multiple containers running. Please specify " C_BOLD
-              "--name" C_RESET ".");
+    log_error("Multiple containers running. Please specify --name.");
     show_containers(cfg);
     return -1;
   }
@@ -143,24 +131,7 @@ static int auto_resolve_container_name(cfg_t *cfg) {
   return 0;
 }
 
-/* ---------------------------------------------------------------------------
- * Command Dispatch
- * ---------------------------------------------------------------------------*/
-
-static void check_network_namespace(cfg_t *cfg) {
-  if (cfg->isolation_network) {
-    if (!check_ns(CLONE_NEWNET, "net")) {
-      printf("\n" C_RED C_BOLD
-             "[ FATAL: NETWORK NAMESPACE UNSUPPORTED ]" C_RESET "\n\n");
-      log_error("Kernel does not support CLONE_NEWNET (network namespaces).");
-      log_info("Cannot use --net=none.");
-      log_info("Tip: Use --net=host (default) for shared host networking.");
-      exit(EXIT_FAILURE);
-    }
-  }
-}
-
-int main(int argc, char **argv) {
+int main(const int argc, char **argv) {
   int ret = 0;
   /* CRITICAL: Zero all fields to avoid garbage pointer in dynamic arrays */
   cfg_t cfg = {};
@@ -168,13 +139,14 @@ int main(int argc, char **argv) {
 
   safe_strncpy(cfg.prog_name, argv[0], sizeof(cfg.prog_name));
 
-  static struct option long_options[] = {
-      {"name", required_argument, 0, 'n'},
-      {"foreground", no_argument, 0, 'f'},
-      {"config", required_argument, 0, 'C'},
-      {"format", no_argument, 0, 265},
-      {"help", no_argument, 0, 270},
-      {0, 0, 0, 0}};
+  static const struct option long_options[] = {
+    {"name", required_argument, nullptr, 'n'},
+    {"foreground", no_argument, nullptr, 'f'},
+    {"config", required_argument, nullptr, 'C'},
+    {"format", no_argument, nullptr, 265},
+    {"help", no_argument, nullptr, 270},
+    {nullptr, 0, nullptr, 0}
+  };
 
   opterr = 0;
 
@@ -193,7 +165,7 @@ int main(int argc, char **argv) {
    * 3. Override Pass: Apply CLI overrides on top of loaded config.
    */
   const char *discovered_cmd = nullptr;
-  char temp_i[PATH_MAX] = {0};
+  constexpr char temp_i[PATH_MAX] = {0};
   int opt;
 
   /* 1. Discovery Pass: Capture identity and command without permuting argv.
@@ -222,19 +194,19 @@ int main(int argc, char **argv) {
    * Optimistically attempt to proxy commands to the background daemon.
    * If the daemon is not reachable, fall back to direct execution.
    */
-  bool is_daemon_cmd = (discovered_cmd && strcmp(discovered_cmd, "daemon") == 0);
+  const bool is_daemon_cmd = discovered_cmd && strcmp(discovered_cmd, "daemon") == 0;
 
   /*
    * Commands that do not require root access (help, version) or
    * must be run locally to avoid recursive loops (mode) are never proxied.
    */
-  bool is_no_root_cmd =
-      (discovered_cmd && (strcmp(discovered_cmd, "help") == 0 ||
-                          strcmp(discovered_cmd, "mode") == 0 ||
-                          strcmp(discovered_cmd, "check") == 0));
+  const bool is_no_root_cmd =
+      discovered_cmd && (strcmp(discovered_cmd, "help") == 0 ||
+                         strcmp(discovered_cmd, "mode") == 0 ||
+                         strcmp(discovered_cmd, "check") == 0);
 
   if (!is_daemon_cmd && !is_no_root_cmd && getenv("NO_PROXY") == nullptr) {
-    int proxy_ret = client_run(argc - 1, argv + 1);
+    const int proxy_ret = client_run(argc - 1, argv + 1);
     if (proxy_ret != -2) {
       ret = proxy_ret;
       goto cleanup;
@@ -258,12 +230,12 @@ int main(int argc, char **argv) {
    *    <workspace dir>/Containers/<name>/container.config if config hasn't
    *    been loaded yet.
    */
-  bool is_stateful =
-      (discovered_cmd && (strcmp(discovered_cmd, "stop") == 0 ||
-                          strcmp(discovered_cmd, "restart") == 0 ||
-                          strcmp(discovered_cmd, "pid") == 0 ||
-                          strcmp(discovered_cmd, "info") == 0 ||
-                          strcmp(discovered_cmd, "usage") == 0));
+  const bool is_stateful =
+      discovered_cmd && (strcmp(discovered_cmd, "stop") == 0 ||
+                         strcmp(discovered_cmd, "restart") == 0 ||
+                         strcmp(discovered_cmd, "pid") == 0 ||
+                         strcmp(discovered_cmd, "info") == 0 ||
+                         strcmp(discovered_cmd, "usage") == 0);
 
   bool loaded = false;
   if (cfg.config_file_specified) {
@@ -304,7 +276,7 @@ int main(int argc, char **argv) {
        * container was moved or renamed. Perform a recovery scan of running
        * systems as a last resort. */
       if (is_stateful) {
-        bool prev = log_silent;
+        const bool prev = log_silent;
         log_silent = true;
         scan_containers();
         log_silent = prev;
@@ -354,9 +326,8 @@ int main(int argc, char **argv) {
   }
 
   if (optind >= argc) {
-    log_error(C_BOLD "Missing command" C_RESET);
-    log_info("Run '" C_BOLD "%s help" C_RESET "' for usage information.",
-             cfg.prog_name);
+    log_error("Missing command");
+    log_info("Run '%s help' for usage information.", cfg.prog_name);
     ret = 1;
     goto cleanup;
   }
@@ -418,9 +389,8 @@ int main(int argc, char **argv) {
       ret = 1;
       goto cleanup;
     }
-    check_network_namespace(&cfg);
     print_privileged_warning(cfg.privileged_mask);
-    if ((cfg.privileged_mask & PRIV_NOSEC) && cfg.block_nested_ns)
+    if (cfg.privileged_mask & PRIV_NOSEC && cfg.block_nested_ns)
       log_warn("--privileged=noseccomp is active: --block-nested-namespaces "
                "is now a NO-OP.");
     cgroup_host_bootstrap(cfg.force_cgroupv1);
@@ -446,9 +416,8 @@ int main(int argc, char **argv) {
       ret = 1;
       goto cleanup;
     }
-    check_network_namespace(&cfg);
     print_privileged_warning(cfg.privileged_mask);
-    if ((cfg.privileged_mask & PRIV_NOSEC) && cfg.block_nested_ns)
+    if (cfg.privileged_mask & PRIV_NOSEC && cfg.block_nested_ns)
       log_warn("--privileged=noseccomp is active: --block-nested-namespaces "
                "is now a NO-OP.");
     cgroup_host_bootstrap(cfg.force_cgroupv1);
@@ -469,7 +438,7 @@ int main(int argc, char **argv) {
   }
 
   if (strcmp(cmd, "info") == 0) {
-    ret = show_info(&cfg, 0);
+    ret = show_info(&cfg, false);
     goto cleanup;
   }
 
@@ -484,8 +453,7 @@ int main(int argc, char **argv) {
   }
 
   log_error("Unknown command: '%s'", cmd);
-  log_info("Run '" C_BOLD "%s help" C_RESET "' for usage information.",
-           cfg.prog_name);
+  log_info("Run '%s help' for usage information.", cfg.prog_name);
   ret = 1;
 
 cleanup:

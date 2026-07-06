@@ -1,15 +1,4 @@
-/*
- * ds-fork v6 - High-performance Container Runtime
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 #include "asc.h"
-
-/* ---------------------------------------------------------------------------
- * Android System Call Filtering (Seccomp)
- * ---------------------------------------------------------------------------*/
 
 /**
  * seccomp_apply_minimal()
@@ -17,7 +6,7 @@
  * Blocks direct host kernel takeover vectors (module loading, kexec).
  * Applied unconditionally to all kernels and all modes.
  */
-int seccomp_apply_minimal(int privileged_mask) {
+int seccomp_apply_minimal(const int privileged_mask) {
   /* noseccomp: skip everything, 32-bit binaries must work */
   if (privileged_mask & PRIV_NOSEC)
     return 0;
@@ -227,7 +216,7 @@ int seccomp_apply_minimal(int privileged_mask) {
  * 2. Deadlock Shield (EPERM): Blocks namespace creation (unshare/clone).
  *    Applied ONLY if block_nested_ns is true (manual override).
  */
-int android_seccomp_setup(bool block_nested_ns, int privileged_mask) {
+int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask) {
   if (privileged_mask & PRIV_NOSEC)
     return 0;
   int major = 0, minor = 0;
@@ -235,13 +224,13 @@ int android_seccomp_setup(bool block_nested_ns, int privileged_mask) {
 
   /* ns_mask covers: CLONE_NEWNS|CLONE_NEWCGROUP|CLONE_NEWUTS|CLONE_NEWIPC|
    *                 CLONE_NEWUSER|CLONE_NEWPID|CLONE_NEWNET */
-  const uint32_t ns_mask = 0x7E020000;
+  constexpr uint32_t ns_mask = 0x7E020000;
 
   if (!block_nested_ns && major >= 5)
     return 0;
 
   /* Define base filter (arch check + load nr) */
-  struct sock_filter filter_base[] = {
+  const struct sock_filter filter_base[] = {
       /* Same wrong-arch fix as seccomp_apply_minimal: KILL on mismatch. */
       BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch)),
 #ifdef __aarch64__
@@ -257,12 +246,12 @@ int android_seccomp_setup(bool block_nested_ns, int privileged_mask) {
       BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
   };
 
-  struct sock_filter filter_keyring[] = {
+  const struct sock_filter filter_keyring[] = {
       BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_keyctl, 0, 1),
       BPF_STMT(BPF_RET | BPF_K,
                SECCOMP_RET_ERRNO | (ENOSYS & SECCOMP_RET_DATA))};
 
-  struct sock_filter filter_ns[] = {
+  const struct sock_filter filter_ns[] = {
       BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_unshare, 1, 0),
       BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, __NR_clone, 0, 3),
       BPF_STMT(BPF_LD | BPF_W | BPF_ABS,
@@ -271,8 +260,9 @@ int android_seccomp_setup(bool block_nested_ns, int privileged_mask) {
       BPF_STMT(BPF_RET | BPF_K,
                SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA))};
 
-  struct sock_filter filter_allow[] = {
-      BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW)};
+  const struct sock_filter filter_allow[] = {
+      BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW)
+  };
 
   /* Combine filters based on conditions */
   int filter_len = sizeof(filter_base) / sizeof(struct sock_filter);

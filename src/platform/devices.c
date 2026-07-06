@@ -1,12 +1,16 @@
 #include "asc.h"
 
+static int create_devices(const char *rootfs);
+static bool is_dangerous_node(const char *name);
+static void mirror_gpu_nodes(const char *dev_path);
+
 /*
  * prune_host_devices()
  *
  * Scans the mounted /dev (devtmpfs) and unlinks dangerous nodes to isolate
  * the container from the host's display server, consoles, and GPU masters.
  */
-static void prune_host_devices(const char *dev_path, int privileged_mask) {
+static void prune_host_devices(const char *dev_path, const int privileged_mask) {
   if (privileged_mask & PRIV_UNFILT) {
     log_info("[SEC] --privileged=unfiltered-dev: skipping hardware blocklist.");
     return;
@@ -76,8 +80,8 @@ static void prune_host_devices(const char *dev_path, int privileged_mask) {
   }
 }
 
-int setup_dev(const char *rootfs, bool hw_access, bool gpu_mode,
-              int privileged_mask) {
+int setup_dev(const char *rootfs, const bool hw_access, const bool gpu_mode,
+              const int privileged_mask) {
   char dev_path[PATH_MAX];
   snprintf(dev_path, sizeof(dev_path), "%s/dev", rootfs);
 
@@ -131,20 +135,22 @@ int setup_dev(const char *rootfs, bool hw_access, bool gpu_mode,
   return create_devices(rootfs);
 }
 
-int create_devices(const char *rootfs) {
+static int create_devices(const char *rootfs) {
   const struct {
     const char *name;
     mode_t mode;
     dev_t dev;
-  } devices[] = {{"null", S_IFCHR | 0666, makedev(1, 3)},
-                 {"zero", S_IFCHR | 0666, makedev(1, 5)},
-                 {"full", S_IFCHR | 0666, makedev(1, 7)},
-                 {"random", S_IFCHR | 0666, makedev(1, 8)},
-                 {"urandom", S_IFCHR | 0666, makedev(1, 9)},
-                 {"tty", S_IFCHR | 0666, makedev(5, 0)},
-                 {"console", S_IFCHR | 0620, makedev(5, 1)},
-                 {"ptmx", S_IFCHR | 0666, makedev(5, 2)},
-                 {nullptr, 0, 0}};
+  } devices[] = {
+    {"null", S_IFCHR | 0666, makedev(1, 3)},
+    {"zero", S_IFCHR | 0666, makedev(1, 5)},
+    {"full", S_IFCHR | 0666, makedev(1, 7)},
+    {"random", S_IFCHR | 0666, makedev(1, 8)},
+    {"urandom", S_IFCHR | 0666, makedev(1, 9)},
+    {"tty", S_IFCHR | 0666, makedev(5, 0)},
+    {"console", S_IFCHR | 0620, makedev(5, 1)},
+    {"ptmx", S_IFCHR | 0666, makedev(5, 2)},
+    {nullptr, 0, 0}
+  };
 
   char path[PATH_MAX];
 
@@ -214,7 +220,7 @@ int create_devices(const char *rootfs) {
   return 0;
 }
 
-int setup_devpts(bool hw_access) {
+int setup_devpts(const bool hw_access) {
   const char *pts_path = "/dev/pts";
 
   /* Unmount any existing devpts instance first */
@@ -232,9 +238,14 @@ int setup_devpts(bool hw_access) {
   snprintf(optbuf2, sizeof(optbuf2), "gid=%d,newinstance,mode=0620",
            DEFAULT_TTY_GID);
 
-  const char *opts[] = {optbuf,        "newinstance,ptmxmode=0666,mode=0620",
-                        optbuf2,       "newinstance,ptmxmode=0666",
-                        "newinstance", nullptr};
+  const char *opts[] = {
+    optbuf,
+    "newinstance,ptmxmode=0666,mode=0620",
+    optbuf2,
+    "newinstance,ptmxmode=0666",
+    "newinstance",
+    nullptr
+  };
 
   for (int i = 0; opts[i]; i++) {
     if (domount("devpts", pts_path, "devpts", MS_NOSUID | MS_NOEXEC, opts[i]) ==
@@ -325,42 +336,61 @@ static const struct {
   const char *dir;
   const char *prefix;
 } gpu_scan_dirs[] = {
-    {"/dev/dri", "renderD"},    {"/dev", "nvidia"}, {"/dev", "video"},
-    {"/dev/nvidia-caps", nullptr}, {"/dev", "mali"},   {"/dev", "kgsl"},
-    {"/dev/dma_heap", nullptr},    {nullptr, nullptr}, /* sentinel */
+  {"/dev/dri", "renderD"},
+  {"/dev", "nvidia"},
+  {"/dev", "video"},
+  {"/dev/nvidia-caps", nullptr},
+  {"/dev", "mali"},
+  {"/dev", "kgsl"},
+  {"/dev/dma_heap", nullptr},
+  {nullptr, nullptr}, /* sentinel */
 };
 
 /* Static paths: individual nodes that don't fit a directory scan */
 static const char *gpu_static_devices[] = {
-    /* Android IPC (Critical for Android containers/hosts) */
-    "/dev/binder", "/dev/vndbinder", "/dev/hwbinder",
+  /* Android IPC (Critical for Android containers/hosts) */
+  "/dev/binder",
+  "/dev/vndbinder",
+  "/dev/hwbinder",
 
-    /* Legacy Android Memory Allocators */
-    "/dev/ion", "/dev/ashmem",
+  /* Legacy Android Memory Allocators */
+  "/dev/ion",
+  "/dev/ashmem",
 
-    /* ARM Mali / Adreno aliases */
-    "/dev/mali", "/dev/genlock",
+  /* ARM Mali / Adreno aliases */
+  "/dev/mali",
+  "/dev/genlock",
 
-    /* AMD ROCm Compute */
-    "/dev/kfd",
+  /* AMD ROCm Compute */
+  "/dev/kfd",
 
-    /* PowerVR */
-    "/dev/pvrsrvkm", "/dev/pvr_sync",
+  /* PowerVR */
+  "/dev/pvrsrvkm",
+  "/dev/pvr_sync",
 
-    /* Tegra */
-    "/dev/nvhost-ctrl", "/dev/nvhost-gpu", "/dev/nvhost-ctrl-gpu",
-    "/dev/nvhost-as-gpu", "/dev/nvhost-dbg-gpu", "/dev/nvhost-prof-gpu",
-    "/dev/nvhost-tsg", "/dev/nvhost-tsg-gpu", "/dev/nvhost-vic",
-    "/dev/nvhost-nvdec", "/dev/nvhost-nvdec1", "/dev/nvhost-nvenc",
-    "/dev/nvhost-msenc", "/dev/nvmap",
+  /* Tegra */
+  "/dev/nvhost-ctrl",
+  "/dev/nvhost-gpu",
+  "/dev/nvhost-ctrl-gpu",
+  "/dev/nvhost-as-gpu",
+  "/dev/nvhost-dbg-gpu",
+  "/dev/nvhost-prof-gpu",
+  "/dev/nvhost-tsg",
+  "/dev/nvhost-tsg-gpu",
+  "/dev/nvhost-vic",
+  "/dev/nvhost-nvdec",
+  "/dev/nvhost-nvdec1",
+  "/dev/nvhost-nvenc",
+  "/dev/nvhost-msenc",
+  "/dev/nvmap",
 
-    /* WSL2 */
-    "/dev/dxg",
+  /* WSL2 */
+  "/dev/dxg",
 
-    /* Async Sync */
-    "/dev/sw_sync",
+  /* Async Sync */
+  "/dev/sw_sync",
 
-    nullptr, /* sentinel */
+  nullptr, /* sentinel */
 };
 
 /*
@@ -369,7 +399,7 @@ static const char *gpu_static_devices[] = {
  * Checks if a device node name is "dangerous" (part of the host display stack
  * or a privileged DRM master node) and should be blocked from container access.
  */
-bool is_dangerous_node(const char *name) {
+static bool is_dangerous_node(const char *name) {
   /* Tier 1: DRM card nodes and control nodes */
   if ((strncmp(name, "card", 4) == 0 &&
        (name[4] == '\0' || isdigit(name[4]))) ||
@@ -722,7 +752,7 @@ static void mirror_gpu_node(const char *host_path, const char *dev_path) {
   }
 
   /* Create the node with the same major:minor and permissions as the host */
-  mode_t mode = S_IFCHR | (host_st.st_mode & 0666);
+  const mode_t mode = S_IFCHR | (host_st.st_mode & 0666);
   if (mknod(tgt, mode, host_st.st_rdev) < 0) {
     log_warn("[GPU] mknod %s (%d:%d) failed: %s", tgt,
              (int)major(host_st.st_rdev), (int)minor(host_st.st_rdev),
@@ -781,7 +811,7 @@ static void do_mirror_gpu_dir(const char *host_dir, const char *prefix,
  *
  * Must be called BEFORE pivot_root while the host /dev is still accessible.
  */
-void mirror_gpu_nodes(const char *dev_path) {
+static void mirror_gpu_nodes(const char *dev_path) {
   /* Dynamic directories */
   for (int i = 0; gpu_scan_dirs[i].dir != nullptr; i++)
     do_mirror_gpu_dir(gpu_scan_dirs[i].dir, gpu_scan_dirs[i].prefix, dev_path);

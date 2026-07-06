@@ -1,30 +1,15 @@
-/*
- * ds-fork v6 - High-performance Container Runtime
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 #include "asc.h"
-
-/* ---------------------------------------------------------------------------
- * Static status variables
- * ---------------------------------------------------------------------------*/
 
 static bool is_root = 0;
 
-/* ---------------------------------------------------------------------------
- * Output buffering (for one-shot terminal output)
- * ---------------------------------------------------------------------------*/
-
-#define CHECK_BUF_SIZE 16384
+#define CHECK_BUF_SIZE 16 * 1024
 static char check_buf[CHECK_BUF_SIZE];
 static size_t check_buf_pos = 0;
 
 static void check_append(const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  int n = vsnprintf(check_buf + check_buf_pos, CHECK_BUF_SIZE - check_buf_pos,
+  const int n = vsnprintf(check_buf + check_buf_pos, CHECK_BUF_SIZE - check_buf_pos,
                     fmt, args);
   va_end(args);
 
@@ -37,16 +22,12 @@ static void check_append(const char *fmt, ...) {
   }
 }
 
-/* ---------------------------------------------------------------------------
- * Requirement checks
- * ---------------------------------------------------------------------------*/
-
 static bool check_root(void) {
-  is_root = (getuid() == 0);
+  is_root = getuid() == 0;
   return is_root;
 }
 
-bool check_ns(int flag, const char *name) {
+static bool check_ns(const int flag, const char *name) {
   /* 1. Fast check for kernel support via /proc */
   char path[PATH_MAX];
   snprintf(path, sizeof(path), "/proc/self/ns/%s", name);
@@ -55,7 +36,7 @@ bool check_ns(int flag, const char *name) {
 
   /* 2. Functional check: Try to actually unshare.
    * We fork because unshare() affects the current process. */
-  pid_t p = fork();
+  const pid_t p = fork();
   if (p < 0)
     return false;
 
@@ -81,11 +62,13 @@ static bool check_pivot_root(void) {
   return true;
 }
 
-static bool check_loop(void) { return access("/dev/loop-control", F_OK) == 0; }
+static bool check_loop(void) {
+  return access("/dev/loop-control", F_OK) == 0;
+}
 
 static bool check_seccomp(void) {
   /* Probe for SECCOMP_MODE_FILTER support */
-  return (prctl(PR_GET_SECCOMP, 0, 0, 0, 0) >= 0 || errno == EINVAL);
+  return prctl(PR_GET_SECCOMP, 0, 0, 0, 0) >= 0 || errno == EINVAL;
 }
 
 static bool check_kernel_version_supported(void) {
@@ -99,11 +82,7 @@ static bool check_kernel_version_supported(void) {
   return true;
 }
 
-/* ---------------------------------------------------------------------------
- * Minimal check for 'start' (used internaly)
- * ---------------------------------------------------------------------------*/
-
-int check_requirements_hw(bool hw_access) {
+int check_requirements_hw(const bool hw_access) {
   int missing = 0;
 
   if (!check_root()) {
@@ -158,20 +137,15 @@ int check_requirements_hw(bool hw_access) {
   if (missing > 0) {
     printf("\n");
     log_error("Missing %d required feature(s) - cannot proceed", missing);
-    log_info("Please run " C_BOLD "./" PROJECT_NAME " check" C_RESET
-             " for a full diagnostic report.");
+    log_info("Please run ./" PROJECT_NAME " check for a full diagnostic report.");
     return -1;
   }
 
   return 0;
 }
 
-/* ---------------------------------------------------------------------------
- * Detailed 'check' command
- * ---------------------------------------------------------------------------*/
-
 /* Helper to check and close an FD-based feature probe */
-static bool check_fd_feature(int fd) {
+static bool check_fd_feature(const int fd) {
   if (fd >= 0) {
     close(fd);
     return true;
@@ -179,20 +153,15 @@ static bool check_fd_feature(int fd) {
   return false;
 }
 
-void print_check(const char *name, const char *desc, bool status,
-                 const char *level) {
-  const char *c_sym =
-      status ? C_GREEN : (strcmp(level, "MUST") == 0 ? C_RED : C_YELLOW);
+static void print_check(const char *name, const char *desc, const bool status) {
   const char *sym = status ? "✓" : "✗";
 
-  check_append("  [%s%s%s] %s\n", c_sym, sym, C_RESET, name);
+  check_append("  [%s] %s\n", sym, name);
   if (!status) {
-    check_append("      " C_DIM "%s" C_RESET "\n", desc);
+    check_append("      %s\n", desc);
     if (strstr(name, "namespace") || strstr(name, "Root")) {
       if (!is_root)
-        check_append("      " C_YELLOW
-                     "(Note: Namespace checks require root privileges)" C_RESET
-                     "\n");
+        check_append("      (Note: Namespace checks require root privileges)\n");
     }
   }
 }
@@ -200,158 +169,133 @@ void print_check(const char *name, const char *desc, bool status,
 int check_requirements_detailed(void) {
   check_buf_pos = 0;
   check_buf[0] = '\0';
+  int missing_must = 0;
 
   check_root();
 
-  check_append("\n" C_BOLD "Checking system requirements..." C_RESET "\n\n");
-
-  int missing_must = 0;
+  check_append("\nChecking system requirements...\n\n");
 
   /* MUST HAVE */
-  check_append(C_BOLD "[MUST HAVE]" C_RESET
-                      "\nThese features are required for " PROJECT_NAME
-                      " to work:\n\n");
+  check_append("[MUST HAVE]\n"
+    "These features are required for " PROJECT_NAME " to work:\n\n");
 
   if (!is_root)
     missing_must++;
   print_check("Root privileges",
               "Running as root user (required for container operations)",
-              is_root, "MUST");
+              is_root);
 
   char kver_desc[128];
   snprintf(kver_desc, sizeof(kver_desc),
            "Linux kernel version %d.%d.0 or later", MIN_KERNEL_MAJOR,
            MIN_KERNEL_MINOR);
-  bool kver_ok = check_kernel_version_supported();
+  const bool kver_ok = check_kernel_version_supported();
   if (!kver_ok)
     missing_must++;
-  print_check("Linux version", kver_desc, kver_ok, "MUST");
+  print_check("Linux version", kver_desc, kver_ok);
 
-  bool has_pid_ns = check_ns(CLONE_NEWPID, "pid");
+  const bool has_pid_ns = check_ns(CLONE_NEWPID, "pid");
   if (!has_pid_ns)
     missing_must++;
-  print_check("PID namespace", "Process ID namespace isolation", has_pid_ns,
-              "MUST");
+  print_check("PID namespace", "Process ID namespace isolation", has_pid_ns);
 
-  bool has_mnt_ns = check_ns(CLONE_NEWNS, "mnt");
+  const bool has_mnt_ns = check_ns(CLONE_NEWNS, "mnt");
   if (!has_mnt_ns)
     missing_must++;
-  print_check("Mount namespace", "Filesystem namespace isolation", has_mnt_ns,
-              "MUST");
+  print_check("Mount namespace", "Filesystem namespace isolation", has_mnt_ns);
 
-  bool has_uts_ns = check_ns(CLONE_NEWUTS, "uts");
+  const bool has_uts_ns = check_ns(CLONE_NEWUTS, "uts");
   if (!has_uts_ns)
     missing_must++;
-  print_check("UTS namespace", "Hostname/domainname isolation", has_uts_ns,
-              "MUST");
+  print_check("UTS namespace", "Hostname/domainname isolation", has_uts_ns);
 
-  bool has_ipc_ns = check_ns(CLONE_NEWIPC, "ipc");
+  const bool has_ipc_ns = check_ns(CLONE_NEWIPC, "ipc");
   if (!has_ipc_ns)
     missing_must++;
-  print_check("IPC namespace", "Inter-process communication isolation",
-              has_ipc_ns, "MUST");
+  print_check("IPC namespace", "Inter-process communication isolation", has_ipc_ns);
 
-  bool has_pivot = check_pivot_root();
+  const bool has_pivot = check_pivot_root();
   if (!has_pivot)
     missing_must++;
-  print_check("pivot_root syscall", "Kernel support for the pivot_root syscall",
-              has_pivot, "MUST");
+  print_check("pivot_root syscall", "Kernel support for the pivot_root syscall", has_pivot);
 
-  bool has_proc_fs = access("/proc/self", F_OK) == 0;
+  const bool has_proc_fs = access("/proc/self", F_OK) == 0;
   if (!has_proc_fs)
     missing_must++;
-  print_check("/proc filesystem", "Proc filesystem mount support", has_proc_fs,
-              "MUST");
+  print_check("/proc filesystem", "Proc filesystem mount support", has_proc_fs);
 
-  bool has_sys_fs = access("/sys/kernel", F_OK) == 0;
+  const bool has_sys_fs = access("/sys/kernel", F_OK) == 0;
   if (!has_sys_fs)
     missing_must++;
-  print_check("/sys filesystem", "Sys filesystem mount support", has_sys_fs,
-              "MUST");
+  print_check("/sys filesystem", "Sys filesystem mount support", has_sys_fs);
 
-  bool has_seccomp = check_seccomp();
+  const bool has_seccomp = check_seccomp();
   if (!has_seccomp)
     missing_must++;
-  print_check("Seccomp support", "Kernel support for Seccomp (Bypass Mode)",
-              has_seccomp, "MUST");
+  print_check("Seccomp support", "Kernel support for Seccomp (Bypass Mode)", has_seccomp);
 
   /* RECOMMENDED */
-  check_append("\n" C_BOLD "[RECOMMENDED]" C_RESET
-               "\nThese features improve functionality but are not strictly "
+  check_append("\n[RECOMMENDED]\n"
+               "These features improve functionality but are not strictly "
                "required:\n\n");
 
-  print_check("epoll support", "Efficient I/O event notification",
-              check_fd_feature(epoll_create1(0)), "OPT");
+  print_check("epoll support", "Efficient I/O event notification", check_fd_feature(epoll_create1(0)));
 
   sigset_t mask;
   sigemptyset(&mask);
   print_check("signalfd support", "Signal handling via file descriptors",
-              check_fd_feature(signalfd(-1, &mask, 0)), "OPT");
+              check_fd_feature(signalfd(-1, &mask, 0)));
 
-  print_check("PTY support", "Unix98 PTY support",
-              access("/dev/ptmx", F_OK) == 0, "OPT");
+  print_check("PTY support", "Unix98 PTY support", access("/dev/ptmx", F_OK) == 0);
 
-  print_check("devpts support", "Virtual terminal filesystem support",
-              access("/dev/pts", F_OK) == 0, "OPT");
+  print_check("devpts support", "Virtual terminal filesystem support", access("/dev/pts", F_OK) == 0);
 
-  print_check("Loop device", "Required for rootfs.img mounting", check_loop(),
-              "OPT");
+  print_check("Loop device", "Required for rootfs.img mounting", check_loop());
 
-  print_check("ext4 filesystem", "Ext4 filesystem support",
-              grep_file("/proc/filesystems", "ext4"), "OPT");
+  print_check("ext4 filesystem", "Ext4 filesystem support", grep_file("/proc/filesystems", "ext4"));
 
-  print_check("Cgroup v2 support", "Unified Control Group hierarchy support",
-              grep_file("/proc/filesystems", "cgroup2"), "OPT");
+  print_check("Cgroup v2 support", "Unified Control Group hierarchy support", grep_file("/proc/filesystems", "cgroup2"));
 
-  print_check("Cgroup namespace", "Control Group namespace isolation",
-              check_ns(CLONE_NEWCGROUP, "cgroup"), "OPT");
+  print_check("Cgroup namespace", "Control Group namespace isolation", check_ns(CLONE_NEWCGROUP, "cgroup"));
 
-  bool has_devtmpfs = grep_file("/proc/filesystems", "devtmpfs");
-  print_check(
-      "devtmpfs support",
-      "Required for hardware access mode; tmpfs fallback used otherwise",
-      has_devtmpfs, "OPT");
+  const bool has_devtmpfs = grep_file("/proc/filesystems", "devtmpfs");
+  print_check( "devtmpfs support", "Required for hardware access mode; tmpfs fallback used otherwise", has_devtmpfs);
 
   /* OPTIONAL */
-  check_append("\n" C_BOLD "[OPTIONAL]" C_RESET
-               "\nThese features are optional and only used for specific "
+  check_append("\n[OPTIONAL]\n"
+               "These features are optional and only used for specific "
                "functionality:\n\n");
 
   print_check("FUSE support", "Filesystem in Userspace support",
-              access("/dev/fuse", F_OK) == 0 ||
-                  grep_file("/proc/filesystems", "fuse"),
-              "OPT");
+              access("/dev/fuse", F_OK) == 0 || grep_file("/proc/filesystems", "fuse"));
   print_check("TUN/TAP support", "Virtual network device support",
-              access("/dev/net/tun", F_OK) == 0, "OPT");
+              access("/dev/net/tun", F_OK) == 0);
   print_check("OverlayFS support", "Required for --volatile mode",
-              grep_file("/proc/filesystems", "overlay"), "OPT");
+              grep_file("/proc/filesystems", "overlay"));
   print_check("Network namespace", "Network namespace isolation for --net=none",
-              check_ns(CLONE_NEWNET, "net"), "OPT");
+              check_ns(CLONE_NEWNET, "net"));
 
   /* HARDENING */
-  check_append("\n" C_BOLD "[HARDENING]" C_RESET
-               "\nThese checks are not required for " PROJECT_NAME " to work, "
+  check_append("\n[HARDENING]\n"
+               "These checks are not required for " PROJECT_NAME " to work, "
                "but are recommended for hardened kernels:\n\n");
 
-  bool has_user_ns = access("/proc/self/ns/user", F_OK) == 0;
+  const bool has_user_ns = access("/proc/self/ns/user", F_OK) == 0;
   print_check("CONFIG_USER_NS disabled",
               "Kernel exposes user namespace support, which " PROJECT_NAME " "
               "does not require and hardened kernels should disable",
-              !has_user_ns, "OPT");
+              !has_user_ns);
 
   /* FINAL SUMMARY */
-  check_append("\n" C_BOLD "Summary:" C_RESET "\n\n");
+  check_append("\nSummary:\n\n");
   if (missing_must > 0)
-    check_append("  [" C_RED "✗" C_RESET
-                 "] %d required feature(s) missing - " PROJECT_NAME
-                 " will not work\n",
+    check_append("  [✗] %d required feature(s) missing - " PROJECT_NAME " will not work\n",
                  missing_must);
   else
-    check_append("  [" C_GREEN "✓" C_RESET "] All required features found!\n");
+    check_append("  [✓] All required features found!\n");
 
   if (!is_root) {
-    check_append(C_BOLD C_YELLOW "\n[!] Warning: You are not root. Some checks "
-                                 "may be inaccurate.\n" C_RESET);
+    check_append("\n[!] Warning: You are not root. Some checks may be inaccurate.\n");
   }
   check_append("\n");
 

@@ -1,21 +1,10 @@
-/*
- * ds-fork v6 - High-performance Container Runtime
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 #include "asc.h"
 
-/* ---------------------------------------------------------------------------
- * PID Discovery (UUID Scan)
- * ---------------------------------------------------------------------------*/
-
-bool is_container_running(cfg_t *cfg, pid_t *pid_out) {
+bool is_container_running(const cfg_t *cfg, pid_t *pid_out) {
   if (cfg->uuid[0] == '\0')
     return false;
 
-  pid_t deep_pid = find_container_init_pid(cfg->uuid);
+  const pid_t deep_pid = find_container_init_pid(cfg->uuid);
   if (deep_pid > 0) {
     if (pid_out)
       *pid_out = deep_pid;
@@ -25,11 +14,7 @@ bool is_container_running(cfg_t *cfg, pid_t *pid_out) {
   return false;
 }
 
-/* ---------------------------------------------------------------------------
- * UUID Scan
- * ---------------------------------------------------------------------------*/
-
-int collect_active_uuids(char uuids[][UUID_LEN + 1], int max_uuids) {
+int collect_active_uuids(char uuids[][UUID_LEN + 1], const int max_uuids) {
   if (!uuids || max_uuids <= 0)
     return 0;
 
@@ -58,7 +43,7 @@ int collect_active_uuids(char uuids[][UUID_LEN + 1], int max_uuids) {
       /* Verify it's all hex chars -- UUID marker files are 32 hex chars */
       bool is_uuid = true;
       for (int j = 0; j < UUID_LEN; j++) {
-        char c = ent->d_name[j];
+        const char c = ent->d_name[j];
         if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
           is_uuid = false;
           break;
@@ -75,23 +60,17 @@ int collect_active_uuids(char uuids[][UUID_LEN + 1], int max_uuids) {
   return found;
 }
 
-/* ---------------------------------------------------------------------------
- * Status reporting
- * ---------------------------------------------------------------------------*/
-
-int show_containers(cfg_t *cfg) {
-  auto_free struct container_info *containers = nullptr;
-
-  int count = 0;
+int show_containers(const cfg_t *cfg) {
   int cap = 32;
 
   /* Total tracked = folders under Containers */
   char container_dir[1024];
   snprintf(container_dir, sizeof(container_dir), "%s/%s", get_runtime_dir(),
            RUNTIME_CONFIG_SUBDIR);
-  int totalcount = count_folders(container_dir);
+  const int totalcount = count_folders(container_dir);
 
-  containers = malloc(cap * sizeof(struct container_info));
+  auto_free struct container_info *containers =
+    malloc(cap * sizeof(struct container_info));
   if (!containers)
     return -1;
 
@@ -101,6 +80,7 @@ int show_containers(cfg_t *cfg) {
   char path[PATH_MAX];
 
   if (collect_pids(&pids, &pcount) >= 0) {
+    int count = 0;
     size_t max_name_len = 4; /* "NAME" */
 
     for (size_t i = 0; i < pcount; i++) {
@@ -203,7 +183,7 @@ int show_containers(cfg_t *cfg) {
 
 /* Restore host-side metadata (config, pid, mount) from internal markers.
  * Returns 0 on success, -1 on failure. */
-int metadata_sync(pid_t pid) {
+static int metadata_sync(const pid_t pid) {
   if (pid <= 1 || !is_valid_container_pid(pid))
     return -1;
 
@@ -288,7 +268,7 @@ int scan_containers(void) {
   /* 2. Process all running PIDs */
   int recovered_found = 0;
   for (size_t i = 0; i < count; i++) {
-    pid_t pid = pids[i];
+    const pid_t pid = pids[i];
     if (pid <= 1)
       continue;
 

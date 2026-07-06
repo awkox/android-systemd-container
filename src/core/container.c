@@ -1,10 +1,3 @@
-/*
- * ds-fork v6 - High-performance Container Runtime
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 #include "asc.h"
 
 /* ---------------------------------------------------------------------------
@@ -23,15 +16,15 @@ static char active_lock_path[PATH_MAX] = {0};
  * Precision: 2048 (pids_dir) + 256 (name) + 5 (.lock) = 2309 < PATH_MAX (4096)
  * This prevents format-truncation warnings while ensuring paths never overflow.
  */
-static int get_lock_path(const char *name, char *buf, size_t size) {
+static int get_lock_path(const char *name, char *buf, const size_t size) {
   if (!name || !buf || size == 0 || !validate_container_name(name))
     return -1;
 
   char safe_name[256];
   sanitize_container_name(name, safe_name, sizeof(safe_name));
-  int r =
+  const int r =
       snprintf(buf, size, "%.2048s/%.256s" EXT_LOCK, get_lock_dir(), safe_name);
-  return (r > 0 && (size_t)r < size) ? 0 : -1;
+  return r > 0 && (size_t)r < size ? 0 : -1;
 }
 
 /* Create external command lock - ONLY called by CLI parent.
@@ -47,7 +40,7 @@ static int acquire_external_lock(const char *name) {
     return -1;
 
   /* 获取写锁必须使用可写模式打开 */
-  int fd = open(lock_path, O_CREAT | O_RDWR | O_CLOEXEC, 0644);
+  const int fd = open(lock_path, O_CREAT | O_RDWR | O_CLOEXEC, 0644);
   if (fd < 0)
     return -1;
 
@@ -101,10 +94,6 @@ static void release_external_lock(void) {
   }
 }
 
-/* ---------------------------------------------------------------------------
- * Configuration & Metadata Recovery
- * ---------------------------------------------------------------------------*/
-
 /* Check if external command lock exists - called by monitor (READ ONLY).
  * Returns: 1 if lock exists and holder is alive, 0 otherwise. */
 bool is_external_lock_active(const char *name) {
@@ -112,7 +101,7 @@ bool is_external_lock_active(const char *name) {
   if (get_lock_path(name, lock_path, sizeof(lock_path)) < 0)
     return false;
 
-  auto_close int fd = open(lock_path, O_RDONLY | O_CLOEXEC);
+  auto_close const int fd = open(lock_path, O_RDONLY | O_CLOEXEC);
   if (fd < 0)
     return false; /* 文件不存在 -> 没有锁 */
 
@@ -137,12 +126,8 @@ bool is_external_lock_active(const char *name) {
   return true;
 }
 
-/* ---------------------------------------------------------------------------
- * Cleanup
- * ---------------------------------------------------------------------------*/
-
 void cleanup_container_resources(cfg_t *cfg,
-                                 bool skip_unmount, bool force_cleanup) {
+                                 const bool skip_unmount, const bool force_cleanup) {
   /* Flush filesystem buffers (skip if force cleanup - sync can hang on
    * zombie-held fs) */
   if (!force_cleanup)
@@ -209,8 +194,6 @@ void cleanup_container_resources(cfg_t *cfg,
      * if no external lock is active. */
   }
 
-  /* Network cleanup: remove host-side resources */
-
   /* Cgroup subtree cleanup: remove /sys/fs/cgroup/ds-fork/<name>/.
    * All container processes are dead by now so every leaf is empty and
    * the bottom-up rmdir walk always succeeds.  Skipped on restart
@@ -221,11 +204,7 @@ void cleanup_container_resources(cfg_t *cfg,
   }
 }
 
-/* ---------------------------------------------------------------------------
- * Introspection
- * ---------------------------------------------------------------------------*/
-
-bool is_valid_container_pid(pid_t pid) {
+bool is_valid_container_pid(const pid_t pid) {
   char path[PATH_MAX];
 
   /* Primary marker: /run/ds-fork must exist inside the container.
@@ -245,10 +224,6 @@ bool is_valid_container_pid(pid_t pid) {
 
   return true;
 }
-
-/* ---------------------------------------------------------------------------
- * Start
- * ---------------------------------------------------------------------------*/
 
 int start_rootfs(cfg_t *cfg) {
   bool has_side_effects = false;
@@ -406,8 +381,7 @@ int start_rootfs(cfg_t *cfg) {
       goto cleanup;
     }
     if (was_new) {
-      log_info("Configuration persisted to " C_BOLD "%s" C_RESET,
-               cfg->config_file);
+      log_info("Configuration persisted to %s", cfg->config_file);
     }
   }
 
@@ -518,7 +492,6 @@ int start_rootfs(cfg_t *cfg) {
   if (cfg->foreground) {
     if (lock_acquired) {
       release_external_lock();
-      lock_acquired = false;
     }
 
     int ret = console_monitor_loop(cfg->console.master, monitor_pid, cfg);
@@ -551,7 +524,7 @@ int start_rootfs(cfg_t *cfg) {
       goto cleanup;
     }
 
-    show_info(cfg, 1);
+    show_info(cfg, true);
     log_info("Container '%s' is running in background.", cfg->container_name);
   }
 
@@ -585,7 +558,7 @@ cleanup:
   return -1;
 }
 
-int stop_rootfs_with_timeout(cfg_t *cfg, bool skip_unmount,
+static int stop_rootfs_with_timeout(cfg_t *cfg, const bool skip_unmount,
                              int timeout_seconds) {
   if (timeout_seconds < 0)
     timeout_seconds = STOP_TIMEOUT;
@@ -652,7 +625,7 @@ int stop_rootfs_with_timeout(cfg_t *cfg, bool skip_unmount,
         killed = true;
         break;
       }
-      usleep(200000); /* 200ms */
+      usleep(RETRY_DELAY_US);
     }
 
     if (!killed) {
@@ -687,13 +660,9 @@ int stop_rootfs_with_timeout(cfg_t *cfg, bool skip_unmount,
   return 0;
 }
 
-int stop_rootfs(cfg_t *cfg, bool skip_unmount) {
+int stop_rootfs(cfg_t *cfg, const bool skip_unmount) {
   return stop_rootfs_with_timeout(cfg, skip_unmount, STOP_TIMEOUT);
 }
-
-/* ---------------------------------------------------------------------------
- * Other operations
- * ---------------------------------------------------------------------------*/
 
 static const char *get_architecture(void) {
   static struct utsname uts;
@@ -702,7 +671,7 @@ static const char *get_architecture(void) {
   return uts.machine;
 }
 
-static void parse_pretty_name(FILE *fp, char *buf, size_t size) {
+static void parse_pretty_name(FILE *fp, char *buf, const size_t size) {
   char line[512];
   while (fgets(line, sizeof(line), fp)) {
     if (strncmp(line, "PRETTY_NAME=", 12) == 0) {
@@ -722,7 +691,7 @@ static void parse_pretty_name(FILE *fp, char *buf, size_t size) {
   }
 }
 
-static void get_os_pretty(const char *osrelease_path, char *buf, size_t size) {
+static void get_os_pretty(const char *osrelease_path, char *buf, const size_t size) {
   if (!buf || size == 0)
     return;
   buf[0] = '\0';
@@ -734,16 +703,16 @@ static void get_os_pretty(const char *osrelease_path, char *buf, size_t size) {
   parse_pretty_name(fp, buf, size);
 }
 
-int show_info(cfg_t *cfg, int trust_cfg_pid) {
+int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
   /* Case 1: No container name specified - try auto-resolution or listing */
   if (cfg->container_name[0] == '\0') {
     char first_name[256];
-    int count = count_running_containers(first_name, sizeof(first_name));
+    const int count = count_running_containers(first_name, sizeof(first_name));
 
     if (count == 0) {
       const char *arch = get_architecture();
-      printf(C_GREEN "Host:" C_RESET " %s\n", arch);
-      printf("\n" C_YELLOW "Container:" C_RESET " No containers running.\n\n");
+      printf("Host: %s\n", arch);
+      printf("\nContainer: No containers running.\n\n");
       return 0;
     }
 
@@ -754,11 +723,10 @@ int show_info(cfg_t *cfg, int trust_cfg_pid) {
     } else {
       /* Multiple containers running, show Host info and list */
       const char *arch = get_architecture();
-      printf(C_GREEN "Host:" C_RESET " %s\n", arch);
-      printf("\n" C_YELLOW "Multiple containers running:" C_RESET "\n");
+      printf("Host: %s\n", arch);
+      printf("\nMultiple containers running:\n");
       show_containers(cfg);
-      printf("\nUse '" C_GREEN "--name <NAME> info" C_RESET
-             "' for detailed information.\n\n");
+      printf("\nUse '--name <NAME> info' for detailed information.\n\n");
       return 0;
     }
   }
@@ -803,7 +771,7 @@ int show_info(cfg_t *cfg, int trust_cfg_pid) {
     }
 
     if (!trust_cfg_pid) {
-      long uptime_sec = get_container_uptime(pid);
+      const long uptime_sec = get_container_uptime(pid);
       if (uptime_sec >= 0) {
         char uptime_str[128];
         format_uptime(uptime_sec, uptime_str, sizeof(uptime_str));
@@ -861,15 +829,15 @@ int show_info(cfg_t *cfg, int trust_cfg_pid) {
   } else {
     /* Human-readable output */
     const char *arch = get_architecture();
-    printf(C_GREEN "Host:" C_RESET " %s\n", arch);
+    printf("Host: %s\n", arch);
 
-    printf("\n" C_GREEN "Container:" C_RESET " %s (RUNNING)\n",
+    printf("\nContainer: %s (RUNNING)\n",
            cfg->container_name);
     printf("  PID: %d\n", pid);
 
     char pretty[256];
     char osr_path[PATH_MAX];
-    if (build_proc_root_path(pid, "/etc/os-release", osr_path,
+    if (build_proc_root_path(pid, OS_RELEASE, osr_path,
                              sizeof(osr_path)) == 0) {
       get_os_pretty(osr_path, pretty, sizeof(pretty));
       if (pretty[0])
@@ -878,7 +846,7 @@ int show_info(cfg_t *cfg, int trust_cfg_pid) {
 
     /* Uptime (only if called from info command) */
     if (!trust_cfg_pid) {
-      long uptime_sec = get_container_uptime(pid);
+      const long uptime_sec = get_container_uptime(pid);
       if (uptime_sec >= 0) {
         char uptime_str[128];
         format_uptime(uptime_sec, uptime_str, sizeof(uptime_str));
@@ -886,7 +854,7 @@ int show_info(cfg_t *cfg, int trust_cfg_pid) {
       }
     }
 
-    printf("\n" C_GREEN "Features:" C_RESET "\n");
+    printf("\nFeatures:\n");
     int feat_count = 0;
 
     /* 1. Isolation Network */
@@ -897,7 +865,7 @@ int show_info(cfg_t *cfg, int trust_cfg_pid) {
 
     /* 2. HW/GPU Access */
     if (cfg->hw_access) {
-      printf("  " C_RED "HW access:" C_RESET " full\n");
+      printf("  HW access: full\n");
       feat_count++;
     } else if (cfg->gpu_mode) {
       printf("  HW access: GPU\n");
@@ -912,19 +880,19 @@ int show_info(cfg_t *cfg, int trust_cfg_pid) {
 
     /* 4. Cgroup v1 */
     if (cfg->force_cgroupv1) {
-      printf("  " C_RED "Force Cgroup V1:" C_RESET " yes\n");
+      printf("  Force Cgroup V1: yes\n");
       feat_count++;
     }
 
     /* 5. Deadlock Shield (block_nested_ns) */
     if (cfg->block_nested_ns) {
-      printf("  " C_RED "Deadlock Shield:" C_RESET " enabled\n");
+      printf("  Deadlock Shield: enabled\n");
       feat_count++;
     }
 
     /* 6. Privileged Mode */
     if (cfg->privileged_mask > 0) {
-      printf("  " C_RED "Privileged mode:" C_RESET " ");
+      printf("  Privileged mode: ");
       if (cfg->privileged_mask == PRIV_FULL) {
         printf("full");
       } else {
@@ -962,7 +930,7 @@ int show_info(cfg_t *cfg, int trust_cfg_pid) {
 
     /* 8. Custom Init */
     if (cfg->custom_init[0]) {
-      printf("  " C_RED "Custom Init:" C_RESET " %s\n", cfg->custom_init);
+      printf("  Custom Init: %s\n", cfg->custom_init);
       feat_count++;
     }
 
@@ -979,7 +947,7 @@ int show_info(cfg_t *cfg, int trust_cfg_pid) {
       !cfg->force_cgroupv1 && cgroup_host_is_v2()) {
     long long mu = -1, cu = -1, pu = -1;
     cgroup_get_usage(cfg, &mu, &cu, &pu);
-    printf("\n" C_GREEN "Resources:" C_RESET "\n");
+    printf("\nResources:\n");
 
     if (cfg->memory_limit) {
       char used[32] = "?", lim[32];
@@ -989,16 +957,16 @@ int show_info(cfg_t *cfg, int trust_cfg_pid) {
       printf("  Memory : %s / %s\n", used, lim);
     }
     if (cfg->cpu_quota) {
-      long long period = cfg->cpu_period > 0 ? cfg->cpu_period : 100000;
-      double cores = (double)cfg->cpu_quota / period;
+      const long long period = cfg->cpu_period > 0 ? cfg->cpu_period : 100000;
+      const double cores = (double)cfg->cpu_quota / period;
       printf("  CPU    : %.2f cores", cores);
       if (cu >= 0) {
-        long uptime = get_container_uptime(pid);
+        const long uptime = get_container_uptime(pid);
         if (uptime > 0) {
           /* Average usage as percentage of total capacity (all allocated
            * cores). cu is in usec, uptime in sec. */
-          double usage_sec = (double)cu / 1e6;
-          double avg_util = (usage_sec / (double)uptime) / cores * 100.0;
+          const double usage_sec = (double)cu / 1e6;
+          const double avg_util = usage_sec / (double)uptime / cores * 100.0;
           printf(" (Avg usage: %.1f%%)", avg_util);
         } else {
           printf(" (used: %.3fs)", (double)cu / 1e6);
@@ -1018,7 +986,7 @@ int show_info(cfg_t *cfg, int trust_cfg_pid) {
   return 0;
 }
 
-int restart_rootfs_with_timeout(cfg_t *cfg, int timeout_seconds) {
+static int restart_rootfs_with_timeout(cfg_t *cfg, const int timeout_seconds) {
   pid_t pid = 0;
   if (!is_container_running(cfg, &pid) || pid <= 0) {
     log_error("Container '%s' is not running or invalid.", cfg->container_name);

@@ -1,10 +1,3 @@
-/*
- * ds-fork v6 - High-performance Container Runtime
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 #include "asc.h"
 
 /* ---------------------------------------------------------------------------
@@ -15,7 +8,7 @@
  * TIOCGPTPEER (4.13+) opens slave directly from master fd.
  * Falls back to TIOCGPTN + path open for kernel 3.x. */
 int openpty(int *master, int *slave, char *name) {
-  int m = open("/dev/ptmx", O_RDWR | O_NOCTTY | O_CLOEXEC);
+  const int m = open("/dev/ptmx", O_RDWR | O_NOCTTY | O_CLOEXEC);
   if (m < 0)
     return -1;
 
@@ -70,7 +63,7 @@ int terminal_create(struct tty_info *tty) {
   return 0;
 }
 
-int terminal_set_stdfds(int fd) {
+int terminal_set_stdfds(const int fd) {
   if (dup2(fd, STDIN_FILENO) < 0)
     return -1;
   if (dup2(fd, STDOUT_FILENO) < 0)
@@ -80,7 +73,7 @@ int terminal_set_stdfds(int fd) {
   return 0;
 }
 
-int terminal_make_controlling(int fd) {
+int terminal_make_controlling(const int fd) {
   /* Drop existing controlling terminal and session */
   setsid();
 
@@ -97,7 +90,7 @@ int terminal_make_controlling(int fd) {
  * Termios / TIOS
  * ---------------------------------------------------------------------------*/
 
-int setup_tios(int fd, struct termios *old) {
+int setup_tios(const int fd, struct termios *old) {
   struct termios new_tios;
 
   if (!isatty(fd))

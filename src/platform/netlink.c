@@ -1,16 +1,3 @@
-/*
- * ds-fork v6 - High-performance Container Runtime
- *
- * Minimal RTNETLINK client: link up/down operations.
- * Used by NET_NONE mode for loopback configuration.
- *
- * Kernel compatibility: 3.10+ (Android & Linux)
- * No external dependencies beyond musl/glibc.
- *
- * Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
 #include "asc.h"
 
 /* ---------------------------------------------------------------------------
@@ -60,7 +47,7 @@ static int nl_talk(nl_ctx_t *ctx, struct nlmsghdr *req) {
     .nl_family = AF_NETLINK,
   };
   struct iovec iov = {req, req->nlmsg_len};
-  struct msghdr msg = {
+  const struct msghdr msg = {
     .msg_name = &sa,
     .msg_namelen = sizeof(sa),
     .msg_iov = &iov,
@@ -79,14 +66,13 @@ static int nl_talk(nl_ctx_t *ctx, struct nlmsghdr *req) {
       return -errno;
     }
 
-    struct nlmsghdr *h = (struct nlmsghdr *)buf;
-    for (; NLMSG_OK(h, (uint32_t)n); h = NLMSG_NEXT(h, n)) {
+    for (auto h = (struct nlmsghdr *)buf; NLMSG_OK(h, (uint32_t)n); h = NLMSG_NEXT(h, n)) {
       /* Ignore responses for other in-flight requests */
       if (h->nlmsg_seq != req->nlmsg_seq)
         continue;
 
       if (h->nlmsg_type == NLMSG_ERROR) {
-        struct nlmsgerr *err = NLMSG_DATA(h);
+        const struct nlmsgerr *err = NLMSG_DATA(h);
         return err->error; /* 0 = ACK/success, negative = error */
       }
       if (h->nlmsg_type == NLMSG_DONE)
@@ -105,9 +91,9 @@ static int nl_talk(nl_ctx_t *ctx, struct nlmsghdr *req) {
  * (uses if_nametoindex - one ioctl, no netlink round-trip needed)
  * ---------------------------------------------------------------------------*/
 
-int nl_get_ifindex(const char *ifname) {
-  unsigned int idx = if_nametoindex(ifname);
-  return (idx > 0) ? (int)idx : -ENODEV;
+static int nl_get_ifindex(const char *ifname) {
+  const unsigned int idx = if_nametoindex(ifname);
+  return idx > 0 ? (int)idx : -ENODEV;
 }
 
 /* ---------------------------------------------------------------------------
@@ -115,7 +101,7 @@ int nl_get_ifindex(const char *ifname) {
  * ---------------------------------------------------------------------------*/
 
 int nl_link_up(nl_ctx_t *ctx, const char *ifname) {
-  int idx = nl_get_ifindex(ifname);
+  const int idx = nl_get_ifindex(ifname);
   if (idx <= 0)
     return -ENODEV;
 
