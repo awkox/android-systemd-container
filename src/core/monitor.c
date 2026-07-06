@@ -425,6 +425,5 @@ reboot_loop:;
 
 monitor_cleanup_and_exit:
   /* Free dynamically allocated configuration members before exit */
-  config_free(cfg);
   _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 0);
 }

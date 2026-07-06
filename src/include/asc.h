@@ -105,11 +105,6 @@ typedef struct {
   pid_t pid;    /* our PID used as nl_portid */
 } nl_ctx_t;
 
-struct config_line {
-  char line[2048];
-  struct config_line *next;
-};
-
 /* Terminal/TTY info - one per allocated PTY */
 struct tty_info {
   int master;          /* master fd (stays in parent/monitor) */
@@ -138,9 +133,6 @@ typedef struct {
   bool block_nested_ns;
   int privileged_mask;
 
-  struct config_line *unknown_head;
-  struct config_line *unknown_tail;
-
   long long memory_limit;
   long long pids_limit;
   long long cpu_quota;
@@ -151,7 +143,6 @@ typedef struct {
   bool foreground;
   bool reboot_cycle;
   bool format_output;
-  bool config_file_specified;
   bool config_file_existed;
 
   char volatile_dir[PATH_MAX];
@@ -188,7 +179,6 @@ bool is_container_running(const cfg_t *cfg,pid_t *pid_out);
 int collect_active_uuids(char uuids[][UUID_LEN+1],const int max_uuids);
 int show_containers(const cfg_t *cfg);
 int config_load(const char *config_path,cfg_t *cfg);
-void config_free(cfg_t *cfg);
 int config_save(const char *config_path,cfg_t *cfg);
 char *config_auto_path(const char *rootfs_path);
 int config_load_by_name(const char *name,cfg_t *cfg);
@@ -242,9 +232,9 @@ void oom_protect(void);
 bool is_mountpoint(const char *path);
 int domount(const char *src,const char *tgt,const char *fstype,const unsigned long flags,const char *data);
 int bind_mount(const char *src,const char *tgt);
-int check_volatile_mode(cfg_t *cfg);
+int check_volatile_mode(asc_conf_t *conf);
 int setup_volatile_overlay(cfg_t *cfg);
-int cleanup_volatile_overlay(cfg_t *cfg);
+int cleanup_volatile_overlay(asc_rt_t *cfg);
 int mount_rootfs_img(const char *img_path,char *mount_point,const size_t mp_size,const char *name);
 void unmount_rootfs_img(const char *mount_point,const bool silent);
 void write_monitor_debug_log(const char *name,const char *fmt,...);

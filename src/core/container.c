@@ -134,7 +134,7 @@ void cleanup_container_resources(cfg_t *cfg,
       remove_recursive(cfg->rt.volatile_dir);
       cfg->rt.volatile_dir[0] = '\0';
     } else {
-      cleanup_volatile_overlay(cfg);
+      cleanup_volatile_overlay(&cfg->rt);
     }
   }
 
@@ -306,7 +306,7 @@ int start_rootfs(cfg_t *cfg) {
   }
 
   /* 3. Early pre-flight for volatile mode (before any host changes) */
-  if (check_volatile_mode(cfg) < 0) {
+  if (check_volatile_mode(&cfg->conf) < 0) {
     goto cleanup;
   }
 
@@ -487,7 +487,6 @@ int start_rootfs(cfg_t *cfg) {
 
   if (lock_acquired)
     release_external_lock();
-  config_free(cfg);
 
   return 0;
 
@@ -511,7 +510,6 @@ cleanup:
   if (sync_pipe[1] >= 0)
     close(sync_pipe[1]);
 
-  config_free(cfg);
   return -1;
 }
 

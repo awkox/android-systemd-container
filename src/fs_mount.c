@@ -111,8 +111,8 @@ int bind_mount(const char *src, const char *tgt) {
  * /dev setup
  * ---------------------------------------------------------------------------*/
 
-int check_volatile_mode(cfg_t *cfg) {
-  if (!cfg->conf.volatile_mode)
+int check_volatile_mode(asc_conf_t *conf) {
+  if (!conf->volatile_mode)
     return 0;
 
   if (grep_file("/proc/filesystems", "overlay") != 1) {
@@ -123,7 +123,7 @@ int check_volatile_mode(cfg_t *cfg) {
 
   /* Pre-flight: reject f2fs lowerdir - known Android kernel limitation */
   struct statfs sfs;
-  if (statfs(cfg->conf.img_mount_point, &sfs) == 0 && sfs.f_type == 0xF2F52010) {
+  if (statfs(conf->img_mount_point, &sfs) == 0 && sfs.f_type == 0xF2F52010) {
     log_error("Volatile mode cannot be used: Your rootfs is on f2fs, which is "
               "not supported as an OverlayFS lower layer on most Android "
               "kernels.");
@@ -167,7 +167,7 @@ int setup_volatile_overlay(cfg_t *cfg) {
 
   if (n < 0 || (size_t)n >= sizeof(opts)) {
     log_error("OverlayFS options too long");
-    cleanup_volatile_overlay(cfg);
+    cleanup_volatile_overlay(&cfg->rt);
     return -1;
   }
 
@@ -176,7 +176,7 @@ int setup_volatile_overlay(cfg_t *cfg) {
     /* Cleanup: unmount tmpfs first, then remove workspace */
     umount2(base, MNT_DETACH);
     log_error("OverlayFS mount failed: %s", strerror(errno));
-    cleanup_volatile_overlay(cfg);
+    cleanup_volatile_overlay(&cfg->rt);
     return -1;
   }
 
@@ -238,18 +238,18 @@ static bool is_mount_in_namespace(const char *path) {
  * We simply check if the mount is visible in our namespace (host); if so,
  * we try to unmount it normally before deleting the workspace directory.
  */
-int cleanup_volatile_overlay(cfg_t *cfg) {
-  if (cfg->rt.volatile_dir[0] == '\0')
+int cleanup_volatile_overlay(asc_rt_t *rt) {
+  if (rt->volatile_dir[0] == '\0')
     return 0;
 
   char merged[PATH_MAX + 32];
-  snprintf(merged, sizeof(merged), "%s/merged", cfg->rt.volatile_dir);
+  snprintf(merged, sizeof(merged), "%s/merged", rt->volatile_dir);
 
   /* Skip logging for clean exits - nothing prints after 'Powering off.' */
 
   /* 1. Fast path: check if mounts already vanished (normal case) */
   if (!is_mount_in_namespace(merged) &&
-      !is_mount_in_namespace(cfg->rt.volatile_dir)) {
+      !is_mount_in_namespace(rt->volatile_dir)) {
     goto done;
   }
 
@@ -257,13 +257,13 @@ int cleanup_volatile_overlay(cfg_t *cfg) {
    */
   sync();
   umount(merged);
-  umount(cfg->rt.volatile_dir);
+  umount(rt->volatile_dir);
 
 done:
   /* settle time for kernel to release backing store info */
   usleep(RETRY_DELAY_US / 2);
-  const int r = remove_recursive(cfg->rt.volatile_dir);
-  cfg->rt.volatile_dir[0] = '\0';
+  const int r = remove_recursive(rt->volatile_dir);
+  rt->volatile_dir[0] = '\0';
   return r;
 }
 

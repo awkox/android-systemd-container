@@ -1,9 +1,5 @@
 #include "asc.h"
 
-/* Forward declarations */
-static void add_unknown_line(asc_conf_t *conf, const char *line);
-static void free_config_unknown_lines(asc_conf_t *conf);
-
 static char *trim_whitespace(char *str) {
   while (isspace((unsigned char)*str))
     str++;
@@ -91,9 +87,6 @@ int config_load(const char *config_path, cfg_t *cfg) {
 
   asc_conf_t *conf = &cfg->conf;
 
-  /* Clear existing unknown lines to avoid duplication on re-load */
-  free_config_unknown_lines(conf);
-
   char line[2048];
 
   while (fgets(line, sizeof(line), f)) {
@@ -170,43 +163,11 @@ int config_load(const char *config_path, cfg_t *cfg) {
     } else if (strcmp(key, "isolation_network") == 0) {
       conf->isolation_network = parse_bool(val);
     } else {
-      /* Unknown key - preserve verbatim so Android App metadata
-       * (run_at_boot, use_sparse_image, sparse_image_size_gb, etc.)
-       * survives config_save() unchanged. */
-      add_unknown_line(conf, line);
+      log_warn("config: ignoring unknown key '%s'", key);
     }
   }
   
   return 0;
-}
-
-/* Internal helper to add a raw line to the unknown list */
-static void add_unknown_line(asc_conf_t *conf, const char *line) {
-  struct config_line *node = malloc(sizeof(*node));
-  if (!node)
-    return;
-  safe_strncpy(node->line, line, sizeof(node->line));
-  node->next = nullptr;
-  if (!conf->unknown_head) {
-    conf->unknown_head = conf->unknown_tail = node;
-  } else {
-    conf->unknown_tail->next = node;
-    conf->unknown_tail = node;
-  }
-}
-
-static void free_config_unknown_lines(asc_conf_t *conf) {
-  struct config_line *curr = conf->unknown_head;
-  while (curr) {
-    struct config_line *next = curr->next;
-    free(curr);
-    curr = next;
-  }
-  conf->unknown_head = conf->unknown_tail = nullptr;
-}
-
-void config_free(cfg_t *cfg) {
-  free_config_unknown_lines(&cfg->conf);
 }
 
 static void config_serialize_known(FILE *f, asc_conf_t *conf) {
@@ -310,8 +271,6 @@ int config_save(const char *config_path, cfg_t *cfg) {
           fclose(f_disk);
       }
 
-      free_config_unknown_lines(&disk_cfg.conf);
-
       if (is_equal) {
         if (!cfg->rt.config_file_existed) {
           cfg->rt.config_file_existed = true;
@@ -330,15 +289,6 @@ int config_save(const char *config_path, cfg_t *cfg) {
     return -1;
 
   config_serialize_known(f_out, &cfg->conf);
-
-  /* Step 3: Append preserved keys (Android App Config) from memory */
-  if (cfg->conf.unknown_head) {
-    struct config_line *node = cfg->conf.unknown_head;
-    while (node) {
-      fprintf(f_out, "%s", node->line);
-      node = node->next;
-    }
-  }
 
   fclose(f_out);
 

@@ -120,7 +120,6 @@ int main(const int argc, char **argv) {
       }
     } else if (opt == 'C') {
       safe_strncpy(cfg.rt.config_file, optarg, sizeof(cfg.rt.config_file));
-      cfg.rt.config_file_specified = true;
     } else if (opt == 'n') {
       if (reject_container_name(optarg) < 0) {
         ret = 1;
@@ -178,7 +177,7 @@ int main(const int argc, char **argv) {
                          strcmp(discovered_cmd, "info") == 0);
 
   bool loaded = false;
-  if (cfg.rt.config_file_specified) {
+  if (cfg.rt.config_file[0]) {
     if (config_load(cfg.rt.config_file, &cfg) < 0) {
       log_error("Failed to load configuration from '%s': %s", cfg.rt.config_file,
                 strerror(errno));
@@ -245,7 +244,6 @@ int main(const int argc, char **argv) {
       break;
     case 'C':
       safe_strncpy(cfg.rt.config_file, optarg, sizeof(cfg.rt.config_file));
-      cfg.rt.config_file_specified = true;
       break;
     case 265:
       /* --format: machine-parseable output */
@@ -374,6 +372,5 @@ int main(const int argc, char **argv) {
   ret = 1;
 
 cleanup:
-  config_free(&cfg);
   return ret;
 }
