@@ -1,33 +1,15 @@
-/*
- * magisk and apatch run root processes under u:r:magisk:s0 with seccomp
- * filters that block namespace syscalls. grapheneos does similar hardening.
- *
- * this daemon runs from service.sh to bypass those restrictions. the app
- * talks to it via libsu using a dumb client that only does basic socket
- * i/o, avoiding the seccomp traps entirely.
- *
- * we use an abstract socket (@" PROJECT_NAME) so there's no filesystem mess
- * to clean up when we crash or get killed.
- *
- * the wire protocol is just simple typed frames.
- *
- * note on pipe hangs: start_rootfs leaks descriptors to the intermediate
- * monitor process. waiting for epollhup would block forever. we poll waitpid
- * instead and do a final non-blocking drain when the direct child exits.
- */
-
 #include "asc.h"
 
-/* constants */
-
+/* 常量定义 */
 #define SOCK_NAME PROJECT_NAME
 #define BACKLOG SOMAXCONN
 #define MAX_ARGC 64
 #define MAX_ARG 8192
 #define IOBUF 8192
-constexpr size_t PTY_WBUF_MAX = (256 * 1024);  /* absolute buffer cap for PTY master input */
-constexpr size_t PTY_WBUF_HIGH = (192 * 1024); /* suspend conn EPOLLIN above this */
-constexpr size_t PTY_WBUF_LOW = (64 * 1024);   /* resume  conn EPOLLIN below this */
+
+constexpr size_t PTY_WBUF_MAX = (256 * 1024);  /* PTY 缓冲上限 */
+constexpr size_t PTY_WBUF_HIGH = (192 * 1024); /* 触发挂起的最高水位线 */
+constexpr size_t PTY_WBUF_LOW = (64 * 1024);   /* 恢复接收的最低水位线 */
 
 constexpr uint8_t MSG_OUT = 0x01;
 constexpr uint8_t MSG_ERR = 0x02;
@@ -40,9 +22,7 @@ constexpr uint8_t MSG_EXIT = 0xFF;
 static FILE *g_daemon_log_fp = nullptr;
 static char g_daemon_log_path[PATH_MAX] = "";
 
-/* Rotate ds-forkd.log mid-run when it exceeds the size limit.
- * Renames current log to .old, reopens fresh file, and redirects
- * stdout/stderr (background mode) or g_daemon_log_fp (foreground). */
+/* 守护进程日志自动轮转 */
 static void rotate_daemon_log_if_needed(void) {
   if (g_daemon_log_path[0] == '\0')
     return;
@@ -56,11 +36,9 @@ static void rotate_daemon_log_if_needed(void) {
   rename(g_daemon_log_path, old_path);
 
   if (g_daemon_log_fp) {
-    /* foreground: reopen tee file */
     fclose(g_daemon_log_fp);
     g_daemon_log_fp = fopen(g_daemon_log_path, "ae");
   } else {
-    /* background: reopen and re-dup2 stdout/stderr */
     const int lfd = open(g_daemon_log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC,
                    0644);
     if (lfd >= 0) {
@@ -72,10 +50,6 @@ static void rotate_daemon_log_if_needed(void) {
   }
 }
 
-/*
- * Tee helper: writes a plain (no ANSI) line to g_daemon_log_fp.
- * Used only in foreground mode; background mode relies on dup2.
- */
 [[gnu::format(printf, 2, 3)]]
 static void daemon_log_tee(const char *prefix, const char *fmt, ...) {
   if (!g_daemon_log_fp)
@@ -110,28 +84,19 @@ static void daemon_log_tee(const char *prefix, const char *fmt, ...) {
     daemon_log_tee("-", fmt __VA_OPT__(,) __VA_ARGS__);                        \
   } while (0)
 
-/*
- * g_self_path is populated once during daemon startup (after daemonize()).
- * Subsequent fork()+reexec() children inherit a copy of this path.
- * After an atomic `mv` replaces the binary on disk, this path resolves to
- * the NEW binary - so all future sessions transparently use the updated code
- * without restarting the daemon.
- */
 static char g_self_path[PATH_MAX];
-
 static volatile sig_atomic_t g_sigusr2_received = 0;
 static volatile sig_atomic_t g_terminate = 0;
 
-/* wire protocol helpers */
-
+/* 数据帧读写辅助 */
 static int read_exact(const int fd, void *buf, size_t n) {
-  uint8_t *p = buf;
+  uint8_t *p = static_cast<uint8_t *>(buf);
   while (n) {
     const ssize_t r = read(fd, p, n);
     if (r <= 0)
       return -1;
     p += r;
-    n -= (size_t)r;
+    n -= static_cast<size_t>(r);
   }
   return 0;
 }
@@ -160,21 +125,17 @@ static int recv_frame_hdr(const int fd, uint8_t *type_out, uint32_t *len_out) {
 }
 
 static void send_exit(const int fd, const int code) {
-  const uint32_t nc = htonl((uint32_t)code);
+  const uint32_t nc = htonl(static_cast<uint32_t>(code));
   send_frame(fd, MSG_EXIT, &nc, 4);
 }
-
-/* abstract socket setup */
 
 static socklen_t make_addr(struct sockaddr_un *addr) {
   memset(addr, 0, sizeof(*addr));
   addr->sun_family = AF_UNIX;
   const size_t nlen = strlen(SOCK_NAME);
   memcpy(addr->sun_path + 1, SOCK_NAME, nlen);
-  return (socklen_t)(offsetof(struct sockaddr_un, sun_path) + 1 + nlen);
+  return static_cast<socklen_t>(offsetof(struct sockaddr_un, sun_path) + 1 + nlen);
 }
-
-/* request parsing */
 
 typedef struct {
   uint32_t flags;
@@ -209,13 +170,13 @@ static int recv_req(const int fd, req_t *r) {
     const uint32_t al = ntohl(nl);
     if (al > MAX_ARG)
       return -1;
-    r->argv[i] = (char *)malloc((size_t)al + 1);
+    r->argv[i] = static_cast<char *>(malloc(static_cast<size_t>(al) + 1));
     if (!r->argv[i])
       return -1;
     if (al && read_exact(fd, r->argv[i], al) < 0)
       return -1;
     r->argv[i][al] = '\0';
-    r->argc++; /* safely increment once we actually have the string */
+    r->argc++;
   }
   r->argv[r->argc] = nullptr;
 
@@ -233,25 +194,17 @@ static int recv_req(const int fd, req_t *r) {
   return 0;
 }
 
-/* re-execute the ds-fork binary */
-
 static void reexec(char **argv) {
-  /*
-   * Use the path pinned at daemon startup. After an atomic mv swap,
-   * g_self_path resolves to the new binary automatically. If for some
-   * reason it was never set, fall back to the symlink (which may have
-   * (deleted) but is better than nothing).
-   */
   const char *path = g_self_path[0] != '\0' ? g_self_path : "/proc/self/exe";
   execv(path, argv);
   _exit(127);
 }
 
 static char **make_exec_argv(const req_t *r) {
-  char **av = malloc((size_t)(r->argc + 2) * sizeof(char *));
+  char **av = static_cast<char **>(malloc(static_cast<size_t>(r->argc + 2) * sizeof(char *)));
   if (!av)
     return nullptr;
-  av[0] = (char *)PROJECT_NAME;
+  av[0] = const_cast<char *>(PROJECT_NAME);
   for (int i = 0; i < r->argc; i++)
     av[i + 1] = r->argv[i];
   av[r->argc + 1] = nullptr;
@@ -266,13 +219,12 @@ static void drain_fd(const int fd, const int conn, const uint8_t type) {
     const ssize_t n = read(fd, buf, sizeof(buf));
     if (n <= 0)
       break;
-    send_frame(conn, type, buf, (uint32_t)n);
+    send_frame(conn, type, buf, static_cast<uint32_t>(n));
   }
   fcntl(fd, F_SETFL, fl);
 }
 
-/* unified session handler for both pty and pipe modes */
-
+/* 统一管理 PTY 和普通管道的会话会话处理函数 */
 static void handle_session(int conn, req_t *r) {
   int is_pty = r->flags & REQ_FLAG_PTY;
   int master = -1, slave = -1;
@@ -281,7 +233,7 @@ static void handle_session(int conn, req_t *r) {
 
   if (is_pty) {
     if (openpty(&master, &slave, nullptr) < 0) {
-      send_frame(conn, MSG_ERR, "daemon: openpty failed\n", 23);
+      send_frame(conn, MSG_ERR, "daemon: openpty 失败\n", 23);
       send_exit(conn, 1);
       return;
     }
@@ -289,20 +241,8 @@ static void handle_session(int conn, req_t *r) {
     ioctl(master, TIOCSWINSZ, &ws);
     fcntl(master, F_SETFD, FD_CLOEXEC);
   } else {
-    /*
-     * Create pipes with O_CLOEXEC only - NOT O_NONBLOCK.
-     *
-     * O_NONBLOCK is a file-description flag (shared across dup'd fds).
-     * If we set it in pipe2(), the child's stdout/stderr (dup2'd from
-     * the write ends) inherit the flag, causing EAGAIN / short writes for
-     * programs that write more than PIPE_BUF in one call.
-     *
-     * We set O_NONBLOCK on the READ ends only, in the parent, after the
-     * fork and after the write ends have been closed.  The child's write
-     * ends are a separate file description and remain blocking.
-     */
     if (pipe2(out, O_CLOEXEC) < 0 || pipe2(err, O_CLOEXEC) < 0) {
-      send_frame(conn, MSG_ERR, "daemon: pipe2 failed\n", 21);
+      send_frame(conn, MSG_ERR, "daemon: pipe2 失败\n", 21);
       send_exit(conn, 1);
       if (out[0] >= 0) {
         close(out[0]);
@@ -342,7 +282,7 @@ static void handle_session(int conn, req_t *r) {
       close(err[0]);
       close(err[1]);
     }
-    send_frame(conn, MSG_ERR, "daemon: fork failed\n", 20);
+    send_frame(conn, MSG_ERR, "daemon: fork 失败\n", 20);
     send_exit(conn, 1);
     return;
   }
@@ -372,11 +312,7 @@ static void handle_session(int conn, req_t *r) {
       close(out[1]);
       close(err[1]);
     }
-    /* Prevent the spawned child from proxying back to the daemon */
     setenv("NO_PROXY", "1", 1);
-    /* Reset inherited signal dispositions: the daemon ignores SIGHUP/SIGPIPE
-     * for its own survival, but execv() preserves SIG_IGN across the new image.
-     * Restore defaults so the CLI child responds to signals normally. */
     signal(SIGHUP, SIG_DFL);
     signal(SIGPIPE, SIG_DFL);
     signal(SIGCHLD, SIG_DFL);
@@ -400,7 +336,6 @@ static void handle_session(int conn, req_t *r) {
     return;
   }
 
-  /* signalfd for zero-latency SIGCHLD: avoids 100ms poll-waitpid loop */
   sigset_t ss;
   sigemptyset(&ss);
   sigaddset(&ss, SIGCHLD);
@@ -422,8 +357,6 @@ static void handle_session(int conn, req_t *r) {
     close(out[1]);
     close(err[1]);
     out[1] = err[1] = -1;
-    /* Read ends are now exclusively owned by the parent.  Set O_NONBLOCK
-     * here so epoll's edge reads can drain without blocking. */
     fcntl(out[0], F_SETFL, O_NONBLOCK);
     fcntl(err[0], F_SETFL, O_NONBLOCK);
     ev.events = EPOLLIN | EPOLLHUP | EPOLLERR;
@@ -441,7 +374,6 @@ static void handle_session(int conn, req_t *r) {
     epoll_ctl(epfd, EPOLL_CTL_ADD, sfd, &ev);
   }
 
-  /* watch the connection for dead clients or pty input */
   ev.events = EPOLLHUP | EPOLLERR;
   if (is_pty)
     ev.events |= EPOLLIN;
@@ -449,16 +381,12 @@ static void handle_session(int conn, req_t *r) {
   epoll_ctl(epfd, EPOLL_CTL_ADD, conn, &ev);
 
   int exit_code = EXIT_PENDING;
-  int child_done = 0; /* 0=running, 1=killed, 2=normal-exit-seen */
+  int child_done = 0;
 
-  /* Non-blocking write buffer for PTY master input.
-   * Prevents blocking the event loop when the PTY kernel buffer is full
-   * (e.g. large paste). Excess bytes are queued here and flushed via
-   * EPOLLOUT on master. */
   auto_free uint8_t *pty_wbuf = nullptr;
   size_t pty_wbuf_len = 0;
   size_t pty_wbuf_cap = 0;
-  bool conn_suspended = false; /* 1 = conn EPOLLIN removed (wbuf high-water) */
+  bool conn_suspended = false;
 
   for (;;) {
     int nfds = epoll_wait(epfd, events, 8, -1);
@@ -469,9 +397,8 @@ static void handle_session(int conn, req_t *r) {
       int fd = events[i].data.fd;
 
       if (sfd >= 0 && fd == sfd) {
-        /* drain all pending SIGCHLD notifications */
         struct signalfd_siginfo si;
-        while (read(sfd, &si, sizeof(si)) == (ssize_t)sizeof(si)) {
+        while (read(sfd, &si, sizeof(si)) == static_cast<ssize_t>(sizeof(si))) {
           if (!child_done) {
             int st;
             if (waitpid(child, &st, WNOHANG) == child) {
@@ -482,7 +409,6 @@ static void handle_session(int conn, req_t *r) {
         }
       } else if (fd == conn) {
         if (events[i].events & (EPOLLHUP | EPOLLERR)) {
-          /* client died unexpectedly, kill the child */
           kill(child, is_pty ? SIGHUP : SIGTERM);
           waitpid(child, nullptr, 0);
           goto session_end;
@@ -495,24 +421,18 @@ static void handle_session(int conn, req_t *r) {
             waitpid(child, nullptr, 0);
             goto session_end;
           }
-          if (type == MSG_OUT && mlen > 0 && mlen <= (uint32_t)sizeof(buf)) {
+          if (type == MSG_OUT && mlen > 0 && mlen <= static_cast<uint32_t>(sizeof(buf))) {
             if (read_exact(conn, buf, mlen) == 0) {
-              /* Non-blocking write to PTY master; queue overflow into wbuf. */
               size_t written = 0;
               if (pty_wbuf_len == 0) {
-                /* Fast path: no pending data, try direct write first. */
                 ssize_t w = write(master, buf, mlen);
                 if (w > 0)
-                  written = (size_t)w;
+                  written = static_cast<size_t>(w);
               }
               size_t rem = mlen - written;
               if (rem > 0) {
-                /* Buffer remainder; grow wbuf if needed (cap at PTY_WBUF_MAX).
-                 */
                 if (pty_wbuf_len + rem <= PTY_WBUF_MAX) {
                   if (pty_wbuf_len + rem > pty_wbuf_cap) {
-                    /* Double capacity without overflow: clamp before shifting.
-                     */
                     size_t ncap = pty_wbuf_cap ? pty_wbuf_cap : IOBUF;
                     while (ncap < pty_wbuf_len + rem) {
                       if (ncap > PTY_WBUF_MAX / 2) {
@@ -523,34 +443,26 @@ static void handle_session(int conn, req_t *r) {
                     }
                     if (ncap > PTY_WBUF_MAX)
                       ncap = PTY_WBUF_MAX;
-                    /* Preserve old pointer on realloc failure to avoid leak. */
-                    uint8_t *nb = realloc(pty_wbuf, ncap);
+                    uint8_t *nb = static_cast<uint8_t *>(realloc(pty_wbuf, ncap));
                     if (nb) {
                       pty_wbuf = nb;
                       pty_wbuf_cap = ncap;
                     }
-                    /* If realloc failed, pty_wbuf unchanged; fall through to
-                     * the capacity check below which will drop the frame. */
                   }
                   if (pty_wbuf_len + rem <= pty_wbuf_cap) {
                     memcpy(pty_wbuf + pty_wbuf_len, buf + written, rem);
                     pty_wbuf_len += rem;
-                    /* Arm EPOLLOUT on master to flush wbuf. */
                     ev.events = EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLERR;
                     ev.data.fd = master;
                     epoll_ctl(epfd, EPOLL_CTL_MOD, master, &ev);
-                    /* High-watermark: suspend conn input to apply backpressure.
-                     * Prevents unbounded growth; conn resumes at low-watermark.
-                     */
                     if (!conn_suspended && pty_wbuf_len >= PTY_WBUF_HIGH) {
-                      ev.events = EPOLLHUP | EPOLLERR; /* no EPOLLIN */
+                      ev.events = EPOLLHUP | EPOLLERR;
                       ev.data.fd = conn;
                       epoll_ctl(epfd, EPOLL_CTL_MOD, conn, &ev);
                       conn_suspended = true;
                     }
                   }
                 }
-                /* wbuf full and conn suspended: no data lost, client stalls. */
               }
             }
           } else if (type == MSG_WINCH && mlen == 4) {
@@ -561,11 +473,10 @@ static void handle_session(int conn, req_t *r) {
               kill(child, SIGWINCH);
             }
           } else {
-            /* drain unknown frames so we don't stall the pipe */
             uint32_t rem = mlen;
             while (rem) {
               uint32_t c =
-                  rem < (uint32_t)sizeof(buf) ? rem : (uint32_t)sizeof(buf);
+                  rem < static_cast<uint32_t>(sizeof(buf)) ? rem : static_cast<uint32_t>(sizeof(buf));
               if (read_exact(conn, buf, c) < 0)
                 goto session_end;
               rem -= c;
@@ -573,38 +484,34 @@ static void handle_session(int conn, req_t *r) {
           }
         }
       } else if (is_pty && fd == master && events[i].events & EPOLLOUT) {
-        /* Flush pending wbuf to PTY master. */
         while (pty_wbuf_len > 0) {
           ssize_t w = write(master, pty_wbuf, pty_wbuf_len);
           if (w > 0) {
-            pty_wbuf_len -= (size_t)w;
+            pty_wbuf_len -= static_cast<size_t>(w);
             if (pty_wbuf_len > 0)
               memmove(pty_wbuf, pty_wbuf + w, pty_wbuf_len);
           } else if (w < 0 && errno == EAGAIN) {
-            break; /* PTY buffer still full; wait for next EPOLLOUT */
+            break;
           } else {
             break;
           }
         }
         if (pty_wbuf_len == 0) {
-          /* All flushed; stop watching for writability. */
           ev.events = EPOLLIN | EPOLLHUP | EPOLLERR;
           ev.data.fd = master;
           epoll_ctl(epfd, EPOLL_CTL_MOD, master, &ev);
         }
-        /* Low-watermark: resume conn input once pressure drops. */
         if (conn_suspended && pty_wbuf_len < PTY_WBUF_LOW) {
           ev.events = EPOLLIN | EPOLLHUP | EPOLLERR;
           ev.data.fd = conn;
           epoll_ctl(epfd, EPOLL_CTL_MOD, conn, &ev);
           conn_suspended = false;
         }
-        /* Also service any pending output from master in this iteration. */
         if (events[i].events & EPOLLIN) {
           for (;;) {
             ssize_t n = read(master, buf, sizeof(buf));
             if (n > 0) {
-              if (send_frame(conn, MSG_OUT, buf, (uint32_t)n) < 0) {
+              if (send_frame(conn, MSG_OUT, buf, static_cast<uint32_t>(n)) < 0) {
                 kill(child, SIGHUP);
                 waitpid(child, nullptr, 0);
                 goto session_end;
@@ -617,14 +524,13 @@ static void handle_session(int conn, req_t *r) {
           }
         }
       } else {
-        /* this is a read fd from the child */
         if (events[i].events & (EPOLLIN | EPOLLHUP)) {
           bool drained = false;
           for (;;) {
             ssize_t n = read(fd, buf, sizeof(buf));
             if (n > 0) {
               uint8_t t = fd == err[0] ? MSG_ERR : MSG_OUT;
-              if (send_frame(conn, t, buf, (uint32_t)n) < 0) {
+              if (send_frame(conn, t, buf, static_cast<uint32_t>(n)) < 0) {
                 kill(child, is_pty ? SIGHUP : SIGTERM);
                 waitpid(child, nullptr, 0);
                 goto session_end;
@@ -658,8 +564,6 @@ static void handle_session(int conn, req_t *r) {
       }
     }
 
-    /* wait for eofs on pipes even if the child exited, because the monitor
-     * might still be holding it */
     if (child_done == 1) {
       if (out[0] >= 0)
         drain_fd(out[0], conn, MSG_OUT);
@@ -695,24 +599,20 @@ session_end:
   send_exit(conn, exit_code == EXIT_PENDING ? 0 : exit_code);
 }
 
-/* handle incoming client connections */
-
 static void handle_conn(const int conn) {
   req_t req;
   if (recv_req(conn, &req) < 0) {
-    send_frame(conn, MSG_ERR, "daemon: bad request\n", 20);
+    send_frame(conn, MSG_ERR, "daemon: 无效请求\n", 20);
     send_exit(conn, 1);
     close(conn);
     _exit(1);
   }
 
-  /* 拦截 daemon-stop 命令：主动退出 */
   if (req.argc > 0 && strcmp(req.argv[0], "daemon-stop") == 0) {
-    const char *msg = "Daemon is gracefully shutting down...\n";
-    send_frame(conn, MSG_OUT, msg, (uint32_t)strlen(msg));
+    const char *msg = "Daemon 正在安全关闭...\n";
+    send_frame(conn, MSG_OUT, msg, static_cast<uint32_t>(strlen(msg)));
     send_exit(conn, 0);
 
-    /* 杀死父进程（即 Daemon 的 accept4 主循环） */
     kill(getppid(), SIGTERM);
 
     free_req(&req);
@@ -720,20 +620,12 @@ static void handle_conn(const int conn) {
     _exit(0);
   }
 
-  /*
-   * Block recursive daemon/client invocations.
-   * We skip any argv[i] whose predecessor starts with '-', because that arg
-   * is an option VALUE (e.g. --name daemon-container), not a sub-command.
-   * NO_PROXY=1 is the primary guard (set before reexec); this is a
-   * defence-in-depth check.
-   */
   for (int i = 0; i < req.argc; i++) {
-    /* If the previous token was an option flag, this token is its value. */
     if (i > 0 && req.argv[i - 1][0] == '-')
       continue;
     if (strcmp(req.argv[i], "daemon") == 0 ||
         strcmp(req.argv[i], "client") == 0) {
-      send_frame(conn, MSG_ERR, "daemon: recursive call refused\n", 31);
+      send_frame(conn, MSG_ERR, "daemon: 拒绝递归调用\n", 31);
       send_exit(conn, 1);
       free_req(&req);
       close(conn);
@@ -741,7 +633,6 @@ static void handle_conn(const int conn) {
     }
   }
 
-  /* log the request */
   {
     char cmdline[512];
     size_t off = 0;
@@ -749,51 +640,46 @@ static void handle_conn(const int conn) {
       const int n = snprintf(cmdline + off, sizeof(cmdline) - off, "%s%s",
                        i > 0 ? " " : "", req.argv[i]);
       if (n > 0)
-        off += (size_t)n;
+        off += static_cast<size_t>(n);
     }
-    log_info("Client connected. Mode: %s",
+    log_info("客户端已连接。 模式: %s",
              (req.flags & REQ_FLAG_PTY) ? "PTY" : "PIPE");
-    log_info("Executing command: %s", cmdline);
+    log_info("即将执行: %s", cmdline);
   }
 
   handle_session(conn, &req);
 
-  log_info("Session finished. Client disconnected.");
+  log_info("会话已完成。客户端已断开连接。");
   free_req(&req);
   close(conn);
   _exit(0);
 }
 
-/* main daemon loop */
-
-/* daemonize the process: detach from terminal and protect from OOM killer */
 static void daemonize(const bool foreground) {
   if (!foreground) {
     pid_t pid = fork();
     if (pid < 0)
       exit(1);
     if (pid > 0)
-      exit(0); /* parent exits */
+      exit(0);
 
     if (setsid() < 0)
       exit(1);
 
-    /* ignore signals that might kill us on terminal closure */
     signal(SIGHUP, SIG_IGN);
 
     pid = fork();
     if (pid < 0)
       exit(1);
     if (pid > 0)
-      exit(0); /* second parent exits */
+      exit(0);
   }
 
   umask(0);
-  if (chdir("/") < 0) { /* ignore */
+  if (chdir("/") < 0) {
   }
 
   if (!foreground) {
-    /* redirect standard streams */
     const int dn = open("/dev/null", O_RDONLY);
     if (dn >= 0) {
       dup2(dn, STDIN_FILENO);
@@ -809,8 +695,6 @@ static void daemonize(const bool foreground) {
     rotate_log(log_path, 2 * 1024 * 1024);
 
     if (!foreground) {
-      /* Background: dup2 stdout/stderr to log file; g_daemon_log_fp stays
-       * NULL so the tee macros don't double-write. */
       const int lfd = open(log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
       if (lfd >= 0) {
         dup2(lfd, STDOUT_FILENO);
@@ -819,14 +703,10 @@ static void daemonize(const bool foreground) {
           close(lfd);
       }
     } else {
-      /* Foreground: keep terminal live; open log file for explicit tee.
-       * The daemon_log_tee() helper writes every message here alongside
-       * the terminal output produced by log_internal(). */
       g_daemon_log_fp = fopen(log_path, "ae");
     }
   }
 
-  /* Make daemon unkillable */
   oom_protect();
 }
 
@@ -842,94 +722,76 @@ int daemon_run(const bool foreground) {
   ensure_runtime();
 
   if (daemon_probe()) {
-    log_error("Daemon is already running (@%s)", SOCK_NAME);
+    log_error("Daemon 后台服务已在运行中 (@%s)", SOCK_NAME);
     return 1;
   }
 
   daemonize(foreground);
 
-  /*
-   * Pin our absolute path NOW, once, in the final daemon process.
-   * /proc/self/exe is still clean here. After any atomic mv swap that
-   * replaces our binary, g_self_path still holds the same string but
-   * it now resolves to the new file on disk. Every fork()+reexec() from
-   * this point on will automatically exec the updated binary.
-   */
   {
     const ssize_t n =
         readlink("/proc/self/exe", g_self_path, sizeof(g_self_path) - 1);
     if (n > 0)
       g_self_path[n] = '\0';
     else
-      g_self_path[0] = '\0'; /* reexec() will fall back gracefully */
+      g_self_path[0] = '\0';
   }
 
-  /* SIGUSR2: app sends this after a live binary swap as an acknowledgment */
   signal(SIGUSR2, sigusr2_handler);
 
-  /* 注册 SIGTERM 处理函数，不使用 SA_RESTART 以便打断 accept4 */
-  struct sigaction sa = {
-   .sa_handler = sigterm_handler,
-  };
+  struct sigaction sa = {};
+  sa.sa_handler = sigterm_handler;
   sigaction(SIGTERM, &sa, nullptr);
 
   auto_close const int srv = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (srv < 0) {
-    log_error("daemon: socket: %s", strerror(errno));
+    log_error("daemon socket 建立失败: %s", strerror(errno));
     return 1;
   }
 
-  struct sockaddr_un addr;
+  struct sockaddr_un addr = {};
   const socklen_t alen = make_addr(&addr);
-  if (bind(srv, (struct sockaddr *)&addr, alen) < 0) {
-    log_error("daemon: bind(@%s): %s", SOCK_NAME, strerror(errno));
+  if (bind(srv, reinterpret_cast<struct sockaddr *>(&addr), alen) < 0) {
+    log_error("daemon 绑定失败 (@%s): %s", SOCK_NAME, strerror(errno));
     if (errno == EADDRINUSE) {
-      log_info("Is another " PROJECT_NAME " daemon stuck? Check 'ps' to see.");
+      log_info("可能有另一个失效的 " PROJECT_NAME " daemon 残留，请使用 'ps' 检查。");
     }
     return 1;
   }
 
   if (listen(srv, BACKLOG) < 0) {
-    log_error("daemon: listen: %s", strerror(errno));
+    log_error("daemon listen: %s", strerror(errno));
     return 1;
   }
 
-  signal(SIGCHLD, SIG_IGN); /* auto-reap children */
-  signal(SIGPIPE, SIG_IGN); /* ignore broken pipes */
+  signal(SIGCHLD, SIG_IGN);
+  signal(SIGPIPE, SIG_IGN);
 
-  log_info("Listening on @" SOCK_NAME " (PID %d)", getpid());
+  log_info("正在监听 @" SOCK_NAME " (PID %d)", getpid());
 
   for (;;) {
-    /* Rotate log if it exceeds 4MB */
     rotate_daemon_log_if_needed();
 
-    /* Acknowledge a live binary swap signalled by the Android app. */
     if (g_sigusr2_received) {
       g_sigusr2_received = 0;
       log_info(
-          "Binary updated on disk (SIGUSR2). New sessions will use updated "
-          "binary automatically.");
+          "探测到二进制文件热更新 (SIGUSR2)。新会话将自动加载新版本的代码执行。");
     }
 
     auto_close const int conn = accept4(srv, nullptr, nullptr, SOCK_CLOEXEC);
 
-    /* 检查是否收到退出信号 */
     if (g_terminate) {
-      log_info("Daemon stopped by user request. Exiting cleanly...");
-      break; /* 跳出循环，触发 RAII 清理 */
+      log_info("接收到用户退出指令，Daemon 正在关闭...");
+      break;
     }
 
     if (conn < 0) {
       if (errno == EINTR || errno == EAGAIN)
         continue;
-      log_error("accept4: %s", strerror(errno));
+      log_error("accept4 错误: %s", strerror(errno));
       continue;
     }
 
-     /*
-      * 验证对端身份：仅允许 root 用户（uid 0）连接。
-      * 由于抽象套接字没有文件系统权限，我们通过 SO_PEERCRED 来强制执行此安全限制。
-      */
     {
       struct ucred cred;
       socklen_t clen = sizeof(cred);
@@ -938,8 +800,8 @@ int daemon_run(const bool foreground) {
       }
 
       if (cred.uid != 0) {
-        const char *msg = "permission denied: only user 0 may connect.";
-        send_frame(conn, MSG_ERR, msg, (uint32_t)strlen(msg));
+        const char *msg = "权限拒绝：仅允许 Root 用户 (uid 0) 连接通信。";
+        send_frame(conn, MSG_ERR, msg, static_cast<uint32_t>(strlen(msg)));
         send_exit(conn, 1);
         continue;
       }
@@ -951,80 +813,71 @@ int daemon_run(const bool foreground) {
     }
     if (h == 0) {
       signal(SIGCHLD, SIG_DFL);
-      /* keep SIGPIPE ignored so we don't die on client disconnect */
       handle_conn(conn);
     }
   }
   return 0;
 }
 
-/*
- * Probe whether the daemon is alive.
- *
- * Abstract Unix socket connect() on Linux completes synchronously: the
- * kernel connects in-kernel without a network round-trip, so O_NONBLOCK +
- * poll() buys us nothing here.  A blocking connect() that finds no listener
- * returns ECONNREFUSED immediately.
- */
 bool daemon_probe(void) {
-  struct sockaddr_un addr;
+  struct sockaddr_un addr = {};
   const socklen_t alen = make_addr(&addr);
   auto_close const int s = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (s < 0)
     return 0;
-  return connect(s, (struct sockaddr *)&addr, alen) == 0;
+  return connect(s, reinterpret_cast<struct sockaddr *>(&addr), alen) == 0;
 }
 
-/* connect to the daemon and relay our command */
 int client_run(int argc, char **argv) {
+  /* 为避免 C++ 的 goto 跳跃限制，将所有局部变量声明前置 */
   auto_close int winch_sfd = -1;
   auto_close int epfd = -1;
   auto_close int sock = -1;
+  struct termios orig = {};
+  bool raw_tty_active = false;
+  int exit_code = 0;
+  char buf[IOBUF];
+  struct epoll_event ev = {};
+  struct epoll_event events[4] = {};
+  struct sockaddr_un addr = {};
 
   if (argc < 1)
     return -2;
 
-  /* Under the strict CLI, the command is always the first argument */
   bool interactive = (strcmp(argv[0], "start") == 0);
   bool has_tty = isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
 
   if (interactive && !has_tty) {
-    /* Since the format is strict `asc start NAME [CONFIG] [-f]`, 
-     * `-f` will always be the last argument if provided. */
     bool forces_tty = (argc > 1 && strcmp(argv[argc - 1], "-f") == 0);
 
     if (forces_tty) {
-      /* Strip -f; start_rootfs() will warn and flip the switch. */
       argv[--argc] = nullptr;
     }
     interactive = false;
   }
 
-  /* try to connect - single pass for execution path, retry loop only for 1st
-   * connect */
-  struct sockaddr_un addr;
   const socklen_t alen = make_addr(&addr);
 
   sock = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (sock < 0) {
-    fprintf(stderr, "client: socket: %s\n", strerror(errno));
+    fprintf(stderr, "client: 套接字创建失败: %s\n", strerror(errno));
     return 1;
   }
-  if (connect(sock, (struct sockaddr *)&addr, alen) < 0) {
+  if (connect(sock, reinterpret_cast<struct sockaddr *>(&addr), alen) < 0) {
     int err = errno;
     if (err == ECONNREFUSED || err == ENOENT)
-      return -2; /* Daemon not listening */
-    fprintf(stderr, "[-] Connection to daemon failed: %s\n", strerror(err));
+      return -2;
+    fprintf(stderr, "[-] 无法连接到 Daemon 守护进程: %s\n", strerror(err));
     return 1;
   }
 
-  /* send the request */
   uint32_t flags = interactive ? REQ_FLAG_PTY : 0u;
-  uint32_t nf = htonl(flags), na = htonl((uint32_t)argc);
+  uint32_t nf = htonl(flags), na = htonl(static_cast<uint32_t>(argc));
   if (write_all(sock, &nf, 4) < 0 || write_all(sock, &na, 4) < 0)
     goto send_err;
+
   for (int i = 0; i < argc; i++) {
-    uint32_t al = (uint32_t)strlen(argv[i]), nal = htonl(al);
+    uint32_t al = static_cast<uint32_t>(strlen(argv[i])), nal = htonl(al);
     if (write_all(sock, &nal, 4) < 0)
       goto send_err;
     if (al && write_all(sock, argv[i], al) < 0)
@@ -1039,17 +892,12 @@ int client_run(int argc, char **argv) {
       goto send_err;
   }
 
-  /* run the relay loop */
-  struct termios orig;
-  bool raw_tty_active = false;
-
   if (interactive && has_tty && tcgetattr(STDIN_FILENO, &orig) == 0) {
     raw_tty_active = true;
     struct termios raw = orig;
     cfmakeraw(&raw);
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 
-    /* signalfd for SIGWINCH: no handler, no 200ms timeout needed */
     sigset_t ws;
     sigemptyset(&ws);
     sigaddset(&ws, SIGWINCH);
@@ -1058,7 +906,6 @@ int client_run(int argc, char **argv) {
   }
 
   epfd = epoll_create1(EPOLL_CLOEXEC);
-  struct epoll_event ev, events[4];
 
   if (raw_tty_active) {
     ev.events = EPOLLIN;
@@ -1074,9 +921,6 @@ int client_run(int argc, char **argv) {
   ev.data.fd = sock;
   epoll_ctl(epfd, EPOLL_CTL_ADD, sock, &ev);
 
-  int exit_code = 0;
-  char buf[IOBUF];
-
   for (;;) {
     int nfds = epoll_wait(epfd, events, 4, -1);
     if (nfds < 0 && errno != EINTR)
@@ -1088,7 +932,7 @@ int client_run(int argc, char **argv) {
 
       if (winch_sfd >= 0 && fd == winch_sfd) {
         struct signalfd_siginfo si;
-        while (read(winch_sfd, &si, sizeof(si)) == (ssize_t)sizeof(si)) {
+        while (read(winch_sfd, &si, sizeof(si)) == static_cast<ssize_t>(sizeof(si))) {
           struct winsize nws = {24, 80, 0, 0};
           ioctl(STDIN_FILENO, TIOCGWINSZ, &nws);
           uint16_t wd2[2] = {htons(nws.ws_row), htons(nws.ws_col)};
@@ -1097,14 +941,13 @@ int client_run(int argc, char **argv) {
       } else if (fd == STDIN_FILENO) {
         ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
         if (n > 0) {
-          if (send_frame(sock, MSG_OUT, buf, (uint32_t)n) < 0)
+          if (send_frame(sock, MSG_OUT, buf, static_cast<uint32_t>(n)) < 0)
             done = true;
         } else {
           done = true;
         }
       } else if (fd == sock) {
         if (events[i].events & EPOLLIN) {
-          /* drain all available frames without a redundant poll() probe */
           for (;;) {
             uint8_t type;
             uint32_t mlen;
@@ -1117,7 +960,7 @@ int client_run(int argc, char **argv) {
               uint32_t nc = 0;
               if (mlen >= 4)
                 read_exact(sock, &nc, 4);
-              exit_code = (int)ntohl(nc);
+              exit_code = static_cast<int>(ntohl(nc));
               done = true;
               break;
             }
@@ -1126,7 +969,7 @@ int client_run(int argc, char **argv) {
             uint32_t rem = mlen;
             while (rem) {
               uint32_t c =
-                  rem < (uint32_t)sizeof(buf) ? rem : (uint32_t)sizeof(buf);
+                  rem < static_cast<uint32_t>(sizeof(buf)) ? rem : static_cast<uint32_t>(sizeof(buf));
               if (read_exact(sock, buf, c) < 0) {
                 done = true;
                 break;
@@ -1138,7 +981,6 @@ int client_run(int argc, char **argv) {
             if (done)
               break;
 
-            /* check for more data without blocking */
             struct pollfd pfd = {sock, POLLIN, 0};
             if (poll(&pfd, 1, 0) <= 0 || !(pfd.revents & POLLIN))
               break;
@@ -1167,6 +1009,6 @@ int client_run(int argc, char **argv) {
   return exit_code;
 
 send_err:
-  fprintf(stderr, "client: send failed: %s\n", strerror(errno));
+  fprintf(stderr, "client: 发送数据失败: %s\n", strerror(errno));
   return 1;
 }

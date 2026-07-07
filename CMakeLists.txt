@@ -23,31 +23,31 @@ configure_file(
 )
 
 add_executable(asc
-	src/main.c
-	src/utils.c
-	src/fs_mount.c
-	src/core/state.c
-	src/core/init.c
-	src/core/config.c
-	src/core/container.c
-	src/core/monitor.c
-	src/core/daemon.c
-	src/core/check.c
-	src/utils/string.c
-	src/utils/fileio.c
-	src/utils/logger.c
-	src/utils/workspace.c
-	src/utils/process.c
-	src/oci/jail.c
-	src/oci/seccomp.c
-	src/oci/cgroup.c
-	src/oci/caps.c
-	src/platform/blockdev.c
-	src/platform/devices.c
-	src/platform/pty.c
-	src/platform/console.c
-	src/platform/netlink.c
-	src/platform/virtual.c
+	src/main.cpp
+	src/utils.cpp
+	src/fs_mount.cpp
+	src/core/state.cpp
+	src/core/init.cpp
+	src/core/config.cpp
+	src/core/container.cpp
+	src/core/monitor.cpp
+	src/core/daemon.cpp
+	src/core/check.cpp
+	src/utils/string.cpp
+	src/utils/fileio.cpp
+	src/utils/logger.cpp
+	src/utils/workspace.cpp
+	src/utils/process.cpp
+	src/oci/jail.cpp
+	src/oci/seccomp.cpp
+	src/oci/cgroup.cpp
+	src/oci/caps.cpp
+	src/platform/blockdev.cpp
+	src/platform/devices.cpp
+	src/platform/pty.cpp
+	src/platform/console.cpp
+	src/platform/netlink.cpp
+	src/platform/virtual.cpp
 )
 target_include_directories(asc PRIVATE 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/include"

@@ -1,3 +1,4 @@
+// ===== src/include/asc.h =====
 #ifndef ASC_H
 #define ASC_H
 
@@ -5,11 +6,12 @@
 #define _GNU_SOURCE
 #endif
 
-#include <stdarg.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdarg>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cctype>
 
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
@@ -38,7 +40,6 @@
 #include <linux/filter.h>
 
 #include <arpa/inet.h>
-#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -59,19 +60,20 @@
 #include "utils/log.h"
 #include "cleanup.h"
 
+// 常量定义
 constexpr int MIN_KERNEL_MAJOR = 4;
 constexpr int MIN_KERNEL_MINOR = 9;
 constexpr int UUID_LEN = 32;
 constexpr int MAX_CONTAINERS = 1024;
-constexpr int STOP_TIMEOUT = 15; /* seconds */
-constexpr unsigned int RETRY_DELAY_US = 200000; /* 200ms */
-constexpr int REBOOT_EXIT = 249; /* exit code: in-container reboot */
+constexpr int STOP_TIMEOUT = 15; /* 秒 */
+constexpr unsigned int RETRY_DELAY_US = 200000; /* 200毫秒 */
+constexpr int REBOOT_EXIT = 249; /* 退出码: 容器内部触发重启 */
 constexpr int NL_BUFSIZE = 8192;
 constexpr int BIND_INITIAL_CAP = 4;
 constexpr int DEFAULT_TTY_GID = 5;
 constexpr int MAX_TRACKED_ENTRIES = 512;
 
-/* Runtime paths - all under /tmp/<project> (tmpfs, gone on reboot) */
+// 运行时路径 - 全部位于 /tmp/<project> 目录下 (使用 tmpfs，重启后丢失)
 #define RUNTIME_DIR "/tmp/asc"
 #define RUNTIME_LOCK_SUBDIR "lock"
 #define RUNTIME_CONFIG_SUBDIR "config"
@@ -82,7 +84,7 @@ constexpr int MAX_TRACKED_ENTRIES = 512;
 #define DEFAULT_INIT "/sbin/init"
 #define ANDROID_TMPFS_CONTEXT "u:object_r:tmpfs:s0"
 
-/* Common Paths & Patterns */
+// 通用路径与模式
 #define PROC_ROOT_FMT "/proc/%d/root"
 #define PROC_CMDLINE_FMT "/proc/%d/cmdline"
 #define PROC_STATUS_FMT "/proc/%d/status"
@@ -92,24 +94,27 @@ constexpr int MAX_TRACKED_ENTRIES = 512;
 #define FORK_MARKER "/run/asc"
 #define VPROC_PATH "/run/asc/vproc"
 
-constexpr int PRIV_NOMASK = 1 << 0; /* No jail masks (/proc, /sys) */
-constexpr int PRIV_NOCAPS = 1 << 1; /* No capability drops */
-constexpr int PRIV_NOSEC  = 1 << 2; /* Minimal seccomp only */
-constexpr int PRIV_SHARED = 1 << 3; /* MS_SHARED root propagation */
-constexpr int PRIV_UNFILT = 1 << 4; /* No device node blocking (except PTYs) */
-constexpr int PRIV_FULL   = 0xFF;   /* All above */
+// 特权掩码定义
+constexpr int PRIV_NOMASK = 1 << 0; // 不使用挂载掩码限制 (/proc, /sys)
+constexpr int PRIV_NOCAPS = 1 << 1; // 不丢弃任何内核能力 (capabilities)
+constexpr int PRIV_NOSEC  = 1 << 2; // 仅应用最小化的 seccomp 过滤器
+constexpr int PRIV_SHARED = 1 << 3; // 根目录挂载传播模式设置为 MS_SHARED
+constexpr int PRIV_UNFILT = 1 << 4; // 不阻止访问设备节点 (PTY 除外)
+constexpr int PRIV_FULL   = 0xFF;   // 启用上述所有特权
+
+extern "C" {
 
 typedef struct {
-  int fd;       /* AF_NETLINK / NETLINK_ROUTE socket */
-  uint32_t seq; /* monotonically increasing sequence number */
-  pid_t pid;    /* our PID used as nl_portid */
+  int fd;       // AF_NETLINK / NETLINK_ROUTE 套接字
+  uint32_t seq; // 单调递增的序列号
+  pid_t pid;    // 用作 nl_portid 的本进程 PID
 } nl_ctx_t;
 
-/* Terminal/TTY info - one per allocated PTY */
+// 终端/TTY 信息 - 每个分配的伪终端对应一个
 struct tty_info {
-  int master;          /* master fd (stays in parent/monitor) */
-  int slave;           /* slave fd (bind-mounted into container) */
-  char name[PATH_MAX]; /* slave device path (e.g. /dev/pts/3) */
+  int master;          // 主设备文件描述符 (保留在父进程/监控进程中)
+  int slave;           // 从设备文件描述符 (绑定挂载到容器中)
+  char name[PATH_MAX]; // 从设备路径 (例如 /dev/pts/3)
 };
 
 struct container_info {
@@ -117,7 +122,7 @@ struct container_info {
   pid_t pid;
 };
 
-/* Container configuration - replaces all global variables */
+// 容器配置 - 用于替代所有的全局变量
 typedef struct {
   char rootfs_img_path[PATH_MAX];
   char container_name[256];
@@ -161,6 +166,7 @@ typedef struct {
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
+// API 声明
 bool is_external_lock_active(const char *name);
 void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup);
 bool is_valid_container_pid(const pid_t pid);
@@ -262,5 +268,7 @@ int collect_pids(pid_t **pids_out,size_t *count_out);
 int build_proc_root_path(const pid_t pid,const char *suffix,char *buf,const size_t size);
 bool is_container_init(const pid_t pid);
 pid_t find_container_init_pid(const char *uuid);
+
+}
 
 #endif /* ASC_H */

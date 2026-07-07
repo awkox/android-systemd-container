@@ -6,7 +6,7 @@ int log_container_fd = -1;
 
 void rotate_log(const char *path, const size_t max_size) {
   struct stat st;
-  if (stat(path, &st) == 0 && (size_t)st.st_size >= max_size) {
+  if (stat(path, &st) == 0 && static_cast<size_t>(st.st_size) >= max_size) {
     char old_path[PATH_MAX + 8];
     snprintf(old_path, sizeof(old_path), "%s.old", path);
     rename(path, old_path);
@@ -23,21 +23,12 @@ static void write_to_log_file(const char *name, const char *component,
   struct tm tm;
   localtime_r(&ts.tv_sec, &tm);
 
-  /* Pre-opened FD path: survives pivot_root / mount namespace changes.
-   * dprintf() writes directly to the fd - no dup/fdopen/fclose overhead.
-   * O_APPEND (set at open time) makes each write atomic for small messages. */
   if (pre_opened_fd >= 0) {
-    /* In-place rotation: truncate when over 2MB.
-     * rename() is not possible since the FD follows the inode, not the path. */
     struct stat st;
     if (fstat(pre_opened_fd, &st) == 0 &&
-        (size_t)st.st_size >= 2 * 1024 * 1024) {
-      if (ftruncate(pre_opened_fd, 0) < 0) {
-        /* best-effort, ignore */
-      }
-      if (lseek(pre_opened_fd, 0, SEEK_SET) == (off_t)-1) {
-        /* best-effort, ignore */
-      }
+        static_cast<size_t>(st.st_size) >= 2 * 1024 * 1024) {
+      if (ftruncate(pre_opened_fd, 0) < 0) {}
+      if (lseek(pre_opened_fd, 0, SEEK_SET) == static_cast<off_t>(-1)) {}
     }
     dprintf(pre_opened_fd, "[%04d-%02d-%02d %02d:%02d:%02d.%03ld] [%s] %s\n",
             tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
@@ -45,7 +36,6 @@ static void write_to_log_file(const char *name, const char *component,
     return;
   }
 
-  /* Fallback: open by path (pre-pivot, monitor process, etc.) */
   char log_dir[PATH_MAX];
   char safe_log_name[256];
   sanitize_container_name(name, safe_log_name, sizeof(safe_log_name));
@@ -58,7 +48,7 @@ static void write_to_log_file(const char *name, const char *component,
 
   rotate_log(log_path, 2 * 1024 * 1024);
 
-  auto_fclose FILE *f = fopen(log_path, "ae"); /* append + close-on-exec */
+  auto_fclose FILE *f = fopen(log_path, "ae");
   if (!f)
     return;
 
@@ -75,12 +65,10 @@ void log_internal(const char *prefix, const bool is_err, const char *fmt, ...) {
   vsnprintf(raw_msg, sizeof(raw_msg), fmt, ap);
   va_end(ap);
 
-  /* Always log to file if container name is known */
   if (log_container_name[0]) {
     write_to_log_file(log_container_name, "main", raw_msg, log_container_fd);
   }
 
-  /* Decide if we should print to terminal */
   if (log_silent && !is_err)
     return;
 
@@ -135,7 +123,7 @@ void print_privileged_warning(const int privileged_mask) {
   if (privileged_mask <= 0)
     return;
 
-  printf("WARNING: PRIVILEGED MODE ACTIVE - DEVICE SECURITY COMPROMISED\r\n\r\n");
+  printf("警告: 特权模式(PRIVILEGED)已激活 - 设备安全性已被降级\r\n\r\n");
   fflush(stdout);
 }
 

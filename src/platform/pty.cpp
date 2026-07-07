@@ -1,23 +1,18 @@
 #include "asc.h"
 
-/* ---------------------------------------------------------------------------
- * PTY Allocation
- * ---------------------------------------------------------------------------*/
-
-/* Open master + slave without relying on /dev/ptmx symlink resolution.
- * TIOCGPTPEER (4.13+) opens slave directly from master fd.
- * Falls back to TIOCGPTN + path open for kernel 3.x. */
+/* 不依赖 /dev/ptmx 符号链接直接打开 master 与 slave。
+ * 对于 4.13+ 内核，使用 TIOCGPTPEER 直接从 master 文件描述符派生打开 slave。
+ * 对于 3.x 内核，回退使用 TIOCGPTN + 路径打开的方式。*/
 int openpty(int *master, int *slave, char *name) {
   const int m = open("/dev/ptmx", O_RDWR | O_NOCTTY | O_CLOEXEC);
   if (m < 0)
     return -1;
 
-  /* best-effort: vendor 4.9 kernels may return EINVAL/EIO on newinstance
-   * devpts mounts; kernel auto-unlocks if needed */
+  /* 尽力尝试解锁：部分 4.9 内核魔改后的 devpts mount 可能返回 EINVAL/EIO，忽略错误 */
   int unlock = 0;
   ioctl(m, TIOCSPTLCK, &unlock);
 
-  /* try kernel 4.13+ path-free method first */
+  /* 首选 4.13+ 无路径要求的方法 */
   int s = ioctl(m, TIOCGPTPEER, O_RDWR | O_NOCTTY | O_CLOEXEC);
   if (s >= 0) {
     if (name) {
@@ -27,7 +22,7 @@ int openpty(int *master, int *slave, char *name) {
       }
     }
   } else {
-    /* fallback: build /dev/pts/N path */
+    /* 回退方案：构建 /dev/pts/N 路径 */
     unsigned int ptyno;
     if (ioctl(m, TIOCGPTN, &ptyno) < 0)
       goto err;
@@ -50,13 +45,12 @@ err:
 
 int terminal_create(struct tty_info *tty) {
   if (openpty(&tty->master, &tty->slave, tty->name) < 0) {
-    log_error("openpty failed: %s", strerror(errno));
+    log_error("openpty 获取伪终端失败: %s", strerror(errno));
     return -1;
   }
 
-  /* tty group ownership + permissions */
+  /* 修正 PTY 从设备的组属和权限 */
   if (fchown(tty->slave, 0, 5) < 0) {
-    /* best-effort, ignore */
   }
   fchmod(tty->slave, 0620);
 
@@ -74,12 +68,10 @@ int terminal_set_stdfds(const int fd) {
 }
 
 int terminal_make_controlling(const int fd) {
-  /* Drop existing controlling terminal and session */
   setsid();
 
-  /* Make fd the new controlling terminal */
   if (ioctl(fd, TIOCSCTTY, nullptr) < 0) {
-    log_error("TIOCSCTTY failed: %s", strerror(errno));
+    log_error("TIOCSCTTY 控制终端绑定失败: %s", strerror(errno));
     return -1;
   }
 
@@ -87,7 +79,7 @@ int terminal_make_controlling(const int fd) {
 }
 
 /* ---------------------------------------------------------------------------
- * Termios / TIOS
+ * Termios 终端设置
  * ---------------------------------------------------------------------------*/
 
 int setup_tios(const int fd, struct termios *old) {
@@ -99,29 +91,27 @@ int setup_tios(const int fd, struct termios *old) {
   if (tcgetattr(fd, old) < 0)
     return -1;
 
-  /* Ignore signals during transition */
   signal(SIGTTIN, SIG_IGN);
   signal(SIGTTOU, SIG_IGN);
 
   new_tios = *old;
 
-  /* Raw mode - mirroring LXC/SSH settings for best compatibility */
+  /* Raw 模式 - 尽可能对齐 LXC/SSH 的设置以保证最大兼容性 */
   new_tios.c_iflag |= IGNPAR;
   new_tios.c_iflag &=
-      (tcflag_t) ~(ISTRIP | INLCR | IGNCR | ICRNL | IXON | IXANY | IXOFF);
+      static_cast<tcflag_t>(~(ISTRIP | INLCR | IGNCR | ICRNL | IXON | IXANY | IXOFF));
 #ifdef IUCLC
-  new_tios.c_iflag &= (tcflag_t)~IUCLC;
+  new_tios.c_iflag &= static_cast<tcflag_t>(~IUCLC);
 #endif
   new_tios.c_lflag &=
-      (tcflag_t) ~(TOSTOP | ISIG | ICANON | ECHO | ECHOE | ECHOK | ECHONL);
+      static_cast<tcflag_t>(~(TOSTOP | ISIG | ICANON | ECHO | ECHOE | ECHOK | ECHONL));
 #ifdef IEXTEN
-  new_tios.c_lflag &= (tcflag_t)~IEXTEN;
+  new_tios.c_lflag &= static_cast<tcflag_t>(~IEXTEN);
 #endif
-  /* Disable output processing: OPOST with ONLCR active on the host PTY causes
-   * the line discipline to transform \n -> \r\n, corrupting TUI escape
-   * sequences from tmux, vim, etc. The container shell sets its own ONLCR on
-   * the inner slave, so \r\n translation happens exactly once, there. */
-  new_tios.c_oflag &= (tcflag_t) ~(OPOST | ONLCR);
+  /* 禁用输出处理：如果主 PTY 的 OPOST 处于 ONLCR 激活状态，\n 会被转换为 \r\n，
+   * 从而破坏 tmux、vim 等终端 UI 工具的转义序列。在沙盒从 PTY 内它会自行设置，所以
+   * 在此必须禁用以保证只转换一次。 */
+  new_tios.c_oflag &= static_cast<tcflag_t>(~(OPOST | ONLCR));
   new_tios.c_cc[VMIN] = 1;
   new_tios.c_cc[VTIME] = 0;
 

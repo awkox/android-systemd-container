@@ -40,7 +40,7 @@ int collect_active_uuids(char uuids[][UUID_LEN + 1], const int max_uuids) {
     while ((ent = readdir(d)) != nullptr && found < max_uuids) {
       if (strlen(ent->d_name) != UUID_LEN)
         continue;
-      /* Verify it's all hex chars -- UUID marker files are 32 hex chars */
+      /* 验证是否为纯十六进制字符，UUID 标记文件必须是 32 个十六进制字符 */
       bool is_uuid = true;
       for (int j = 0; j < UUID_LEN; j++) {
         const char c = ent->d_name[j];

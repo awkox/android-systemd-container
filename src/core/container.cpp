@@ -1,11 +1,10 @@
 #include "asc.h"
 
 /* ---------------------------------------------------------------------------
- * External Command Lock - CLI-only ownership
+ * 外部命令锁 - 仅用于 CLI 命令行工具独占控制
  *
- * The lock represents exactly ONE thing: an external CLI command is actively
- * managing this container. ONLY the CLI parent creates/removes locks.
- * The monitor is READ-ONLY for locks.
+ * 该锁仅代表一件事：当前有一个外部 CLI 命令正在管理此容器。
+ * 只有 CLI 父进程能创建和释放锁。监控进程(monitor)对锁是只读的。
  * ---------------------------------------------------------------------------*/
 
 /* 保存当前进程持有的锁 FD 和路径，解决进程内多次申请锁的重入问题 */
@@ -26,11 +25,10 @@ static int get_lock_path(const char *name, char *buf, const size_t size) {
   return r > 0 && (size_t)r < size ? 0 : -1;
 }
 
-/* Create external command lock - ONLY called by CLI parent.
- * Uses POSIX record locks (fcntl) for automatic kernel cleanup.
- * Returns: 0 on success, -1 if lock already held by a live process. */
+/* 创建外部命令锁 - 仅由 CLI 父进程调用。
+ * 使用 POSIX 记录锁 (fcntl)，以便在进程崩溃时内核能自动清理。 */
 static int acquire_external_lock(const char *name) {
-  /* Re-entrancy: 如果当前进程已经持有锁（例如 restart 流程），直接返回成功 */
+  /* 重入支持：如果当前进程已经持有锁，直接返回成功 */
   if (active_lock_fd >= 0)
     return 0;
 
@@ -43,10 +41,9 @@ static int acquire_external_lock(const char *name) {
   if (fd < 0)
     return -1;
 
-  struct flock fl = {
-    .l_type = F_WRLCK,
-    .l_whence = SEEK_SET,
-  };
+  struct flock fl = {};
+  fl.l_type = F_WRLCK;
+  fl.l_whence = SEEK_SET;
 
   /* 尝试非阻塞 POSIX 记录锁 */
   if (fcntl(fd, F_SETLK, &fl) == 0) {
@@ -67,7 +64,7 @@ static int acquire_external_lock(const char *name) {
   if (errno == EACCES || errno == EAGAIN) {
     fl.l_type = F_WRLCK;
     if (fcntl(fd, F_GETLK, &fl) == 0 && fl.l_type != F_UNLCK) {
-      log_warn("Cannot acquire lock: held by process %d", fl.l_pid);
+      log_warn("无法获取锁: 当前已被进程 %d 持有", fl.l_pid);
     }
   }
 
@@ -75,12 +72,11 @@ static int acquire_external_lock(const char *name) {
   return -1;
 }
 
-/* Release external command lock - ONLY called by CLI parent. */
+/* 释放外部命令锁 - 仅由 CLI 父进程调用。 */
 static void release_external_lock(void) {
   if (active_lock_fd >= 0) {
     /* 
      * 在关闭 FD 前先 unlink，防止其他排队的进程获取到一个即将被删除的孤儿文件的锁。
-     * 这保持了 lock 目录的干净。
      */
     if (active_lock_path[0]) {
       unlink(active_lock_path);
@@ -93,8 +89,7 @@ static void release_external_lock(void) {
   }
 }
 
-/* Check if external command lock exists - called by monitor (READ ONLY).
- * Returns: 1 if lock exists and holder is alive, 0 otherwise. */
+/* 检查外部命令锁是否存在 - 仅供 monitor 调用 (只读模式)。 */
 bool is_external_lock_active(const char *name) {
   char lock_path[PATH_MAX];
   if (get_lock_path(name, lock_path, sizeof(lock_path)) < 0)
@@ -105,31 +100,26 @@ bool is_external_lock_active(const char *name) {
 }
 
 void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
-  /* Flush filesystem buffers (skip if force cleanup - sync can hang on
-   * zombie-held fs) */
+  /* 刷新文件系统缓冲区（如果强制清理则跳过，防止卡死） */
   if (!force_cleanup)
     sync();
 
-  /* 1. Cleanup firmware path (hw_access mode only; skip on force-cleanup
-   * since accessing a zombie-held mount can hang).
-   * Use cfg->conf.img_mount_point directly - it is already fully resolved and valid. */
+  /* 1. 清理固件路径（仅限硬件直通模式；强制清理跳过） */
   if (!force_cleanup && cfg->conf.hw_access && cfg->conf.img_mount_point[0]) {
     char fw_path[PATH_MAX + 16];
     snprintf(fw_path, sizeof(fw_path), "%s/lib/firmware", cfg->conf.img_mount_point);
     firmware_path_remove(fw_path);
   }
 
-  /* 2. Handle Volatile Overlay Cleanup (upper/work/merged)
-   * This MUST happen before unmounting the lower image mount.
-   * When force_cleanup, use detach+force unmount to avoid hangs. */
+  /* 2. 处理易失性 Overlay 模式清理 (upper/work/merged)
+   * 必须在卸载底层镜像挂载之前发生。 */
   if (cfg->conf.volatile_mode) {
     if (force_cleanup) {
-      /* Force path: skip sync, just detach everything */
+      /* 强制模式：跳过同步，直接解除挂载 */
       char merged[PATH_MAX + 32];
       snprintf(merged, sizeof(merged), "%s/merged", cfg->rt.volatile_dir);
       umount2(merged, MNT_DETACH | MNT_FORCE);
       umount2(cfg->rt.volatile_dir, MNT_DETACH | MNT_FORCE);
-      /* Best-effort directory removal */
       remove_recursive(cfg->rt.volatile_dir);
       cfg->rt.volatile_dir[0] = '\0';
     } else {
@@ -137,7 +127,7 @@ void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
     }
   }
 
-  /* 4. Handle rootfs image unmount */
+  /* 4. 处理 rootfs 镜像卸载 */
   char mount_point[PATH_MAX] = "";
   if (cfg->conf.img_mount_point[0]) {
     safe_strncpy(mount_point, cfg->conf.img_mount_point, sizeof(mount_point));
@@ -145,35 +135,27 @@ void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
 
   if (mount_point[0]) {
     if (force_cleanup) {
-      /* Force path: detach+force unmount, no sync, no retry loops */
       umount2(mount_point, MNT_DETACH | MNT_FORCE);
-      rmdir(mount_point); /* best-effort */
+      rmdir(mount_point);
     } else {
-      /* Explicitly call unmount wrapper. It handles its own logging. */
       unmount_rootfs_img(mount_point, cfg->rt.foreground);
     }
   }
 
-  /* Cgroup 子树清理：删除 /sys/fs/cgroup/asc/<name>/ 目录。
-   * All container processes are dead by now so every leaf is empty and
-   * the bottom-up rmdir walk always succeeds. */
+  /* Cgroup 子树清理：删除 /sys/fs/cgroup/asc/<name>/ 目录。 */
   cgroup_cleanup_container(cfg->conf.container_name);
 }
 
 bool is_valid_container_pid(const pid_t pid) {
   char path[PATH_MAX];
 
-  /* 主要标记：容器内必须存在 /run/asc。这是由本项目在引导时写入的唯一权威标记
-   * We do NOT require /run/systemd/container - Alpine/runit/openrc never
-   * write that file, causing scan to be blind to non-systemd distros. */
+  /* 容器内必须存在 /run/asc 标识目录。 */
   if (build_proc_root_path(pid, FORK_MARKER, path, sizeof(path)) < 0)
     return false;
   if (access(path, F_OK) != 0)
     return false;
 
-  /* Secondary check: process must be the init (PID 1) of its namespace.
-   * This is more robust than checking cmdline for "init" which distros
-   * like Void Linux (runit) or Alpine may not provide. */
+  /* 必须是其命名空间的 init 进程 (PID 1) */
   if (!is_container_init(pid))
     return false;
 
@@ -183,21 +165,22 @@ bool is_valid_container_pid(const pid_t pid) {
 int start_rootfs(cfg_t *cfg) {
   bool has_side_effects = false;
   bool lock_acquired = false;
+  pid_t existing_pid = 0;
+  int sync_pipe[2] = {-1, -1};
+  pid_t monitor_pid = -1;
+  char marker[PATH_MAX];
+  bool booted = false;
 
-  /* 0. Early restart detection: check for external lock from previous stop
-   *    command to detect a preserved mount for reuse. */
+  /* 0. 早期重启检测：检查之前停止命令留下的锁 */
   if (cfg->conf.container_name[0]) {
     char lock_path[PATH_MAX];
     if (get_lock_path(cfg->conf.container_name, lock_path, sizeof(lock_path)) == 0 &&
         access(lock_path, F_OK) == 0) {
-      /* This looks like a restart handoff - take ownership of the lock */
       if (acquire_external_lock(cfg->conf.container_name) == 0) {
         lock_acquired = true;
 
-        /* Try to reuse existing mount from config */
         if (cfg->conf.img_mount_point[0] && is_mountpoint(cfg->conf.img_mount_point)) {
         } else {
-          /* Mount not active - remove invalid lock */
           release_external_lock();
           lock_acquired = false;
         }
@@ -205,64 +188,55 @@ int start_rootfs(cfg_t *cfg) {
     }
   }
 
-  /* 1. Name Uniqueness Check
-   * We no longer auto-generate or increment names. The name must be provided
-   * by the user and it must be unique. */
+  /* 1. 唯一性检查：防止同名容器多次启动 */
   if (!lock_acquired) {
-    pid_t existing_pid = 0;
     if (is_container_running(cfg->conf.uuid, &existing_pid)) {
-      log_error("Container name '%s' is already in use by PID %d.",
+      log_error("容器名称 '%s' 已被 PID %d 占用。",
                 cfg->conf.container_name, existing_pid);
       goto cleanup;
     }
   }
 
-  /* 2. Preparation */
+  /* 2. 准备运行环境 */
   ensure_runtime();
 
-  /* 0a. Resolve any symlinks in rootfs image path to canonical absolute paths.
-   *     This prevents symlink-based attacks and ensures that all subsequent
-   *     operations use the intended location. */
+  /* 0a. 将 rootfs 路径解析为绝对路径以防止符号链接攻击 */
   if (cfg->conf.rootfs_img_path[0]) {
     auto_free char *abs_path = resolve_path_arg(cfg->conf.rootfs_img_path);
     if (!abs_path || access(abs_path, F_OK) != 0) {
-      log_error("Failed to resolve rootfs image path '%s': %s",
+      log_error("无法解析 rootfs 镜像路径 '%s': %s",
                 abs_path ? abs_path : cfg->conf.rootfs_img_path, strerror(errno));
       goto cleanup;
     }
     safe_strncpy(cfg->conf.rootfs_img_path, abs_path, sizeof(cfg->conf.rootfs_img_path));
   }
 
-  /* if foreground was requested but we have no interactive terminal (piped,
-   * scripted, config foreground=1, etc.), flip the switch once here and warn
-   * once. Covers both CLI and daemon paths. */
+  /* 自动回退后台模式：如果请求前台但没有交互终端，则转入后台运行 */
   if (cfg->rt.foreground && (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))) {
     cfg->rt.foreground = 0;
-    log_warn("No interactive terminal - foreground mode disabled, running in "
-             "background.");
+    log_warn("无交互式终端 - 已禁用前台模式，转入后台运行。");
   }
 
   print_cgroup_status(cfg);
 
   has_side_effects = true;
 
-  /* 2. Mount rootfs image (using the resolved name) */
+  /* 2. 挂载 rootfs 镜像 */
   if (cfg->conf.rootfs_img_path[0] && !lock_acquired) {
     if (mount_rootfs_img(cfg->conf.rootfs_img_path, cfg->conf.img_mount_point,
                          sizeof(cfg->conf.img_mount_point), cfg->conf.container_name) < 0) {
-      goto cleanup; /* 失败时跳转到清理流程，下方 cleanup 函数会自动解除绑定 */
+      goto cleanup;
     }
   }
 
-  /* 2a. Verify init binary exists before any side effects (NAT, config save).
-   * The image is now mounted at img_mount_point. */
+  /* 2a. 挂载后立即校验 init 二进制文件是否存在，防止空跑 */
   {
     char init_path[PATH_MAX * 2];
     char rootfs_norm[PATH_MAX];
     if (cfg->conf.img_mount_point[0])
       safe_strncpy(rootfs_norm, cfg->conf.img_mount_point, sizeof(rootfs_norm));
     else {
-      log_error("Rootfs image mount point not available.");
+      log_error("未获取到 Rootfs 镜像挂载点。");
       return -1;
     }
     size_t rlen = strlen(rootfs_norm);
@@ -276,27 +250,26 @@ int start_rootfs(cfg_t *cfg) {
              init_bin);
     struct stat st;
     if (lstat(init_path, &st) != 0) {
-      log_error("Init binary not found: %s", init_path);
-      log_error("Please ensure the rootfs path is correct and contains %s.",
+      log_error("未找到 Init 文件: %s", init_path);
+      log_error("请确保 rootfs 路径正确且包含了 %s 可执行文件。",
                 init_bin);
       unmount_rootfs_img(cfg->conf.img_mount_point, cfg->rt.foreground);
       return -1;
     }
-    /* Absolute symlinks resolve correctly inside the container after
-     * pivot_root, so skip the X_OK check for symlinks. */
     if (!S_ISLNK(st.st_mode) && access(init_path, X_OK) != 0) {
-      log_error("Init binary is not executable: %s", init_path);
-      log_error("Ensure it has executable permissions.");
+      log_error("Init 文件没有可执行权限: %s", init_path);
+      log_error("请确保为其赋予可执行权限 (chmod +x)。");
       unmount_rootfs_img(cfg->conf.img_mount_point, cfg->rt.foreground);
       return -1;
     }
   }
 
-  /* 3. Early pre-flight for volatile mode (before any host changes) */
+  /* 3. 易失模式 (Volatile) 的预检 */
   if (check_volatile_mode(&cfg->conf) < 0) {
     goto cleanup;
   }
 
+  /* UUID 生成与持久化 */
   {
     char active_uuids[MAX_CONTAINERS][UUID_LEN + 1];
     int uuid_count = collect_active_uuids(active_uuids, MAX_CONTAINERS);
@@ -313,42 +286,30 @@ int start_rootfs(cfg_t *cfg) {
       generate_uuid(cfg->conf.uuid, sizeof(cfg->conf.uuid));
   }
 
-  /* Persist UUID to config immediately
-   * so disk always matches the running container. CLI overrides (e.g. -f)
-   * are already in cfg at this point since start_rootfs() is called after
-   * argument parsing. */
   if (cfg->rt.config_file[0]) {
     bool was_new = !cfg->rt.config_file_existed;
     if (config_save(cfg->rt.config_file, cfg) < 0) {
-      log_error("Failed to persist configuration to '%s': %s", cfg->rt.config_file,
+      log_error("无法持久化配置到 '%s': %s", cfg->rt.config_file,
                 strerror(errno));
       goto cleanup;
     }
     if (was_new) {
-      log_info("Configuration persisted to %s", cfg->rt.config_file);
+      log_info("配置已成功持久化至 %s", cfg->rt.config_file);
     }
   }
 
-  /* Mirror to workspace so 'start -n <n>' works later without --conf */
   if (config_save_by_name(cfg->conf.container_name, cfg) < 0) {
-    log_warn("Failed to mirror configuration to workspace for '%s': %s",
+    log_warn("无法将工作区镜像配置同步至 '%s': %s",
              cfg->conf.container_name, strerror(errno));
   }
 
-  /* Pre-populate volatile_dir for monitor cleanup (actual overlay setup
-   * happens inside internal_boot's isolated mount namespace) */
   if (cfg->conf.volatile_mode) {
     snprintf(cfg->rt.volatile_dir, sizeof(cfg->rt.volatile_dir),
              "%s/" RUNTIME_VOLATILE_SUBDIR "/%s", get_runtime_dir(),
              cfg->conf.container_name);
   }
 
-  /* 4. Parent-side PTY allocation (LXC Model) */
-
-  /* Firmware path - hw_access mode only.
-   * The image is mounted at img_mount_point.  firmware_path_add() internally
-   * checks that /lib/firmware exists in the rootfs before touching the sysfs
-   * node. */
+  /* 4. 分配容器交互所用的伪终端 (PTY) */
   if (cfg->conf.hw_access) {
     char fw_path[PATH_MAX + 16];
     snprintf(fw_path, sizeof(fw_path), "%s/lib/firmware", cfg->conf.img_mount_point);
@@ -358,59 +319,49 @@ int start_rootfs(cfg_t *cfg) {
   fix_host_ptys();
 
   if (terminal_create(&cfg->rt.console) < 0) {
-    log_error("Failed to allocate console PTY");
+    log_error("无法分配容器控制台 (Console) PTY");
     goto cleanup;
   }
 
-  /* Propagate the host terminal's window size to the console PTY master
-   * so the slave (which becomes /dev/console) has correct dimensions
-   * from the very start of boot. This prevents misaligned output during
-   * the window between PTY creation and the console_monitor_loop startup.
-   * Without this, 'sudo poweroff' output is misaligned for the first
-   * ~10 lines because sudo resets/queries the terminal size and finds
-   * a {0,0} winsize on the PTY slave. */
+  /* 窗口尺寸同步 */
   if (isatty(STDIN_FILENO)) {
     struct winsize ws;
     if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
       ioctl(cfg->rt.console.master, TIOCSWINSZ, &ws);
   }
 
-  /* 5. Pipe for synchronization */
-  int sync_pipe[2] = {-1, -1};
+  /* 5. 创建用于同步的管道 */
   if (pipe(sync_pipe) < 0) {
-    log_error("pipe failed: %s", strerror(errno));
+    log_error("创建管道失败: %s", strerror(errno));
     goto cleanup;
   }
 
-  /* Set FD_CLOEXEC on both ends of sync_pipe */
   fcntl(sync_pipe[0], F_SETFD, FD_CLOEXEC);
   fcntl(sync_pipe[1], F_SETFD, FD_CLOEXEC);
 
-  /* Record start time before fork so monitor and virtualize_update share it */
   clock_gettime(CLOCK_BOOTTIME, &cfg->rt.start_time);
 
-  /* 7. Fork Monitor Process */
-  pid_t monitor_pid = fork();
+  /* 7. Fork 出监控进程 (Monitor) */
+  monitor_pid = fork();
   if (monitor_pid < 0) {
     close(sync_pipe[0]);
     close(sync_pipe[1]);
-    log_error("fork failed: %s", strerror(errno));
+    log_error("fork(Monitor) 失败: %s", strerror(errno));
     goto cleanup;
   }
 
   if (monitor_pid == 0) {
     close(sync_pipe[0]);
     monitor_run(cfg, sync_pipe[1]);
-    /* monitor_run never returns */
     _exit(EXIT_FAILURE);
   }
 
-  /* PARENT PROCESS */
+  /* ==== 父进程流程 ==== */
   close(sync_pipe[1]);
 
-  /* Wait for Monitor to send child PID */
+  /* 等待 Monitor 发送子进程 PID */
   if (read(sync_pipe[0], &cfg->rt.container_pid, sizeof(pid_t)) != sizeof(pid_t)) {
-    log_error("Monitor failed to send container PID.");
+    log_error("Monitor 监控进程未能发送容器 PID。");
     if (lock_acquired)
       release_external_lock();
     goto cleanup;
@@ -418,58 +369,46 @@ int start_rootfs(cfg_t *cfg) {
   close(sync_pipe[0]);
   sync_pipe[0] = -1;
 
-  log_info("Container started with PID %d (Monitor: %d)", cfg->rt.container_pid,
+  log_info("容器启动成功，主 PID 为 %d (Monitor PID: %d)", cfg->rt.container_pid,
            monitor_pid);
 
-  /* Log volatile mode */
   if (cfg->conf.volatile_mode)
-    log_info("Entering volatile mode (OverlayFS)...");
+    log_info("正在进入易失模式 (OverlayFS)...");
 
-  /* 9. Done - container is running, metadata is in /proc/<pid>/environ */
+  /* 9. 将挂载点状态同步到运行时配置 */
   if (cfg->conf.img_mount_point[0]) {
-    /* Ensure mount point is persisted in config for restart recovery */
     cfg_t save_cfg = *cfg;
     config_save_by_name(cfg->conf.container_name, &save_cfg);
   }
 
-  /* 10. Foreground or background finish */
+  /* 10. 处理前台交互或后台脱离 */
   if (cfg->rt.foreground) {
     if (lock_acquired) {
       release_external_lock();
     }
-
     int ret = console_monitor_loop(cfg->rt.console.master, monitor_pid, cfg);
     return ret;
   } else {
-    /* Wait for container to finish pivot_root before showing info.
-     * The boot sequence writes /run/ds-fork after pivot_root,
-     * so we poll for it via /proc/<pid>/root/run/ds-fork. */
-    char marker[PATH_MAX];
+    /* 后台模式：等待 pivot_root 完成再显示状态 (最多 5 秒) */
     snprintf(marker, sizeof(marker), "/proc/%d/root/run/" PROJECT_NAME,
              cfg->rt.container_pid);
-    bool booted = false;
-    for (int i = 0; i < 50; i++) { /* 5 seconds max */
+    for (int i = 0; i < 50; i++) {
       if (access(marker, F_OK) == 0) {
         booted = true;
         break;
       }
-      /* If the container PID is already dead, stop polling */
       if (kill(cfg->rt.container_pid, 0) < 0 && errno == ESRCH)
         break;
-      usleep(100000); /* 100ms */
+      usleep(100000); 
     }
 
     if (!booted) {
-      log_error("Container failed to boot correctly.");
-      /* If pid is still alive, we might want to kill it, but monitor usually
-       * handles this. Let's just return error so parent doesn't report
-       * success.
-       */
+      log_error("容器未能正确完成引导流程。");
       goto cleanup;
     }
 
     show_info(cfg, true);
-    log_info("Container '%s' is running in background.", cfg->conf.container_name);
+    log_info("容器 '%s' 正在后台运行。", cfg->conf.container_name);
   }
 
   if (lock_acquired)
@@ -478,12 +417,9 @@ int start_rootfs(cfg_t *cfg) {
   return 0;
 
 cleanup:
-  /* Centralized host-side cleanup IF we are returning error.
-   * This ensures image mounts and tracking files are reverted on fatal boot
-   * errors. Only execute if we successfully crossed the point of creating
-   * effects. */
+  /* ==== 集中清理流程 ==== */
   if (has_side_effects) {
-    cleanup_container_resources(cfg, true /* force */);
+    cleanup_container_resources(cfg, true);
   }
   if (lock_acquired)
     release_external_lock();
@@ -504,40 +440,34 @@ static int stop_rootfs_with_timeout(cfg_t *cfg, int timeout_seconds) {
   if (timeout_seconds < 0)
     timeout_seconds = STOP_TIMEOUT;
 
-  /* Acquire external command lock FIRST */
+  /* 获取外部命令锁 */
   if (acquire_external_lock(cfg->conf.container_name) != 0) {
-    log_error("Cannot stop '%s': another command is managing this container",
+    log_error("无法停止 '%s': 另一个命令正在管理此容器",
               cfg->conf.container_name);
-    log_error("Wait for the other operation to complete, or use '" PROJECT_NAME
-              " "
-              "show' to check status");
     return -1;
   }
 
   pid_t pid = 0;
   if (!is_container_running(cfg->conf.uuid, &pid) || pid <= 0) {
-    log_error("Container '%s' is not running or invalid.", cfg->conf.container_name);
+    log_error("容器 '%s' 未运行或状态无效。", cfg->conf.container_name);
     release_external_lock();
     return -1;
   }
 
-  log_info("Stopping container '%s' (PID %d)...", cfg->conf.container_name, pid);
+  log_info("正在停止容器 '%s' (PID %d)...", cfg->conf.container_name, pid);
 
-  /* Safe Metadata Capture: Read mount path from /proc/<pid>/environ
-   * before shutdown to preserve it for cleanup if container dies. */
+  /* 安全的元数据捕获 */
   if (cfg->conf.img_mount_point[0] == '\0') {
     read_proc_environ(pid, "RUNTIME_MOUNT_PATH", cfg->conf.img_mount_point,
                       sizeof(cfg->conf.img_mount_point));
   }
 
-  /* 1. Send shutdown signal. */
-  kill(pid, SIGRTMIN + 3); /* SIGRTMIN+3 */
+  /* 1. 发送关闭信号 */
+  kill(pid, SIGRTMIN + 3);
 
-  log_info(
-      "Waiting for graceful shutdown (this may take up to %d seconds)...",
-      timeout_seconds);
+  log_info("正在等待容器优雅关闭 (最长可能需要 %d 秒)...", timeout_seconds);
 
-  /* 2. Wait for exit */
+  /* 2. 等待进程退出 */
   bool stopped = false;
   for (int i = 0; i < timeout_seconds * 5; i++) {
     if (kill(pid, 0) < 0) {
@@ -549,19 +479,14 @@ static int stop_rootfs_with_timeout(cfg_t *cfg, int timeout_seconds) {
     usleep(RETRY_DELAY_US);
   }
 
-  /* 3. Force kill if still running */
+  /* 3. 如果仍然存活，强制杀死 */
   bool unkillable = false;
   if (!stopped) {
-    log_warn("Graceful stop timed out, sending SIGKILL...");
+    log_warn("优雅关闭超时，正在发送 SIGKILL 信号...");
     kill(pid, SIGKILL);
 
-    /*
-     * Wait up to 5 seconds for the kernel to clean up the process.
-     * We don't use blocking waitpid() because we aren't the parent,
-     * and we want a timeout to prevent hanging on unkillable PIDs.
-     */
     bool killed = false;
-    for (int j = 0; j < 25; j++) { /* 5 seconds total */
+    for (int j = 0; j < 25; j++) {
       if (kill(pid, 0) < 0 && errno == ESRCH) {
         killed = true;
         break;
@@ -571,26 +496,23 @@ static int stop_rootfs_with_timeout(cfg_t *cfg, int timeout_seconds) {
 
     if (!killed) {
       unkillable = true;
-      log_error("Container PID %d is in an unkillable state!", pid);
-      log_warn("This often happens on old Android kernels due to zombie "
-               "processes.\nPlease restart your device to clear it.");
-      log_warn("Proceeding with best-effort host cleanup (no sync)...");
+      log_error("容器进程 (PID %d) 进入了不可杀死的僵尸状态！", pid);
+      log_warn("这通常是因为内核僵尸进程导致。\n将尽最大努力清理宿主机资源 (无数据同步)...");
     }
   }
 
-  /* 4. Firmware cleanup (hw_access mode only).
-   * Skip when unkillable - accessing zombie-held rootfs can hang. */
+  /* 4. 清理固件路径 */
   if (cfg->conf.img_mount_point[0] && !unkillable && cfg->conf.hw_access) {
     char fw_path[PATH_MAX + 16];
     snprintf(fw_path, sizeof(fw_path), "%s/lib/firmware", cfg->conf.img_mount_point);
     firmware_path_remove(fw_path);
   }
 
-  /* 5. Complete resource cleanup. */
+  /* 5. 执行完整资源清理 */
   cleanup_container_resources(cfg, unkillable);
 
   if (!cfg->rt.foreground)
-    log_info("Container '%s' stopped.", cfg->conf.container_name);
+    log_info("容器 '%s' 已停止。", cfg->conf.container_name);
 
   release_external_lock();
 
@@ -601,6 +523,7 @@ int stop_rootfs(cfg_t *cfg) {
   return stop_rootfs_with_timeout(cfg, STOP_TIMEOUT);
 }
 
+/* 后续函数（show_info 等）因为没有用到 goto，且原样迁移即可 */
 static const char *get_architecture(void) {
   static struct utsname uts;
   if (uname(&uts) != 0)
@@ -641,40 +564,31 @@ static void get_os_pretty(const char *osrelease_path, char *buf, const size_t si
 }
 
 int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
-  /* Case 1: No container name specified - try auto-resolution or listing */
   if (cfg->conf.container_name[0] == '\0') {
-    log_error("Container name is missing.");
+    log_error("未指定容器名称。");
     return 0;
   }
 
-  /* Now we have a container name. Ensure its config is loaded from the source
-   * of truth (container.config) so we show accurate feature info without
-   * expensive live probing. */
   if (!trust_cfg_pid) {
     config_load_by_name(cfg->conf.container_name, cfg);
   }
 
-  /* Case 2: Validate running status */
   pid_t pid = 0;
   if (trust_cfg_pid) {
-    /* Trust the PID we just got from the sync pipe.
-     * We assume it's running because parent waited for boot marker. */
     pid = cfg->rt.container_pid;
   } else {
-    /* For other calls (e.g., info command), read and validate from pidfile. */
     is_container_running(cfg->conf.uuid, &pid);
   }
 
   if (pid <= 0) {
-    log_error("Container '%s' is not running or invalid.", cfg->conf.container_name);
+    log_error("容器 '%s' 未运行或状态无效。", cfg->conf.container_name);
     return -1;
   }
 
-  /* Human-readable output */
   const char *arch = get_architecture();
-  printf("Host: %s\n", arch);
+  printf("宿主机架构: %s\n", arch);
 
-  printf("\nContainer: %s (RUNNING)\n",
+  printf("\n容器: %s (运行中)\n",
          cfg->conf.container_name);
   printf("  PID: %d\n", pid);
 
@@ -684,60 +598,53 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
                            sizeof(osr_path)) == 0) {
     get_os_pretty(osr_path, pretty, sizeof(pretty));
     if (pretty[0])
-      printf("  OS: %s\n", pretty);
+      printf("  操作系统: %s\n", pretty);
   }
 
-  /* Uptime (only if called from info command) */
   if (!trust_cfg_pid) {
     const long uptime_sec = get_container_uptime(pid);
     if (uptime_sec >= 0) {
       char uptime_str[128];
       format_uptime(uptime_sec, uptime_str, sizeof(uptime_str));
-      printf("  Uptime: %s\n", uptime_str);
+      printf("  运行时长: %s\n", uptime_str);
     }
   }
 
-  printf("\nFeatures:\n");
+  printf("\n已启用特性:\n");
   int feat_count = 0;
 
-  /* 1. Isolation Network */
   if (cfg->conf.isolation_network) {
-    printf("  Isolation network: enabled\n");
+    printf("  隔离网络: 是\n");
     feat_count++;
   }
 
-  /* 2. HW/GPU Access */
   if (cfg->conf.hw_access) {
-    printf("  HW access: full\n");
+    printf("  硬件直通: 完整\n");
     feat_count++;
   } else if (cfg->conf.gpu_mode) {
-    printf("  HW access: GPU\n");
+    printf("  硬件直通: 仅 GPU\n");
     feat_count++;
   }
 
-  /* 3. Volatile Mode */
   if (cfg->conf.volatile_mode) {
-    printf("  Volatile mode: enabled\n");
+    printf("  易失模式: 是\n");
     feat_count++;
   }
 
-  /* 4. Cgroup v1 */
   if (cfg->conf.force_cgroupv1) {
-    printf("  Force Cgroup V1: yes\n");
+    printf("  强制 Cgroup V1: 是\n");
     feat_count++;
   }
 
-  /* 5. Deadlock Shield (block_nested_ns) */
   if (cfg->conf.block_nested_ns) {
-    printf("  Deadlock Shield: enabled\n");
+    printf("  死锁保护护盾: 是\n");
     feat_count++;
   }
 
-  /* 6. Privileged Mode */
   if (cfg->conf.privileged_mask > 0) {
-    printf("  Privileged mode: ");
+    printf("  特权模式掩码: ");
     if (cfg->conf.privileged_mask == PRIV_FULL) {
-      printf("full");
+      printf("完整(full)");
     } else {
       bool first = true;
       if (cfg->conf.privileged_mask & PRIV_NOMASK) {
@@ -766,48 +673,43 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
   }
 
   if (feat_count == 0) {
-    printf("  None\n");
+    printf("  (无)\n");
   }
 
-  /* Resource limits & live usage. Only show if Cgroup V2 is active,
-   * since we skip resource management entirely on V1. We also skip this
-   * when called during the boot sequence (!trust_cfg_pid). */
   if (!trust_cfg_pid &&
       (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit) &&
       !cfg->conf.force_cgroupv1 && cgroup_host_is_v2()) {
     long long mu = -1, cu = -1, pu = -1;
     cgroup_get_usage(cfg->conf.container_name, &mu, &cu, &pu);
-    printf("\nResources:\n");
+    printf("\n资源限制与使用状态:\n");
 
     if (cfg->conf.memory_limit) {
       char used[32] = "?", lim[32];
       if (mu >= 0)
         format_size(mu, used, sizeof(used));
       format_size(cfg->conf.memory_limit, lim, sizeof(lim));
-      printf("  Memory : %s / %s\n", used, lim);
+      printf("  内存   : %s / %s\n", used, lim);
     }
     if (cfg->conf.cpu_quota) {
       const long long period = cfg->conf.cpu_period > 0 ? cfg->conf.cpu_period : 100000;
       const double cores = (double)cfg->conf.cpu_quota / period;
-      printf("  CPU    : %.2f cores", cores);
+      printf("  CPU    : %.2f 核心", cores);
       if (cu >= 0) {
         const long uptime = get_container_uptime(pid);
         if (uptime > 0) {
-          /* Average usage as percentage of total capacity (all allocated
-           * cores). cu is in usec, uptime in sec. */
           const double usage_sec = (double)cu / 1e6;
           const double avg_util = usage_sec / (double)uptime / cores * 100.0;
-          printf(" (Avg usage: %.1f%%)", avg_util);
+          printf(" (平均负载: %.1f%%)", avg_util);
         } else {
-          printf(" (used: %.3fs)", (double)cu / 1e6);
+          printf(" (已用: %.3fs)", (double)cu / 1e6);
         }
       }
       printf("\n");
     }
     if (cfg->conf.pids_limit) {
-      printf("  PIDs   : limit %lld", cfg->conf.pids_limit);
+      printf("  PIDs   : 限制上限 %lld", cfg->conf.pids_limit);
       if (pu >= 0)
-        printf(" (current: %lld)", pu);
+        printf(" (当前数量: %lld)", pu);
       printf("\n");
     }
   }

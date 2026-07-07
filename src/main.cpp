@@ -1,62 +1,62 @@
 #include "asc.h"
 
 /*
- * !!!我们假设本程序在除了系统关机外不会被意外杀死!!!
- * !!!所以我们移除了部分意外防护代码，仅保留了正常情况的处理!!!
- * !!!若程序意外退出，必须重启系统进行清理!!!
+ * !!! 我们假设本程序在除了系统关机外不会被意外杀死 !!!
+ * !!! 所以我们移除了部分意外防护代码，仅保留了正常情况的处理 !!!
+ * !!! 若程序意外退出，必须重启系统进行清理 !!!
  */
 
 static void print_usage(void) {
   printf(
-      "Usage: " PROJECT_NAME " <command> [args]\n\n"
-      "Commands:\n"
-      "  daemon start [-f]         Start the background daemon (-f for foreground)\n"
-      "  daemon stop               Stop the running background daemon\n"
-      "  start NAME [CONFIG] [-f]  Start container NAME with optional CONFIG file\n"
-      "  stop NAME                 Stop container NAME\n"
-      "  info NAME                 Show detailed container info\n"
-      "  check                     Check system requirements\n"
-      "  help                      Show this help message\n\n");
+      "用法: " PROJECT_NAME " <命令> [参数]\n\n"
+      "命令列表:\n"
+      "  daemon start [-f]         启动后台守护进程 (使用 -f 可在前台运行)\n"
+      "  daemon stop               停止正在运行的后台守护进程\n"
+      "  start NAME [CONFIG] [-f]  使用可选的 CONFIG 配置文件启动名为 NAME 的容器\n"
+      "  stop NAME                 停止名为 NAME 的容器\n"
+      "  info NAME                 显示详细的容器信息\n"
+      "  check                     检查系统运行要求\n"
+      "  help                      显示此帮助信息\n\n");
 }
 
 /**
- * CLI-level configuration validation with professional error reporting.
- * Deters configuration errors early before entering the runtime.
+ * 命令行级别的配置验证，提供专业的错误报告。
+ * 在进入运行时之前尽早拦截配置错误。
  */
 static int validate_configuration_cli(asc_conf_t *conf) {
   bool error = false;
 
   if (!conf->container_name[0]) {
-    log_error("Container name is mandatory.");
+    log_error("容器名称是必填项。");
     error = true;
   } else if (reject_container_name(conf->container_name) < 0) {
     error = true;
   }
 
   if (!conf->rootfs_img_path[0]) {
-    log_error("No rootfs image specified in configuration.");
+    log_error("配置中未指定 rootfs 镜像。");
     error = true;
   }
 
-  /* Existence checks */
+  /* 存在性检查 */
   if (conf->rootfs_img_path[0] && access(conf->rootfs_img_path, F_OK) != 0) {
-    log_error("Rootfs image not found: '%s' (%s)", conf->rootfs_img_path,
+    log_error("未找到 rootfs 镜像: '%s' (%s)", conf->rootfs_img_path,
               strerror(errno));
     error = true;
   }
 
-  /* Image mode requires a name for the mount point */
+  /* 镜像模式需要一个名称作为挂载点 */
   if (conf->rootfs_img_path[0] && !conf->container_name[0]) {
-    log_error("Rootfs image requires a container name.");
+    log_error("rootfs 镜像需要提供容器名称。");
     error = true;
   }
 
   if (conf->custom_init[0]) {
     if (conf->custom_init[0] != '/') {
-      log_error("Custom init path must be absolute: %s", conf->custom_init);
+      log_error("自定义 init 路径必须是绝对路径: %s", conf->custom_init);
       error = true;
     } else if (strchr(conf->custom_init, ' ')) {
-      log_error("Custom init path cannot contain spaces: %s", conf->custom_init);
+      log_error("自定义 init 路径不能包含空格: %s", conf->custom_init);
       error = true;
     }
   }
@@ -66,17 +66,21 @@ static int validate_configuration_cli(asc_conf_t *conf) {
 
 int main(const int argc, char **argv) {
   int ret = 0;
-  /* CRITICAL: Zero all fields to avoid garbage pointer in dynamic arrays */
+  /* 严重警告：将所有字段归零以避免动态数组中出现垃圾指针 */
   cfg_t cfg = {};
+
+  bool loaded = false;
+  char temp_i[PATH_MAX] = "";
 
   if (argc < 2) {
     print_usage();
     return 1;
   }
 
-  /* Resolve relative path arguments to absolute before any parsing.
-   * The daemon runs from CWD='/' (daemonize calls chdir("/")), so a relative
-   * path would resolve against '/' in the re-exec'd child.
+  /* 
+   * 在任何解析之前，将相对路径参数解析为绝对路径。
+   * 因为守护进程在 daemonize() 中会调用 chdir("/")，所以如果在
+   * 重新执行(re-exec)的子进程中解析相对于 "/" 的相对路径就会出错。
    */
   resolve_argv_paths(argc - 1, argv + 1);
 
@@ -89,7 +93,7 @@ int main(const int argc, char **argv) {
   bool is_no_root_cmd = false;
   bool is_stateful = false;
 
-  /* Strict CLI matching */
+  /* 严格的命令行匹配 */
   if (strcmp(cmd, "daemon") == 0) {
     is_daemon_cmd = true;
     if (argc < 3) goto usage_error;
@@ -141,7 +145,7 @@ int main(const int argc, char **argv) {
     goto usage_error;
   }
 
-  /* Populate cfg with parsed arguments */
+  /* 用解析后的参数填充 cfg */
   if (name) {
     if (reject_container_name(name) < 0) {
       ret = 1;
@@ -155,9 +159,9 @@ int main(const int argc, char **argv) {
   cfg.rt.foreground = foreground ? 1 : 0;
 
   /*
-   * Daemon Proxying:
-   * Optimistically attempt to proxy commands to the background daemon.
-   * If the daemon is not reachable, fall back to direct execution.
+   * 守护进程代理 (Daemon Proxying):
+   * 乐观地尝试将命令代理给后台守护进程执行。
+   * 如果无法连接到守护进程，则回退到直接执行。
    */
   if (!is_daemon_cmd && !is_no_root_cmd && getenv("NO_PROXY") == nullptr) {
     const int proxy_ret = client_run(argc - 1, argv + 1);
@@ -167,27 +171,24 @@ int main(const int argc, char **argv) {
     }
   }
 
-  /* Unified root gate: block all non-exempt commands before any work begins */
+  /* 统一 root 权限卡口：在开始任何工作前拦截所有非豁免命令 */
   if (!is_no_root_cmd && getuid() != 0) {
-    log_error("Root privileges required for '%s'", cmd);
+    log_error("执行 '%s' 命令需要 Root 权限", cmd);
     ret = 1;
     goto cleanup;
   }
 
   /*
-   * Unified Configuration Discovery and Loading
-   * 1. Try to load from explicitly provided config file.
-   * 2. Otherwise try to auto-detect config from rootfs paths.
-   * 3. Ensure we have a container name for stateful commands.
+   * 统一配置发现与加载
+   * 1. 尝试从显式提供的配置文件加载。
+   * 2. 否则尝试根据 rootfs 路径自动检测配置。
+   * 3. 确保对于有状态(stateful)的命令，我们有一个容器名称。
    * 4. 如果配置尚未成功加载，执行恢复扫描以尝试从
    *    <workspace dir>/config/<name>/container.config 加载。
    */
-  bool loaded = false;
-  constexpr char temp_i[PATH_MAX] = "";
-
   if (cfg.rt.config_file[0]) {
     if (config_load(cfg.rt.config_file, &cfg) < 0) {
-      log_error("Failed to load configuration from '%s': %s", cfg.rt.config_file,
+      log_error("无法从 '%s' 加载配置: %s", cfg.rt.config_file,
                 strerror(errno));
       ret = 1;
       goto cleanup;
@@ -200,30 +201,27 @@ int main(const int argc, char **argv) {
       if (config_load(cfg.rt.config_file, &cfg) == 0) {
         loaded = true;
       } else if (errno != ENOENT) {
-        log_warn("Failed to load auto-detected config from '%s': %s",
+        log_warn("无法加载自动检测到的配置文件 '%s': %s",
                  cfg.rt.config_file, strerror(errno));
       }
     }
   }
 
-  /* For stateful commands, we absolutely need a container name.
-   * If we don't have one by now, try to guess the active container. */
+  /* 对于有状态的命令，我们绝对需要一个容器名称。 */
   if (is_stateful && cfg.conf.container_name[0] == '\0') {
-    log_error("Container name is required for this command.");
+    log_error("执行此命令必须指定容器名称。");
     ret = 1;
     goto cleanup;
   }
 
-  /* If we have a name but haven't successfully loaded a config file yet, load
-   * by name. */
+  /* 如果我们有名称但尚未成功加载配置文件，按名称加载。 */
   if (!loaded && cfg.conf.container_name[0] != '\0') {
     if (config_load_by_name(cfg.conf.container_name, &cfg) < 0) {
-      /* If loading by name fails and it's a stateful command, maybe the
-       * container was moved or renamed. Perform a recovery scan of running
-       * systems as a last resort. */
+      /* 如果按名称加载失败且它是一个有状态命令，可能容器已被移动或重命名。
+       * 作为最后手段，对正在运行的系统执行恢复扫描。 */
       if (is_stateful) {
         if (config_load_by_name(cfg.conf.container_name, &cfg) < 0) {
-          log_error("Container '%s' not found or metadata missing.",
+          log_error("未找到容器 '%s' 或元数据丢失。",
                     cfg.conf.container_name);
           ret = 1;
           goto cleanup;
@@ -232,13 +230,13 @@ int main(const int argc, char **argv) {
     }
   }
 
-  /* Set up global logging context for centralized logging engine */
+  /* 为集中式日志引擎设置全局日志上下文 */
   if (cfg.conf.container_name[0] != '\0') {
     safe_strncpy(log_container_name, cfg.conf.container_name,
                  sizeof(log_container_name));
   }
 
-  /* Basic info commands */
+  /* 基础信息命令 */
   if (strcmp(cmd, "check") == 0) {
     ret = check_requirements_detailed();
     goto cleanup;
@@ -251,7 +249,7 @@ int main(const int argc, char **argv) {
 
   ensure_runtime();
 
-  /* single container only */
+  /* 容器启动流程 */
   if (strcmp(cmd, "start") == 0) {
     if (validate_configuration_cli(&cfg.conf) < 0) {
       ret = 1;
@@ -263,8 +261,7 @@ int main(const int argc, char **argv) {
     }
     print_privileged_warning(cfg.conf.privileged_mask);
     if (cfg.conf.privileged_mask & PRIV_NOSEC && cfg.conf.block_nested_ns)
-      log_warn("--privileged=noseccomp is active: --block-nested-namespaces "
-               "is now a NO-OP.");
+      log_warn("警告：由于启用了 --privileged=noseccomp，--block-nested-namespaces 已失效。");
     cgroup_host_bootstrap(cfg.conf.force_cgroupv1);
     ret = start_rootfs(&cfg);
     goto cleanup;
@@ -285,18 +282,18 @@ int main(const int argc, char **argv) {
       ret = daemon_run(cfg.rt.foreground);
     } else if (strcmp(subcmd, "stop") == 0) {
       /* 如果执行到这里，说明 Daemon 没启动（client_run 代理失败并回退了） */
-      log_info("Daemon is not running.");
+      log_info("守护进程当前未运行。");
       ret = 0;
     }
     goto cleanup;
   }
 
-  // Fallback (should be unreachable due to previous strict checking)
+  // 兜底分支 (在前面严格检查下正常是不可达的)
   goto usage_error;
 
 usage_error:
-  log_error("Invalid arguments or missing command.");
-  log_info("Run '%s help' for usage information.", argv[0]);
+  log_error("无效的参数或缺失命令。");
+  log_info("运行 '%s help' 获取使用帮助。", argv[0]);
   ret = 1;
 
 cleanup:

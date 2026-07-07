@@ -30,7 +30,6 @@ void generate_container_name(const char *rootfs_path, char *name, const size_t s
   char id[64], version[64];
 
   if (parse_os_release(rootfs_path, id, version, sizeof(id)) < 0) {
-    /* Fallback if os-release is missing */
     safe_strncpy(name, "linux-container", size);
     return;
   }

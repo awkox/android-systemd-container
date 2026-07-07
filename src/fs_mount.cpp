@@ -1,10 +1,10 @@
 #include "asc.h"
 
 /* ---------------------------------------------------------------------------
- * Helpers
+ * 辅助函数
  * ---------------------------------------------------------------------------*/
 
-/* Check if a path is a mountpoint */
+/* 检查路径是否为挂载点 */
 bool is_mountpoint(const char *path) {
   struct stat st1, st2;
   if (stat(path, &st1) < 0)
@@ -18,14 +18,11 @@ bool is_mountpoint(const char *path) {
   return st1.st_dev != st2.st_dev;
 }
 
-/* 使用容器名称在 /mnt/asc/ 中查找可用的挂载点
- * If a mount point already exists for this name but is not associated
- * with an active container (stale), it will be cleaned up. */
+/* 使用容器名称在 /mnt/asc/ 中查找或创建可用的挂载点 */
 static int find_available_mountpoint(const char *name, char *mount_path,
                                      const size_t size) {
   const char *base_dir = IMG_MOUNT_ROOT;
 
-  /* Create base directory if it doesn't exist */
   mkdir(base_dir, 0755);
 
   char safe_name[256];
@@ -34,7 +31,7 @@ static int find_available_mountpoint(const char *name, char *mount_path,
   snprintf(mount_path, size, "%s/%s", base_dir, safe_name);
 
   if (mkdir(mount_path, 0755) < 0) {
-    log_error("Failed to create mount directory %s: %s", mount_path,
+    log_error("创建挂载目录 %s 失败: %s", mount_path,
               strerror(errno));
     return -1;
   }
@@ -43,15 +40,15 @@ static int find_available_mountpoint(const char *name, char *mount_path,
 }
 
 /* ---------------------------------------------------------------------------
- * Generic mount wrappers
+ * 通用挂载包装器
  * ---------------------------------------------------------------------------*/
 
 int domount(const char *src, const char *tgt, const char *fstype,
             const unsigned long flags, const char *data) {
   if (mount(src, tgt, fstype, flags, data) < 0) {
-    /* Don't log if it's already mounted (EBUSY) */
+    /* 忽略设备忙 (EBUSY) 错误（通常意味着已挂载） */
     if (errno != EBUSY) {
-      log_error("Failed to mount %s on %s (%s): %s", src ? src : "none", tgt,
+      log_error("挂载失败 %s 到 %s (%s): %s", src ? src : "none", tgt,
                 fstype ? fstype : "none", strerror(errno));
       return -1;
     }
@@ -62,7 +59,7 @@ int domount(const char *src, const char *tgt, const char *fstype,
 int bind_mount(const char *src, const char *tgt) {
   auto_close const int src_fd = open(src, O_PATH | O_NOFOLLOW | O_CLOEXEC);
   if (src_fd < 0) {
-    /* If it failed because of ELOOP, it's a symlink we should reject anyway */
+    /* 遇到 ELOOP 说明它是一个我们应拒绝的符号链接 */
     return -1;
   }
 
@@ -70,7 +67,7 @@ int bind_mount(const char *src, const char *tgt) {
   if (fstat(src_fd, &st_src) < 0)
     return -1;
 
-  /* Reject symlinks explicitly */
+  /* 显式拒绝符号链接 */
   if (S_ISLNK(st_src.st_mode)) {
     errno = ELOOP;
     return -1;
@@ -78,23 +75,23 @@ int bind_mount(const char *src, const char *tgt) {
 
   struct stat st_tgt;
   if (lstat(tgt, &st_tgt) < 0) {
-    /* Target does not exist — reject if any parent component is a symlink
-     * (lstat only protects the final component from being followed). */
+    /* 目标不存在 — 如果任何父组件是符号链接则拒绝
+     * (lstat 只能防止最后一个组件被跟踪)。 */
     if (path_has_symlink(tgt)) {
-      log_error("Security Violation: symlink in bind target path %s", tgt);
+      log_error("安全违规：绑定挂载的目标路径中包含符号链接 %s", tgt);
       errno = ELOOP;
       return -1;
     }
     if (S_ISDIR(st_src.st_mode)) {
       mkdir(tgt, st_src.st_mode & 07777);
       if (chown(tgt, st_src.st_uid, st_src.st_gid) < 0) {
-        /* ignore chown failure, not critical for bind mount setup */
+        /* 忽略 chown 失败，这对绑定挂载并非致命 */
       }
     } else {
       write_file(tgt, "");
     }
   } else if (S_ISLNK(st_tgt.st_mode)) {
-    log_error("Security Violation: Bind target %s is a symlink!", tgt);
+    log_error("安全违规：绑定挂载目标 %s 是一个符号链接！", tgt);
     errno = ELOOP;
     return -1;
   }
@@ -105,10 +102,8 @@ int bind_mount(const char *src, const char *tgt) {
   return domount(proc_path, tgt, nullptr, MS_BIND | MS_REC, nullptr);
 }
 
-
-
 /* ---------------------------------------------------------------------------
- * /dev setup
+ * /dev 与 OverlayFS 挂载设置
  * ---------------------------------------------------------------------------*/
 
 int check_volatile_mode(asc_conf_t *conf) {
@@ -116,19 +111,16 @@ int check_volatile_mode(asc_conf_t *conf) {
     return 0;
 
   if (grep_file("/proc/filesystems", "overlay") != 1) {
-    log_error("OverlayFS is not supported by your kernel. Volatile mode cannot "
-              "be used.");
+    log_error("您的内核不支持 OverlayFS。无法使用易失模式。");
     return -1;
   }
 
-  /* Pre-flight: reject f2fs lowerdir - known Android kernel limitation */
+  /* 预检：拒绝 f2fs 底层目录 - 这是已知的 Android 内核限制 */
   struct statfs sfs;
   if (statfs(conf->img_mount_point, &sfs) == 0 && sfs.f_type == 0xF2F52010) {
-    log_error("Volatile mode cannot be used: Your rootfs is on f2fs, which is "
-              "not supported as an OverlayFS lower layer on most Android "
-              "kernels.");
-    log_error("Tip: Use a rootfs image (-i) instead of a directory (-r) "
-              "for volatile mode on f2fs partitions.");
+    log_error("无法使用易失模式：您的 rootfs 位于 f2fs 分区上，"
+              "大多数 Android 内核不支持将其用作 OverlayFS 的下层。");
+    log_error("提示：请在 f2fs 分区上使用镜像文件 (-i) 而不是目录 (-r) 来开启易失模式。");
     return -1;
   }
 
@@ -141,16 +133,16 @@ int setup_volatile_overlay(cfg_t *cfg) {
   snprintf(base, sizeof(base), "%s/" RUNTIME_VOLATILE_SUBDIR "/%s",
            get_runtime_dir(), cfg->conf.container_name);
   if (mkdir_p(base, 0755) < 0) {
-    log_error("Failed to create volatile workspace: %s", base);
+    log_error("创建易失模式工作区失败: %s", base);
     return -1;
   }
   safe_strncpy(cfg->rt.volatile_dir, base, sizeof(cfg->rt.volatile_dir));
 
-  /* 2. Mount tmpfs as the backing store for upper/work */
+  /* 2. 挂载 tmpfs 作为 upper/work 的后备存储 */
   if (domount("none", base, "tmpfs", 0, "size=50%,mode=755") < 0)
     return -1;
 
-  /* 3. Create subdirectories */
+  /* 3. 创建子目录 */
   char upper[PATH_MAX + 32], work[PATH_MAX + 32], merged[PATH_MAX + 32];
   snprintf(upper, sizeof(upper), "%s/upper", base);
   snprintf(work, sizeof(work), "%s/work", base);
@@ -159,45 +151,32 @@ int setup_volatile_overlay(cfg_t *cfg) {
   mkdir(work, 0755);
   mkdir(merged, 0755);
 
-  /* 4. Perform Overlay mount */
+  /* 4. 执行 Overlay 挂载 */
   char opts[32768];
   const int n = snprintf(opts, sizeof(opts),
     "lowerdir=%s,upperdir=%s/upper,workdir=%s/work,context=\""
     ANDROID_TMPFS_CONTEXT "\"", cfg->conf.img_mount_point, base, base);
 
-  if (n < 0 || (size_t)n >= sizeof(opts)) {
-    log_error("OverlayFS options too long");
+  if (n < 0 || static_cast<size_t>(n) >= sizeof(opts)) {
+    log_error("OverlayFS 挂载选项过长");
     cleanup_volatile_overlay(&cfg->rt);
     return -1;
   }
 
   if (domount("overlay", merged, "overlay", 0, opts) < 0) {
-    log_error("OverlayFS mount failed. Your kernel might not support it.");
-    /* Cleanup: unmount tmpfs first, then remove workspace */
+    log_error("OverlayFS 挂载失败。您的内核可能不完全支持此特性。");
+    /* 清理：先卸载 tmpfs，然后删除工作区 */
     umount2(base, MNT_DETACH);
-    log_error("OverlayFS mount failed: %s", strerror(errno));
     cleanup_volatile_overlay(&cfg->rt);
     return -1;
   }
 
-  /* 9. Update cfg->conf.img_mount_point to the merged view */
+  /* 9. 将 img_mount_point 替换为合并后的视图 */
   safe_strncpy(cfg->conf.img_mount_point, merged, sizeof(cfg->conf.img_mount_point));
 
   return 0;
 }
 
-/**
- * is_mount_in_namespace() - Check if `path` is mounted in OUR namespace.
- *
- * Reads /proc/self/mountinfo and searches for an exact match of `path`
- * in the mount-point column (field 5, 0-indexed: 4).
- *
- * Unlike is_mountpoint() (which uses stat-based device ID comparison),
- * this checks the kernel's mount table directly. This is critical for
- * overlay mounts that may share the same device as the lowerdir.
- *
- * Returns 1 if mounted, 0 if not.
- */
 static bool is_mount_in_namespace(const char *path) {
   auto_fclose FILE *f = fopen("/proc/self/mountinfo", "r");
   if (!f)
@@ -210,8 +189,6 @@ static bool is_mount_in_namespace(const char *path) {
   const size_t path_len = strlen(path);
 
   while (fgets(line, sizeof(line), f)) {
-    /* mountinfo format: id parent_id major:minor root mount_point ... */
-    /* We need field 5 (mount_point), skip first 4 fields */
     const char *p = line;
     for (int skip = 0; skip < 4 && *p; skip++) {
       while (*p && *p != ' ')
@@ -219,7 +196,6 @@ static bool is_mount_in_namespace(const char *path) {
       while (*p == ' ')
         p++;
     }
-    /* p now points at the mount_point field */
     if (strncmp(p, path, path_len) == 0 &&
         (p[path_len] == ' ' || p[path_len] == '\n' || p[path_len] == '\0')) {
       return true;
@@ -228,16 +204,6 @@ static bool is_mount_in_namespace(const char *path) {
   return false;
 }
 
-/**
- * cleanup_volatile_overlay() - Simplified OverlayFS cleanup.
- *
- * The overlay is mounted INSIDE the container's mount namespace (boot.c).
- * When the container dies, the kernel tears down the namespace and the
- * mounts vanish automatically.
- *
- * We simply check if the mount is visible in our namespace (host); if so,
- * we try to unmount it normally before deleting the workspace directory.
- */
 int cleanup_volatile_overlay(asc_rt_t *rt) {
   if (rt->volatile_dir[0] == '\0')
     return 0;
@@ -245,22 +211,16 @@ int cleanup_volatile_overlay(asc_rt_t *rt) {
   char merged[PATH_MAX + 32];
   snprintf(merged, sizeof(merged), "%s/merged", rt->volatile_dir);
 
-  /* Skip logging for clean exits - nothing prints after 'Powering off.' */
-
-  /* 1. Fast path: check if mounts already vanished (normal case) */
   if (!is_mount_in_namespace(merged) &&
       !is_mount_in_namespace(rt->volatile_dir)) {
     goto done;
   }
 
-  /* 2. Slow path: unmount visible mounts (e.g. stop-rootfs on live container)
-   */
   sync();
   umount(merged);
   umount(rt->volatile_dir);
 
 done:
-  /* settle time for kernel to release backing store info */
   usleep(RETRY_DELAY_US / 2);
   const int r = remove_recursive(rt->volatile_dir);
   rt->volatile_dir[0] = '\0';
@@ -268,89 +228,89 @@ done:
 }
 
 /* ---------------------------------------------------------------------------
- * Rootfs Image Handling - Pure C loop device management (no host tools)
+ * Rootfs 镜像处理 - 纯 C 实现的 loop 设备管理
  * ---------------------------------------------------------------------------*/
 
 int mount_rootfs_img(const char *img_path, char *mount_point, const size_t mp_size,
                      const char *name) {
   if (find_available_mountpoint(name, mount_point, mp_size) < 0) {
-    log_error("Failed to find available mount point for %s", name);
+    log_error("无法为 %s 找到可用的挂载点", name);
     return -1;
   }
 
-  /* Detect filesystem type from superblock magic */
+  /* 探测镜像的超级块魔数以识别文件系统类型 */
   const char *fstype = detect_fs_type(img_path);
   if (!fstype) {
-    log_warn("Unknown filesystem in %s. Only ext4 and btrfs are supported.",
+    log_warn("位于 %s 的文件系统未知。仅支持 ext4 和 btrfs。",
              img_path);
     return -1;
   }
 
-  /* Settle time: prevent "device busy" on rapid restarts */
   sync();
   usleep(RETRY_DELAY_US);
 
-  /*
-   * Build mount flags: base VFS flags + any fstype-specific extras.
-   * pivot_root requires a writable mount to create .old_root, so no MS_RDONLY.
-   */
   constexpr unsigned long mnt_flags = MS_NOATIME | MS_NODIRATIME;
   const char *mnt_data = nullptr;
 
   if (strcmp(fstype, "ext4") == 0) {
     mnt_data = "nodelalloc,errors=remount-ro,init_itable=0";
   } else if (strcmp(fstype, "btrfs") == 0) {
-    /* btrfs defaults are usually sane */
     mnt_data = nullptr;
   }
 
   for (int attempt = 0; attempt < 3; attempt++) {
     if (attempt == 0)
-      log_info("Mounting %s rootfs image %s on %s...", fstype, img_path,
+      log_info("正在挂载 %s 格式的镜像 %s 到 %s...", fstype, img_path,
                mount_point);
     else
-      log_info("Mounting %s rootfs image %s on %s (Attempt %d/3)...", fstype,
+      log_info("正在挂载 %s 格式的镜像 %s 到 %s (第 %d/3 次尝试)...", fstype,
                img_path, mount_point, attempt + 1);
 
     struct stat st;
     const bool is_blk = stat(img_path, &st) == 0 && S_ISBLK(st.st_mode);
     char final_src[PATH_MAX];
-    auto_close int loop_fd = -1;
+    int loop_fd = -1;
+    bool success = false;
 
     if (is_blk) {
       safe_strncpy(final_src, img_path, sizeof(final_src));
     } else {
       loop_fd = loop_attach(img_path, final_src, sizeof(final_src));
-      if (loop_fd < 0)
-        goto retry;
     }
 
-    const int ret = mount(final_src, mount_point, fstype, mnt_flags, mnt_data);
-    /* AUTOCLEAR handles cleanup if mount failed */
+    if (is_blk || loop_fd >= 0) {
+      const int ret = mount(final_src, mount_point, fstype, mnt_flags, mnt_data);
+      if (ret == 0) {
+        /* Android 修复：针对部分内核的强制 nosuid 补丁进行读写重挂载 */
+        mount(nullptr, mount_point, nullptr, MS_REMOUNT | mnt_flags, mnt_data);
+        success = true;
+      } else {
+        log_warn("挂载 mount(%s, %s) 失败: %s", final_src, fstype, strerror(errno));
+      }
+    }
 
-    if (ret == 0) {
-      /* Android FIX: Some kernels enforce nosuid/nodev on all loop mounts
-       * if the backing file is on /data. Explicitly remount to clear them. */
-      mount(nullptr, mount_point, nullptr, MS_REMOUNT | mnt_flags, mnt_data);
+    /* 无论成败，如果打开了 loop_fd 均需要关闭 */
+    if (loop_fd >= 0) {
+      close(loop_fd);
+      /* 如果挂载失败，手工分离；挂载成功内核的 AUTOCLEAR 会负责 */
+      if (!success) {
+        loop_detach(final_src);
+      }
+    }
+
+    if (success) {
       return 0;
     }
 
-    /* mount() failed: explicitly detach since AUTOCLEAR needs last-fd-close
-     * + no active mounts to trigger; we already closed loop_fd so it should
-     * auto-clear, but be explicit for kernels < 3.10 edge cases. */
-    if (loop_fd >= 0)
-      loop_detach(final_src);
-    log_warn("mount(%s, %s) failed: %s", final_src, fstype, strerror(errno));
-
-  retry:
+    /* 准备下一次重试 */
     if (attempt < 2) {
-      log_info("Retrying in 1s...");
+      log_info("将在 1 秒后重试...");
       sync();
       usleep(RETRY_DELAY_US * 5);
     }
   }
 
-  log_error("Failed to mount image %s after 3 attempts", img_path);
+  log_error("重试 3 次后，依然无法挂载镜像 %s", img_path);
   return -1;
 }
 
@@ -358,20 +318,18 @@ void unmount_rootfs_img(const char *mount_point, const bool silent) {
   if (!mount_point || !mount_point[0])
     return;
 
-  /* Grab the backing loop device before we unmount (it disappears after) */
   char loop_dev[256] = {0};
   get_backing_dev(mount_point, loop_dev, sizeof(loop_dev));
 
-  /* 1. Lazy unmount: detaches the mount even if files are open */
+  /* 1. 懒卸载 (Lazy unmount)：即使文件被打开也会立即从命名空间剥离 */
   sync();
   umount2(mount_point, MNT_DETACH);
 
-  /* 2. Explicitly detach loop device (AUTOCLEAR also handles this, but be safe)
-   */
+  /* 2. 显式分离循环设备 */
   if (loop_dev[0])
     loop_detach(loop_dev);
 
-  /* 3. Settle and force if still mounted (stubborn old kernels) */
+  /* 3. 沉淀一段时间，针对老旧内核强制执行 */
   sync();
   usleep(RETRY_DELAY_US);
   if (is_mountpoint(mount_point)) {
@@ -379,13 +337,13 @@ void unmount_rootfs_img(const char *mount_point, const bool silent) {
     usleep(RETRY_DELAY_US / 2);
   }
 
-  /* 4. Cleanup and log */
+  /* 4. 目录清理和日志记录 */
   const bool still_mounted = is_mountpoint(mount_point);
   if (rmdir(mount_point) == 0 || !still_mounted) {
     if (!silent)
-      log_info("Unmounted rootfs image from %s.", mount_point);
+      log_info("已成功卸载 rootfs 镜像 %s。", mount_point);
   } else if (errno != ENOENT) {
     if (!silent)
-      log_warn("Cleanup warning: %s is still busy/mounted.", mount_point);
+      log_warn("清理警告: 挂载点 %s 仍然处于繁忙或被占用状态。", mount_point);
   }
 }

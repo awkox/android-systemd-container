@@ -1,38 +1,52 @@
 #ifndef ASC_CLEANUP_H
 #define ASC_CLEANUP_H
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
+
 #include <dirent.h>
 #include <unistd.h>
 
-/* ---------------------------------------------------------------------------
- * Cleanup attribute helpers (RAII-style automatic resource management)
+extern "C" {
+
+/*
+ * 清理属性辅助工具（类似 RAII 的自动资源管理）
  *
- * Usage:
- *   auto_free char *buf = malloc(1024);    // auto-free on scope exit
- *   auto_fclose FILE *f = fopen(...);      // auto-fclose on scope exit
- *   auto_close int fd = open(...);          // auto-close on scope exit
- *   auto_closedir DIR *d = opendir(...);    // auto-closedir on scope exit
- * ---------------------------------------------------------------------------*/
-[[maybe_unused]] static void cfree(void *p) {
-  void **pp = p;
-  if (*pp) {
-    free(*pp);
-    *pp = nullptr;
-  }
+ * 接受 const void* 可以完美兼容 C 和 C++ 的任何指针类型，
+ * 同时解决了 const 变量传递时丢失 const 限定符的警告。
+ */
+
+static inline void cfree(const void *p) {
+    void **pp = (void **)p;
+    if (pp && *pp) {
+        free(*pp);
+        *pp = NULL;
+    }
 }
 
-[[maybe_unused]] static void cfclose(FILE **f) {
-  if (*f) fclose(*f);
+static inline void cfclose(const void *p) {
+    FILE **f = (FILE **)p;
+    if (f && *f) {
+        fclose(*f);
+        *f = NULL;
+    }
 }
 
-[[maybe_unused]] static void cclose(const int *fd) {
-  if (*fd >= 0) close(*fd);
+static inline void cclose(const void *p) {
+    const int *fd = (const int *)p;
+    if (fd && *fd >= 0) {
+        close(*fd);
+    }
 }
 
-[[maybe_unused]] static void cclosedir(DIR **d) {
-  if (*d) closedir(*d);
+static inline void cclosedir(const void *p) {
+    DIR **d = (DIR **)p;
+    if (d && *d) {
+        closedir(*d);
+        *d = NULL;
+    }
+}
+
 }
 
 #define _cleanup_(x)  [[gnu::cleanup(x)]]
@@ -41,4 +55,4 @@
 #define auto_close    _cleanup_(cclose)
 #define auto_closedir _cleanup_(cclosedir)
 
-#endif
+#endif // ASC_CLEANUP_H

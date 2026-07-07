@@ -3,18 +3,17 @@
 /**
  * seccomp_apply_minimal()
  *
- * Blocks direct host kernel takeover vectors (module loading, kexec).
- * Applied unconditionally to all kernels and all modes.
+ * 阻止直接控制宿主机内核的提权攻击向量 (内核模块加载，kexec)。
+ * 无论运行在何种模式，它都会被应用到容器。
  */
 int seccomp_apply_minimal(const int privileged_mask) {
-  /* noseccomp: skip everything, 32-bit binaries must work */
   if (privileged_mask & PRIV_NOSEC)
     return 0;
 
   static struct sock_filter filter[78];
   int curr = 0;
 
-  /* 1. Validate Architecture */
+  /* 1. 验证运行架构 */
   filter[curr++] = (struct sock_filter)BPF_STMT(
       BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch));
 #ifdef __aarch64__
@@ -33,12 +32,12 @@ int seccomp_apply_minimal(const int privileged_mask) {
   filter[curr++] =
       (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
 
-  /* 2. Load syscall number */
+  /* 2. 载入 syscall 调用号 */
   filter[curr++] = (struct sock_filter)BPF_STMT(
       BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
 
 #ifdef __x86_64__
-  /* 3. Block x32 ABI */
+  /* 3. 阻塞 x32 ABI 兼容层 */
   filter[curr++] =
       (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, 0x40000000, 0, 1);
   filter[curr++] =
@@ -46,7 +45,7 @@ int seccomp_apply_minimal(const int privileged_mask) {
 #endif
 
   if (!(privileged_mask & PRIV_NOSEC)) {
-    /* 4. Kernel module loading */
+    /* 4. 阻止内核模块加载 */
     filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
                                                   __NR_init_module, 0, 1);
     filter[curr++] =
@@ -60,7 +59,7 @@ int seccomp_apply_minimal(const int privileged_mask) {
     filter[curr++] =
         (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
 
-    /* 5. kexec */
+    /* 5. 阻止 kexec 热重启内核 */
     filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
                                                   __NR_kexec_load, 0, 1);
     filter[curr++] =
@@ -73,7 +72,7 @@ int seccomp_apply_minimal(const int privileged_mask) {
 #endif
 
 #ifdef __NR_clone3
-    /* 6. Block clone3 */
+    /* 6. 阻塞 clone3 (防穿透) */
     filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
                                                   __NR_clone3, 0, 1);
     filter[curr++] = (struct sock_filter)BPF_STMT(
@@ -103,14 +102,7 @@ int seccomp_apply_minimal(const int privileged_mask) {
         BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
 
      /*
-      * 9. CVE-2026-31431 ("Copy Fail") - 缓解层 2。
-      *
-      * 拦截 socket(AF_ALG, ...) - 漏洞利用的强制性第一步。
-      * AF_ALG == 38。在上述检查参数的 unshare/clone 拦截（它们将 acc 指向 args[0]）之后，
-      * 过滤器必须重新加载系统调用号。其模式与上述 unshare 处理程序类似。
-      *
-      * 指令预算：JEQ/socket(5) + JEQ/arg(4) = 6 条指令。
-      * filter[] 的大小已调整为 78 以容纳这些指令。
+      * 9. CVE-2026-31431 ("Copy Fail") - 缓解漏洞的强制性第二层。
       */
     filter[curr++] = (struct sock_filter)BPF_STMT(
         BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
@@ -122,22 +114,11 @@ int seccomp_apply_minimal(const int privileged_mask) {
         (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AF_ALG, 0, 1);
     filter[curr++] = (struct sock_filter)BPF_STMT(
         BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
-    /* Reload nr for any rules that follow this block. */
     filter[curr++] = (struct sock_filter)BPF_STMT(
         BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
 
     /*
-     * 10. Block host clock modification syscalls.
-     *
-     * CAP_SYS_TIME dropped from the bounding set is insufficient: the kernel
-     * checks the capability against the *initial* user namespace, and
-     * ds-fork containers run as real root without a user namespace, so
-     * the check passes even after the bounding-set drop.  Seccomp is the
-     * only reliable barrier.
-     *
-     * Blocked: settimeofday, adjtimex, clock_settime, clock_adjtime,
-     *          clock_settime64 (32-bit ARM compat, ifdef-guarded).
-     * TZ changes (/etc/localtime, TZ env) are pure userspace and unaffected.
+     * 10. 阻止宿主机时钟修改
      */
 #ifdef __NR_settimeofday
     filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
@@ -170,16 +151,7 @@ int seccomp_apply_minimal(const int privileged_mask) {
         BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
 #endif
 
-    /*
-     * 10b. Block host kernel log access via syslog(2).
-     *
-     * syslog(2) (__NR_syslog) reads/writes the kernel ring buffer directly,
-     * bypassing /dev/kmsg and /proc/kmsg path-based protections.  Used by
-     * dmesg(1) and klogctl(3).  The container's own kernel messages are
-     * accessible through /dev/kmsg within its namespace; there is no
-     * legitimate need for the raw syslog() interface inside a container.
-     * Return EPERM instead of killing — dmesg falls back gracefully.
-     */
+    /* 10b. 阻止内核日志的越权读取 */
 #ifdef __NR_syslog
     filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
                                                   __NR_syslog, 0, 1);
@@ -188,7 +160,6 @@ int seccomp_apply_minimal(const int privileged_mask) {
 #endif
   }
 
-  /* Allow everything else */
   filter[curr++] =
       (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
 
@@ -198,7 +169,7 @@ int seccomp_apply_minimal(const int privileged_mask) {
   };
 
   if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) < 0) {
-    log_warn("[SEC] Failed to apply minimal seccomp filter: %s",
+    log_warn("[SEC] 无法应用基础的 Seccomp 内核隔离机制: %s",
              strerror(errno));
     return -1;
   }
@@ -208,12 +179,7 @@ int seccomp_apply_minimal(const int privileged_mask) {
 /**
  * android_seccomp_setup()
  *
- * Applies a seccomp BPF filter for Android compatibility.
- *
- * 1. Keyring compat (ENOSYS): Applied on legacy kernels (< 5.0) to avoid
- *    traversing missing systems.
- * 2. Deadlock Shield (EPERM): Blocks namespace creation (unshare/clone).
- *    Applied ONLY if block_nested_ns is true (manual override).
+ * 为 Android 兼容性应用的一层附加隔离。
  */
 int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask) {
   if (privileged_mask & PRIV_NOSEC)
@@ -221,16 +187,12 @@ int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask)
   int major = 0, minor = 0;
   get_kernel_version(&major, &minor);
 
-  /* ns_mask covers: CLONE_NEWNS|CLONE_NEWCGROUP|CLONE_NEWUTS|CLONE_NEWIPC|
-   *                 CLONE_NEWUSER|CLONE_NEWPID|CLONE_NEWNET */
   constexpr uint32_t ns_mask = 0x7E020000;
 
   if (!block_nested_ns && major >= 5)
     return 0;
 
-  /* Define base filter (arch check + load nr) */
   const struct sock_filter filter_base[] = {
-      /* Same wrong-arch fix as seccomp_apply_minimal: KILL on mismatch. */
       BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch)),
 #ifdef __aarch64__
       BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_AARCH64, 1, 0),
@@ -241,7 +203,7 @@ int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask)
 #elifdef __i386__
       BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_I386, 1, 0),
 #endif
-      BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS), /* wrong arch */
+      BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS),
       BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
   };
 
@@ -263,7 +225,6 @@ int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask)
       BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW)
   };
 
-  /* Combine filters based on conditions */
   int filter_len = sizeof(filter_base) / sizeof(struct sock_filter);
   if (major < 5)
     filter_len += sizeof(filter_keyring) / sizeof(struct sock_filter);
@@ -272,7 +233,7 @@ int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask)
   filter_len += sizeof(filter_allow) / sizeof(struct sock_filter);
 
   auto_free struct sock_filter *final_filter =
-      malloc(filter_len * sizeof(struct sock_filter));
+      static_cast<struct sock_filter *>(malloc(filter_len * sizeof(struct sock_filter)));
   if (!final_filter)
     return -1;
 
@@ -287,7 +248,7 @@ int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask)
 
   if (block_nested_ns) {
     log_info(
-        "[SEC] --block-nested-namespaces: force blocking namespace syscalls.");
+        "[SEC] 激活 --block-nested-namespaces: 已强制拦截后续的命名空间系统调用。");
     memcpy(final_filter + curr, filter_ns, sizeof(filter_ns));
     curr += sizeof(filter_ns) / sizeof(struct sock_filter);
   }
@@ -300,7 +261,7 @@ int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask)
   };
 
   if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) < 0) {
-    log_warn("Failed to apply Seccomp filter: %s", strerror(errno));
+    log_warn("由于未知错误无法应用 Android 附加 Seccomp 滤网: %s", strerror(errno));
     return -1;
   }
 

@@ -4,7 +4,7 @@ int mkdir_p(const char *path, const mode_t mode) {
   char tmp[PATH_MAX];
 
   const int r = snprintf(tmp, sizeof(tmp), "%s", path);
-  if (r < 0 || (size_t)r >= sizeof(tmp)) {
+  if (r < 0 || static_cast<size_t>(r) >= sizeof(tmp)) {
     errno = ENAMETOOLONG;
     return -1;
   }
@@ -38,11 +38,11 @@ int write_file(const char *path, const char *content) {
   const ssize_t w = write_all(fd, content, len);
   const int close_ret = close(fd);
 
-  return w == (ssize_t)len && close_ret == 0 ? 0 : -1;
+  return w == static_cast<ssize_t>(len) && close_ret == 0 ? 0 : -1;
 }
 
 ssize_t write_all(const int fd, const void *buf, const size_t count) {
-  const char *p = buf;
+  const char *p = static_cast<const char *>(buf);
   size_t remaining = count;
   while (remaining > 0) {
     const ssize_t w = write(fd, p, remaining);
@@ -52,9 +52,9 @@ ssize_t write_all(const int fd, const void *buf, const size_t count) {
       return -1;
     }
     p += w;
-    remaining -= (size_t)w;
+    remaining -= static_cast<size_t>(w);
   }
-  return (ssize_t)count;
+  return static_cast<ssize_t>(count);
 }
 
 int read_file(const char *path, char *buf, const size_t size) {
@@ -67,8 +67,8 @@ int read_file(const char *path, char *buf, const size_t size) {
 
   ssize_t total_read = 0;
   ssize_t r = 1;
-  while ((size_t)total_read < size - 1 &&
-         (r = read(fd, buf + total_read, size - 1 - (size_t)total_read)) > 0) {
+  while (static_cast<size_t>(total_read) < size - 1 &&
+         (r = read(fd, buf + total_read, size - 1 - static_cast<size_t>(total_read))) > 0) {
     total_read += r;
   }
 
@@ -77,13 +77,12 @@ int read_file(const char *path, char *buf, const size_t size) {
 
   buf[total_read] = '\0';
 
-  /* strip trailing newline and carriage return */
   while (total_read > 0 &&
          (buf[total_read - 1] == '\n' || buf[total_read - 1] == '\r')) {
     buf[--total_read] = '\0';
   }
 
-  return (int)total_read;
+  return static_cast<int>(total_read);
 }
 
 static int remove_recursive_handler(
@@ -109,17 +108,12 @@ int grep_file(const char *path, const char *pattern) {
   return strstr(buf, pattern) ? 1 : 0;
 }
 
-/* Check if any path component (prefix) is a symbolic link.
- * lstat() does not follow the final component, so walking each prefix
- * with lstat() detects symlinks at ANY level — not just the final one.
- * Returns 1 if a symlink is found, 0 otherwise. */
 bool path_has_symlink(const char *path) {
   char tmp[PATH_MAX];
   safe_strncpy(tmp, path, sizeof(tmp));
   if (strlen(tmp) == 0)
     return false;
 
-  /* Walk each '/' boundary and lstat the prefix */
   for (char *p = tmp + 1; *p; p++) {
     if (*p == '/') {
       *p = '\0';
@@ -130,7 +124,6 @@ bool path_has_symlink(const char *path) {
       *p = '/';
     }
   }
-  /* Check the full path */
   struct stat st;
   if (lstat(tmp, &st) == 0 && S_ISLNK(st.st_mode))
     return true;
@@ -146,7 +139,6 @@ bool is_subpath(const char *parent, const char *child) {
 
   const size_t len = strlen(real_parent);
 
-  /* Special case for the root directory */
   if (len == 1 && real_parent[0] == '/')
     return true;
 
@@ -157,7 +149,6 @@ bool is_subpath(const char *parent, const char *child) {
   return false;
 }
 
-/* Helper to force removal of a path, even if it is a directory */
 int force_unlink(const char *path) {
   if (unlink(path) < 0) {
     if (errno == EISDIR) {

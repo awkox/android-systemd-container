@@ -1,20 +1,20 @@
 #include "asc.h"
 
 static char *trim_whitespace(char *str) {
-  while (isspace((unsigned char)*str))
+  while (isspace(static_cast<unsigned char>(*str)))
     str++;
   if (*str == 0)
     return str;
 
   char *end = str + strlen(str) - 1;
-  while (end > str && isspace((unsigned char)*end))
+  while (end > str && isspace(static_cast<unsigned char>(*end)))
     end--;
 
   *(end + 1) = 0;
   return str;
 }
 
-/* Strict boolean parser: accepts 0/1, true/false, yes/no, on/off */
+/* 严格的布尔解析器：接受 0/1, true/false, yes/no, on/off */
 static bool parse_bool(const char *val) {
   if (!val)
     return false;
@@ -28,8 +28,10 @@ static bool parse_bool(const char *val) {
   return false;
 }
 
-/* Safe positive integer parser: uses strtoll with full error checking.
- * Returns -1 on any error (overflow, empty, non-numeric, negative). */
+/* 
+ * 安全的正整数解析器：使用具备完整错误检查的 strtoll。
+ * 若发生任何错误（溢出、为空、非数字、负数）则返回 -1。
+ */
 static long long parse_ll_positive(const char *val) {
   if (!val || !*val)
     return -1;
@@ -45,7 +47,7 @@ static void parse_privileged(const char *value, asc_conf_t *conf) {
   if (!value)
     return;
 
-  /* Reset first so removing flags from config takes effect on reload */
+  /* 在处理前先重置，以便重载配置时移除标志位可以生效 */
   conf->privileged_mask = 0;
 
   char copy[1024];
@@ -78,7 +80,7 @@ int config_load(const char *config_path, cfg_t *cfg) {
   if (!f) {
     if (errno == ENOENT) {
       cfg->rt.config_file_existed = false;
-      return 0; /* Optional config */
+      return 0; /* 配置是可选的 */
     }
     return -1;
   }
@@ -110,7 +112,7 @@ int config_load(const char *config_path, cfg_t *cfg) {
       if (validate_container_name(val))
         safe_strncpy(conf->container_name, val, sizeof(conf->container_name));
       else
-        log_warn("config: ignoring invalid container name '%s'", val);
+        log_warn("配置警告: 忽略无效的容器名称 '%s'", val);
     } else if (strcmp(key, "rootfs_path") == 0) {
       safe_strncpy(conf->rootfs_img_path, val, sizeof(conf->rootfs_img_path));
     } else if (strcmp(key, "img_mount_point") == 0) {
@@ -130,32 +132,32 @@ int config_load(const char *config_path, cfg_t *cfg) {
       if (v > 0)
         conf->memory_limit = v;
       else
-        log_warn("config: ignoring invalid memory_limit '%s'", val);
+        log_warn("配置警告: 忽略无效的 memory_limit '%s'", val);
     } else if (strcmp(key, "cpu_quota") == 0) {
       const long long v = parse_ll_positive(val);
       if (v > 0)
         conf->cpu_quota = v;
       else
-        log_warn("config: ignoring invalid cpu_quota '%s'", val);
+        log_warn("配置警告: 忽略无效的 cpu_quota '%s'", val);
     } else if (strcmp(key, "cpu_period") == 0) {
       const long long v = parse_ll_positive(val);
       if (v > 0)
         conf->cpu_period = v;
       else
-        log_warn("config: ignoring invalid cpu_period '%s'", val);
+        log_warn("配置警告: 忽略无效的 cpu_period '%s'", val);
     } else if (strcmp(key, "pids_limit") == 0) {
       const long long v = parse_ll_positive(val);
       if (v > 0)
         conf->pids_limit = v;
       else
-        log_warn("config: ignoring invalid pids_limit '%s'", val);
+        log_warn("配置警告: 忽略无效的 pids_limit '%s'", val);
     } else if (strcmp(key, "privileged") == 0) {
       parse_privileged(val, conf);
     } else if (strcmp(key, "custom_init") == 0) {
       if (val[0] != '/')
-        log_warn("config: ignoring non-absolute custom_init path '%s'", val);
+        log_warn("配置警告: 忽略非绝对路径的 custom_init '%s'", val);
       else if (strchr(val, ' '))
-        log_warn("config: ignoring custom_init path with spaces '%s'", val);
+        log_warn("配置警告: 忽略包含空格的 custom_init 路径 '%s'", val);
       else
         safe_strncpy(conf->custom_init, val, sizeof(conf->custom_init));
     } else if (strcmp(key, "uuid") == 0) {
@@ -163,7 +165,7 @@ int config_load(const char *config_path, cfg_t *cfg) {
     } else if (strcmp(key, "isolation_network") == 0) {
       conf->isolation_network = parse_bool(val);
     } else {
-      log_warn("config: ignoring unknown key '%s'", key);
+      log_warn("配置警告: 忽略未知的配置键 '%s'", key);
     }
   }
   
@@ -171,10 +173,10 @@ int config_load(const char *config_path, cfg_t *cfg) {
 }
 
 static void config_serialize_known(FILE *f, asc_conf_t *conf) {
-  fprintf(f, "# " PROJECT_NAME " Container Configuration\n");
-  fprintf(f, "# Generated automatically - Changes may be overwritten\n\n");
+  fprintf(f, "# " PROJECT_NAME " 容器配置文件\n");
+  fprintf(f, "# 此文件由程序自动生成 - 手动修改可能会被覆盖\n\n");
 
-  /* Write managed keys */
+  /* 写入被管理的键 */
   if (conf->container_name[0])
     fprintf(f, "name=%s\n", conf->container_name);
 
@@ -242,8 +244,7 @@ static void config_serialize_known(FILE *f, asc_conf_t *conf) {
 }
 
 int config_save(const char *config_path, cfg_t *cfg) {
-  /* Compare new config with existing disk configuration to avoid redundant
-   * writes */
+  /* 与磁盘上的现有配置进行比较，避免多余的重复写入 */
   struct stat st;
   if (stat(config_path, &st) == 0) {
     cfg_t disk_cfg = {};
@@ -283,7 +284,7 @@ int config_save(const char *config_path, cfg_t *cfg) {
   char temp_path[PATH_MAX];
   snprintf(temp_path, sizeof(temp_path), "%s.tmp", config_path);
 
-  /* Step 2: Write all configurations to temporary file */
+  /* 步骤 2: 将所有配置写入临时文件 */
   FILE *f_out = fopen(temp_path, "we");
   if (!f_out)
     return -1;
@@ -292,7 +293,7 @@ int config_save(const char *config_path, cfg_t *cfg) {
 
   fclose(f_out);
 
-  /* Step 4: Atomic rename commit */
+  /* 步骤 4: 通过原子重命名提交修改 */
   if (rename(temp_path, config_path) < 0) {
     unlink(temp_path);
     return -1;
@@ -312,7 +313,7 @@ char *config_auto_path(const char *rootfs_path) {
   safe_strncpy(temp, rootfs_path, sizeof(temp));
 
   char *dir = dirname(temp);
-  char *final_path = malloc(PATH_MAX);
+  char *final_path = static_cast<char*>(malloc(PATH_MAX));
   if (final_path) {
     if (strcmp(dir, "/") == 0)
       snprintf(final_path, PATH_MAX, "/container.config");
