@@ -317,11 +317,7 @@ void unmount_rootfs_img(const char *mount_point, const bool silent) {
   sync();
   umount2(mount_point, MNT_DETACH);
 
-  /* 2. 显式分离循环设备 */
-  if (loop_dev[0])
-    loop_detach(loop_dev);
-
-  /* 3. 沉淀一段时间，针对老旧内核强制执行 */
+  /* 2. 沉淀一段时间，针对老旧内核强制执行 */
   sync();
   usleep(RETRY_DELAY_US);
   if (is_mountpoint(mount_point)) {
@@ -329,7 +325,7 @@ void unmount_rootfs_img(const char *mount_point, const bool silent) {
     usleep(RETRY_DELAY_US / 2);
   }
 
-  /* 4. 目录清理和日志记录 */
+  /* 3. 目录清理和日志记录 */
   const bool still_mounted = is_mountpoint(mount_point);
   if (rmdir(mount_point) == 0 || !still_mounted) {
     if (!silent)

@@ -59,6 +59,7 @@
 #include <unistd.h>
 #include <libgen.h>
 #include <ftw.h>
+#include <wordexp.h>
 
 #include "version.h"
 #include "utils/log.h"

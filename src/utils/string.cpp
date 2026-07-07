@@ -23,65 +23,44 @@ void sanitize_container_name(const char *name, char *out, const size_t size) {
 }
 
 char *resolve_path_arg(const char *path) {
+  // 拦截空路径
   if (!path || !*path)
     return strdup("");
 
-  const char *p = path;
+  std::string expanded_path = path;
 
-  if (p[0] == '~' && (p[1] == '/' || p[1] == '\0')) {
-    const char *home = getenv("HOME");
-    if (home) {
-      const size_t hlen = strlen(home);
-      const size_t plen = strlen(p + 1);
-      auto_free char *to_free = static_cast<char *>(malloc(hlen + plen + 1));
-      if (to_free) {
-        memcpy(to_free, home, hlen);
-        memcpy(to_free + hlen, p + 1, plen + 1);
-        p = to_free;
-      }
+  // 1. 使用 wordexp 进行安全的 Shell 路径展开（支持 ~ 和 环境变量）
+  wordexp_t we;
+  // 【安全关键】必须使用 WRDE_NOCMD 标志，禁止命令执行替换，防止命令注入风险
+  if (wordexp(path, &we, WRDE_NOCMD) == 0) {
+    if (we.we_wordc > 0 && we.we_wordv[0]) {
+      expanded_path = we.we_wordv[0];
     }
+    wordfree(&we);
   }
 
-  if (p[0] == '/') {
-    char *res = strdup(p);
-    if (res) {
-      size_t len = strlen(res);
-      while (len > 1 && res[len - 1] == '/') {
-        res[len - 1] = '\0';
-        len--;
-      }
-    }
-    return res;
+  // 2. 现代化路径规范处理
+  std::error_code ec;
+  fs::path p(expanded_path);
+  fs::path abs_path;
+
+  // weakly_canonical 会智能将其转为绝对路径，并解析沿途已存在的符号链接
+  // 即使路径末尾的几个层级尚未在磁盘上创建，它也能优雅处理，完美替代原始繁琐的 getcwd/realpath 回退逻辑
+  abs_path = fs::weakly_canonical(p, ec);
+  if (ec) {
+    // 遇到极端无权限访问情况时的回退：纯字面量绝对路径转换
+    abs_path = fs::absolute(p, ec);
   }
 
-  char resolved[PATH_MAX];
-  if (realpath(p, resolved))
-    return strdup(resolved);
+  std::string result = abs_path.string();
 
-  const char *suffix = p;
-  while (suffix[0] == '.' && suffix[1] == '/')
-    suffix += 2;
-  if (!*suffix) {
-    char cwd[PATH_MAX];
-    return strdup(getcwd(cwd, sizeof(cwd)) ? cwd : ".");
+  // 3. 剥离末尾冗余斜杠，统一规范 (保持根目录 "/" 独立)
+  while (result.length() > 1 && result.back() == '/') {
+    result.pop_back();
   }
 
-  char cwd[PATH_MAX];
-  if (!getcwd(cwd, sizeof(cwd)))
-    return strdup(p);
-
-  const size_t clen = strlen(cwd);
-  const size_t plen = strlen(suffix);
-  if (clen + 1 + plen >= PATH_MAX)
-    return strdup(p);
-
-  char *out = static_cast<char *>(malloc(clen + 1 + plen + 1));
-  if (!out)
-    return strdup(p);
-  memcpy(out, cwd, clen);
-  out[clen] = '/';
-  memcpy(out + clen + 1, suffix, plen + 1); 
-  return out;
+  // 4. 返回兼容老代码架构的 C-style 分配器堆字符串
+  return strdup(result.c_str());
 }
 
 static const struct {
