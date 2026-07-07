@@ -14,7 +14,7 @@ static char *trim_whitespace(char *str) {
   return str;
 }
 
-/* 严格的布尔解析器：接受 0/1, true/false, yes/no, on/off */
+/* 简易的布尔解析器 */
 static bool parse_bool(const char *val) {
   if (!val)
     return false;
