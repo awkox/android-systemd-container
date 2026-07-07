@@ -1003,7 +1003,7 @@ int client_run(int argc, char **argv) {
   /* try to connect - single pass for execution path, retry loop only for 1st
    * connect */
   struct sockaddr_un addr;
-  socklen_t alen = make_addr(&addr);
+  const socklen_t alen = make_addr(&addr);
 
   sock = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (sock < 0) {
