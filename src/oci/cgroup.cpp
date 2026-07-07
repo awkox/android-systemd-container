@@ -211,7 +211,7 @@ static void rmdir_cgroup_tree(const char *path) {
   strncat(events_path, "/cgroup.events",
           sizeof(events_path) - strlen(events_path) - 1);
   for (int i = 0; i < 50; i++) {
-    char buf[256] = {0};
+    char buf[256] = "";
     if (read_file(events_path, buf, sizeof(buf)) > 0) {
       if (strstr(buf, "populated 0"))
         break;

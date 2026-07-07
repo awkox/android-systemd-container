@@ -50,8 +50,7 @@ int terminal_create(struct tty_info *tty) {
   }
 
   /* 修正 PTY 从设备的组属和权限 */
-  if (fchown(tty->slave, 0, 5) < 0) {
-  }
+  if (fchown(tty->slave, 0, 5) < 0) {}
   fchmod(tty->slave, 0620);
 
   return 0;

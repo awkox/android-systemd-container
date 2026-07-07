@@ -21,7 +21,7 @@ void internal_boot(cfg_t *cfg) {
    * 这个文件描述符将在挂载命名空间变更中存活，确保能够捕获所有的底层日志。 */
   open_container_log(cfg);
 
-  /* 对于 --net=none 的情况：在隔离的网络命名空间中启动 loopback 回环网卡 */
+  /* 对于启用网络隔离的情况：在隔离的网络命名空间中启动 loopback 回环网卡 */
   if (cfg->conf.isolation_network) {
     auto_free nl_ctx_t *nlctx = nl_open();
     if (nlctx) {

@@ -35,16 +35,16 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
 
   /* 自适应 Cgroup 命名空间支持
    * 只有在 v2 处于活动状态并且未强制使用 v1 时才启用。 */
-  bool cg_ns_ok = access("/proc/self/ns/cgroup", F_OK) == 0 &&
+  bool allow_cgroup_ns = access("/proc/self/ns/cgroup", F_OK) == 0 &&
                  cgroup_host_is_v2() && !cfg->conf.force_cgroupv1;
-  if (cg_ns_ok) {
+  if (allow_cgroup_ns) {
     if (access("/sys/fs/cgroup/cgroup.procs", F_OK) == 0) {
       char safe_name[256];
       sanitize_container_name(cfg->conf.container_name, safe_name,
                               sizeof(safe_name));
 
       if (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit) {
-        char enable[64] = {0};
+        char enable[64] = "";
         char buf[256];
         int eoff = 0;
         if (read_file("/sys/fs/cgroup/cgroup.controllers", buf, sizeof(buf)) >
@@ -116,7 +116,7 @@ reboot_loop:;
     /* ==== 中间进程 (Intermediate Process) ====
      * 负责为本次引导周期创建全新的命名空间 */
      
-    if (cg_ns_ok) {
+    if (allow_cgroup_ns) {
       char safe_name[256];
       sanitize_container_name(cfg->conf.container_name, safe_name, sizeof(safe_name));
       char cg_procs[PATH_MAX];
@@ -132,7 +132,7 @@ reboot_loop:;
     int clone_flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC;
     if (cfg->conf.isolation_network)
       clone_flags |= CLONE_NEWNET;
-    if (cg_ns_ok)
+    if (allow_cgroup_ns)
       clone_flags |= CLONE_NEWCGROUP;
 
     if (unshare(clone_flags) < 0) {

@@ -222,7 +222,7 @@ void firmware_path_add(const char *fw_path) {
   if (stat(fw_path, &st) < 0)
     return;
 
-  char current[FW_PATH_BUF_SIZE] = {0};
+  char current[FW_PATH_BUF_SIZE] = "";
   read_file(FW_PATH_FILE, current, sizeof(current));
 
   const size_t fw_len = strlen(fw_path);
@@ -237,7 +237,7 @@ void firmware_path_add(const char *fw_path) {
     p = comma + 1;
   }
 
-  char new_path[FW_PATH_BUF_SIZE] = {0};
+  char new_path[FW_PATH_BUF_SIZE] = "";
   if (current[0]) {
     const size_t needed =
         strlen(fw_path) + 1 + strlen(current) + 1;
@@ -258,11 +258,11 @@ void firmware_path_add(const char *fw_path) {
 }
 
 void firmware_path_remove(const char *fw_path) {
-  char current[FW_PATH_BUF_SIZE] = {0};
+  char current[FW_PATH_BUF_SIZE] = "";
   if (read_file(FW_PATH_FILE, current, sizeof(current)) < 0)
     return;
 
-  char new_path[FW_PATH_BUF_SIZE] = {0};
+  char new_path[FW_PATH_BUF_SIZE] = "";
   const int new_len = fw_remove_token(current, fw_path, new_path, sizeof(new_path));
 
   if (new_len == 0) {
@@ -364,7 +364,7 @@ void format_uptime(const long uptime_sec, char *buf, const size_t size) {
   const int mins = uptime_sec % 3600 / 60;
   const int secs = uptime_sec % 60;
 
-  char tmp[128] = {0};
+  char tmp[128] = "";
   int pos = 0;
 
   if (days > 0)
@@ -400,8 +400,7 @@ int validate_container_name(const char *name) {
 
 int reject_container_name(const char *name) {
   if (!validate_container_name(name)) {
-    log_error("非法的容器名称 '%s'。请仅使用字母、数字以及 '.' '_' '-' 和空格。",
-              name);
+    log_error("非法的容器名称 '%s'。", name);
     return -1;
   }
   return 0;

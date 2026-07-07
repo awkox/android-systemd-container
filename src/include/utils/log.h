@@ -1,11 +1,8 @@
-// ===== src/include/utils/log.h =====
 #ifndef ASC_UTILS_LOG_H
 #define ASC_UTILS_LOG_H
 
 #include <stdbool.h>
 #include <stddef.h>
-
-extern "C" {
 
 extern bool log_silent;
 extern char log_container_name[256];
@@ -23,7 +20,5 @@ void rotate_log(const char *path, size_t max_size);
 #define log_warn(fmt, ...) log_internal("!", true, fmt __VA_OPT__(,) __VA_ARGS__)
 #define log_error(fmt, ...) log_internal("-", true, fmt __VA_OPT__(,) __VA_ARGS__)
 #define log_die(fmt, ...) die_internal(fmt __VA_OPT__(,) __VA_ARGS__)
-
-}
 
 #endif

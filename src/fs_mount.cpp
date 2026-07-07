@@ -4,18 +4,16 @@
  * 辅助函数
  * ---------------------------------------------------------------------------*/
 
-/* 检查路径是否为挂载点 */
-bool is_mountpoint(const char *path) {
-  struct stat st1, st2;
-  if (stat(path, &st1) < 0)
-    return false;
+bool is_mountpoint(const fs::path& path) {
+    struct stat st1, st2;
+    if (::stat(path.c_str(), &st1) < 0)
+        return false;
 
-  char parent[PATH_MAX];
-  snprintf(parent, sizeof(parent), "%.4092s/..", path);
-  if (stat(parent, &st2) < 0)
-    return false;
+    fs::path parent = path / "..";
+    if (::stat(parent.c_str(), &st2) < 0)
+        return false;
 
-  return st1.st_dev != st2.st_dev;
+    return st1.st_dev != st2.st_dev;
 }
 
 /* 使用容器名称在 /mnt/asc/ 中查找或创建可用的挂载点 */
@@ -128,53 +126,47 @@ int check_volatile_mode(asc_conf_t *conf) {
 }
 
 int setup_volatile_overlay(cfg_t *cfg) {
-  /* 1. 在 /tmp/asc/volatile/<name> 中创建临时工作区 */
-  char base[PATH_MAX];
-  snprintf(base, sizeof(base), "%s/" RUNTIME_VOLATILE_SUBDIR "/%s",
-           get_runtime_dir(), cfg->conf.container_name);
-  if (mkdir_p(base, 0755) < 0) {
-    log_error("创建易失模式工作区失败: %s", base);
-    return -1;
-  }
-  safe_strncpy(cfg->rt.volatile_dir, base, sizeof(cfg->rt.volatile_dir));
+    // 使用 std::format 动态拼接字符串，绝对不会发生缓冲区溢出
+    fs::path base = std::format("{}/{}/{}", 
+                                get_runtime_dir(), 
+                                RUNTIME_VOLATILE_SUBDIR, 
+                                cfg->conf.container_name);
 
-  /* 2. 挂载 tmpfs 作为 upper/work 的后备存储 */
-  if (domount("none", base, "tmpfs", 0, "size=50%,mode=755") < 0)
-    return -1;
+    if (mkdir_p(base, 0755) < 0) {
+        log_error("创建易失模式工作区失败: %s", base.c_str());
+        return -1;
+    }
+    safe_strncpy(cfg->rt.volatile_dir, base.c_str(), sizeof(cfg->rt.volatile_dir));
 
-  /* 3. 创建子目录 */
-  char upper[PATH_MAX + 32], work[PATH_MAX + 32], merged[PATH_MAX + 32];
-  snprintf(upper, sizeof(upper), "%s/upper", base);
-  snprintf(work, sizeof(work), "%s/work", base);
-  snprintf(merged, sizeof(merged), "%s/merged", base);
-  mkdir(upper, 0755);
-  mkdir(work, 0755);
-  mkdir(merged, 0755);
+    if (domount("none", base.c_str(), "tmpfs", 0, "size=50%,mode=755") < 0)
+        return -1;
 
-  /* 4. 执行 Overlay 挂载 */
-  char opts[32768];
-  const int n = snprintf(opts, sizeof(opts),
-    "lowerdir=%s,upperdir=%s/upper,workdir=%s/work,context=\""
-    ANDROID_TMPFS_CONTEXT "\"", cfg->conf.img_mount_point, base, base);
+    // 构建层级目录：优雅且跨平台
+    fs::path upper  = base / "upper";
+    fs::path work   = base / "work";
+    fs::path merged = base / "merged";
 
-  if (n < 0 || static_cast<size_t>(n) >= sizeof(opts)) {
-    log_error("OverlayFS 挂载选项过长");
-    cleanup_volatile_overlay(&cfg->rt);
-    return -1;
-  }
+    std::error_code ec;
+    fs::create_directory(upper, ec);
+    fs::create_directory(work, ec);
+    fs::create_directory(merged, ec);
 
-  if (domount("overlay", merged, "overlay", 0, opts) < 0) {
-    log_error("OverlayFS 挂载失败。您的内核可能不完全支持此特性。");
-    /* 清理：先卸载 tmpfs，然后删除工作区 */
-    umount2(base, MNT_DETACH);
-    cleanup_volatile_overlay(&cfg->rt);
-    return -1;
-  }
+    // C++ 格式化挂载参数，彻底告别超大 char[] 缓冲和截断检查
+    std::string opts = std::format("lowerdir={},upperdir={},workdir={},context=\"{}\"",
+                                   cfg->conf.img_mount_point, 
+                                   upper.string(), 
+                                   work.string(), 
+                                   ANDROID_TMPFS_CONTEXT);
 
-  /* 9. 将 img_mount_point 替换为合并后的视图 */
-  safe_strncpy(cfg->conf.img_mount_point, merged, sizeof(cfg->conf.img_mount_point));
+    if (domount("overlay", merged.c_str(), "overlay", 0, opts.c_str()) < 0) {
+        log_error("OverlayFS 挂载失败。");
+        umount2(base.c_str(), MNT_DETACH);
+        cleanup_volatile_overlay(&cfg->rt);
+        return -1;
+    }
 
-  return 0;
+    safe_strncpy(cfg->conf.img_mount_point, merged.c_str(), sizeof(cfg->conf.img_mount_point));
+    return 0;
 }
 
 static bool is_mount_in_namespace(const char *path) {
@@ -318,7 +310,7 @@ void unmount_rootfs_img(const char *mount_point, const bool silent) {
   if (!mount_point || !mount_point[0])
     return;
 
-  char loop_dev[256] = {0};
+  char loop_dev[256] = "";
   get_backing_dev(mount_point, loop_dev, sizeof(loop_dev));
 
   /* 1. 懒卸载 (Lazy unmount)：即使文件被打开也会立即从命名空间剥离 */

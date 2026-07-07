@@ -12,6 +12,10 @@
 #include <cstdlib>
 #include <cctype>
 #include <string_view>
+#include <filesystem>
+#include <fstream>
+#include <string>
+#include <format>
 
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
@@ -60,6 +64,8 @@
 #include "utils/log.h"
 #include "cleanup.h"
 
+namespace fs = std::filesystem;
+
 // 常量定义
 constexpr int MIN_KERNEL_MAJOR = 4;
 constexpr int MIN_KERNEL_MINOR = 9;
@@ -101,8 +107,6 @@ constexpr int PRIV_NOSEC  = 1 << 2; // 仅应用最小化的 seccomp 过滤器
 constexpr int PRIV_SHARED = 1 << 3; // 根目录挂载传播模式设置为 MS_SHARED
 constexpr int PRIV_UNFILT = 1 << 4; // 不阻止访问设备节点 (PTY 除外)
 constexpr int PRIV_FULL   = 0xFF;   // 启用上述所有特权
-
-extern "C" {
 
 typedef struct {
   int fd;       // AF_NETLINK / NETLINK_ROUTE 套接字
@@ -233,7 +237,7 @@ int validate_container_name(const char *name);
 int reject_container_name(const char *name);
 int count_folders(const char *path);
 void oom_protect(void);
-bool is_mountpoint(const char *path);
+bool is_mountpoint(const fs::path& path);
 int domount(const char *src,const char *tgt,const char *fstype,const unsigned long flags,const char *data);
 int bind_mount(const char *src,const char *tgt);
 int check_volatile_mode(asc_conf_t *conf);
@@ -250,13 +254,13 @@ const char *get_lock_dir(void);
 const char *get_logs_dir(void);
 int ensure_runtime(void);
 void generate_container_name(const char *rootfs_path,char *name,const size_t size);
-int mkdir_p(const char *path,const mode_t mode);
+int mkdir_p(const fs::path& path, mode_t mode);
 int write_file(const char *path,const char *content);
 ssize_t write_all(const int fd,const void *buf,const size_t count);
 int read_file(const char *path,char *buf,const size_t size);
-int remove_recursive(const char *path);
-int grep_file(const char *path,const char *pattern);
-bool path_has_symlink(const char *path);
+int remove_recursive(const fs::path& path);
+bool grep_file(const fs::path& path, std::string_view pattern);
+bool path_has_symlink(const fs::path& path);
 bool is_subpath(const char *parent,const char *child);
 int force_unlink(const char *path);
 void safe_strncpy(char *dst,const char *src,const size_t size);
@@ -268,7 +272,5 @@ int collect_pids(pid_t **pids_out,size_t *count_out);
 int build_proc_root_path(const pid_t pid,const char *suffix,char *buf,const size_t size);
 bool is_container_init(const pid_t pid);
 pid_t find_container_init_pid(const char *uuid);
-
-}
 
 #endif
