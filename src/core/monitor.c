@@ -421,7 +421,7 @@ reboot_loop:;
   /* Normal exit - monitor does cleanup */
   write_monitor_debug_log(cfg->conf.container_name, "Monitor performing cleanup");
 
-  cleanup_container_resources(cfg, false, false);
+  cleanup_container_resources(cfg, false);
 
 monitor_cleanup_and_exit:
   /* Free dynamically allocated configuration members before exit */

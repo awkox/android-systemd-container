@@ -31,7 +31,7 @@ void internal_boot(cfg_t *cfg) {
   }
 
   pid_t existing_pid = 0;
-  if (is_container_running(cfg, &existing_pid)) {
+  if (is_container_running(cfg->conf.uuid, &existing_pid)) {
     /* If we find ourselves in the pidfile, it's not a conflict, it's just us
      * being tracked early (which is fine). */
     if (existing_pid != getpid()) {

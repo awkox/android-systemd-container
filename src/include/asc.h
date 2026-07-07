@@ -163,19 +163,18 @@ typedef struct {
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 bool is_external_lock_active(const char *name);
-void cleanup_container_resources(cfg_t *cfg,const bool skip_unmount,const bool force_cleanup);
+void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup);
 bool is_valid_container_pid(const pid_t pid);
 int start_rootfs(cfg_t *cfg);
-int stop_rootfs(cfg_t *cfg,const bool skip_unmount);
+int stop_rootfs(cfg_t *cfg);
 int show_info(cfg_t *cfg,const bool trust_cfg_pid);
-int restart_rootfs(cfg_t *cfg);
 int check_requirements_hw(const bool hw_access);
 int check_requirements_detailed(void);
 void monitor_run(cfg_t *cfg,int sync_pipe_write);
 int daemon_run(const bool foreground);
 bool daemon_probe(void);
 int client_run(int argc,char **argv);
-bool is_container_running(const cfg_t *cfg,pid_t *pid_out);
+bool is_container_running(char *uuid, pid_t *pid_out);
 int collect_active_uuids(char uuids[][UUID_LEN+1],const int max_uuids);
 int show_containers(const cfg_t *cfg);
 int config_load(const char *config_path,cfg_t *cfg);
@@ -191,7 +190,7 @@ void cgroup_cleanup_container(const char *container_name);
 void print_cgroup_status(const cfg_t *cfg);
 bool cg_word_in_list(const char *list,const char *name);
 int cgroup_apply_limits(cfg_t *cfg);
-int cgroup_get_usage(const cfg_t *cfg,long long *mem,long long *cpu_us,long long *pids);
+int cgroup_get_usage(const char *container_name,long long *mem,long long *cpu_us,long long *pids);
 void apply_jail_mask(const bool hw_access,const int privileged_mask);
 void apply_capability_hardening(const bool hw_access,const int privileged_mask);
 int seccomp_apply_minimal(const int privileged_mask);

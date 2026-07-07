@@ -104,8 +104,7 @@ bool is_external_lock_active(const char *name) {
   return !(fd < 0);
 }
 
-void cleanup_container_resources(cfg_t *cfg,
-                                 const bool skip_unmount, const bool force_cleanup) {
+void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
   /* Flush filesystem buffers (skip if force cleanup - sync can hang on
    * zombie-held fs) */
   if (!force_cleanup)
@@ -144,7 +143,7 @@ void cleanup_container_resources(cfg_t *cfg,
     safe_strncpy(mount_point, cfg->conf.img_mount_point, sizeof(mount_point));
   }
 
-  if (mount_point[0] && !skip_unmount) {
+  if (mount_point[0]) {
     if (force_cleanup) {
       /* Force path: detach+force unmount, no sync, no retry loops */
       umount2(mount_point, MNT_DETACH | MNT_FORCE);
@@ -155,22 +154,10 @@ void cleanup_container_resources(cfg_t *cfg,
     }
   }
 
-  /* 5. Remove tracking info.
-   * For restart (skip_unmount), preserve locks so start can detect handoff. */
-  if (!skip_unmount) {
-    /* Stale lock cleanup is handled by acquire_external_lock and
-     * is_external_lock_active. Monitor only does resource cleanup
-     * if no external lock is active. */
-  }
-
   /* Cgroup 子树清理：删除 /sys/fs/cgroup/asc/<name>/ 目录。
    * All container processes are dead by now so every leaf is empty and
-   * the bottom-up rmdir walk always succeeds.  Skipped on restart
-   * (skip_unmount=1) so the monitor's cgroup context stays intact for
-   * the next boot cycle. */
-  if (!skip_unmount) {
-    cgroup_cleanup_container(cfg->conf.container_name);
-  }
+   * the bottom-up rmdir walk always succeeds. */
+  cgroup_cleanup_container(cfg->conf.container_name);
 }
 
 bool is_valid_container_pid(const pid_t pid) {
@@ -223,7 +210,7 @@ int start_rootfs(cfg_t *cfg) {
    * by the user and it must be unique. */
   if (!lock_acquired) {
     pid_t existing_pid = 0;
-    if (is_container_running(cfg, &existing_pid)) {
+    if (is_container_running(cfg->conf.uuid, &existing_pid)) {
       log_error("Container name '%s' is already in use by PID %d.",
                 cfg->conf.container_name, existing_pid);
       goto cleanup;
@@ -496,7 +483,7 @@ cleanup:
    * errors. Only execute if we successfully crossed the point of creating
    * effects. */
   if (has_side_effects) {
-    cleanup_container_resources(cfg, false, true /* force */);
+    cleanup_container_resources(cfg, true /* force */);
   }
   if (lock_acquired)
     release_external_lock();
@@ -513,8 +500,7 @@ cleanup:
   return -1;
 }
 
-static int stop_rootfs_with_timeout(cfg_t *cfg, const bool skip_unmount,
-                             int timeout_seconds) {
+static int stop_rootfs_with_timeout(cfg_t *cfg, int timeout_seconds) {
   if (timeout_seconds < 0)
     timeout_seconds = STOP_TIMEOUT;
 
@@ -529,7 +515,7 @@ static int stop_rootfs_with_timeout(cfg_t *cfg, const bool skip_unmount,
   }
 
   pid_t pid = 0;
-  if (!is_container_running(cfg, &pid) || pid <= 0) {
+  if (!is_container_running(cfg->conf.uuid, &pid) || pid <= 0) {
     log_error("Container '%s' is not running or invalid.", cfg->conf.container_name);
     release_external_lock();
     return -1;
@@ -601,22 +587,18 @@ static int stop_rootfs_with_timeout(cfg_t *cfg, const bool skip_unmount,
   }
 
   /* 5. Complete resource cleanup. */
-  cleanup_container_resources(cfg, skip_unmount, unkillable);
+  cleanup_container_resources(cfg, unkillable);
 
   if (!cfg->rt.foreground)
     log_info("Container '%s' stopped.", cfg->conf.container_name);
 
-  /* Release lock ONLY if this is a final stop.
-   * For restarts (skip_unmount=1), keep lock alive as handoff. */
-  if (!skip_unmount) {
-    release_external_lock();
-  }
+  release_external_lock();
 
   return 0;
 }
 
-int stop_rootfs(cfg_t *cfg, const bool skip_unmount) {
-  return stop_rootfs_with_timeout(cfg, skip_unmount, STOP_TIMEOUT);
+int stop_rootfs(cfg_t *cfg) {
+  return stop_rootfs_with_timeout(cfg, STOP_TIMEOUT);
 }
 
 static const char *get_architecture(void) {
@@ -680,7 +662,7 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
     pid = cfg->rt.container_pid;
   } else {
     /* For other calls (e.g., info command), read and validate from pidfile. */
-    is_container_running(cfg, &pid);
+    is_container_running(cfg->conf.uuid, &pid);
   }
 
   if (pid <= 0) {
@@ -863,7 +845,7 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
       (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit) &&
       !cfg->conf.force_cgroupv1 && cgroup_host_is_v2()) {
     long long mu = -1, cu = -1, pu = -1;
-    cgroup_get_usage(cfg, &mu, &cu, &pu);
+    cgroup_get_usage(cfg->conf.container_name, &mu, &cu, &pu);
     printf("\nResources:\n");
 
     if (cfg->conf.memory_limit) {
@@ -901,22 +883,4 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
 
   printf("\n");
   return 0;
-}
-
-static int restart_rootfs_with_timeout(cfg_t *cfg, const int timeout_seconds) {
-  pid_t pid = 0;
-  if (!is_container_running(cfg, &pid) || pid <= 0) {
-    log_error("Container '%s' is not running or invalid.", cfg->conf.container_name);
-    return -1;
-  }
-  log_info("Restarting container %s...", cfg->conf.container_name);
-  if (stop_rootfs_with_timeout(cfg, true, timeout_seconds) < 0) {
-    return -1;
-  }
-  putchar('\n');
-  return start_rootfs(cfg);
-}
-
-int restart_rootfs(cfg_t *cfg) {
-  return restart_rootfs_with_timeout(cfg, STOP_TIMEOUT);
 }

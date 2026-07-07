@@ -986,7 +986,7 @@ int client_run(int argc, char **argv) {
 
   bool interactive = false;
   for (int i = 0; i < argc; i++) {
-    if (strcmp(argv[i], "start") == 0 || strcmp(argv[i], "restart") == 0) {
+    if (strcmp(argv[i], "start") == 0) {
       interactive = true;
       break;
     }
@@ -999,8 +999,7 @@ int client_run(int argc, char **argv) {
     for (int i = 0; i < argc; i++) {
       if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--foreground") == 0) {
         for (int j = 0; j < argc; j++) {
-          if (strcmp(argv[j], "start") == 0 ||
-              strcmp(argv[j], "restart") == 0) {
+          if (strcmp(argv[j], "start") == 0) {
             forces_tty = true;
             break;
           }

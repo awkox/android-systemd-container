@@ -12,10 +12,8 @@ static void print_usage(void) {
       "Commands:\n"
       "  start                     Start a new container\n"
       "  stop                      Stop one or more containers\n"
-      "  restart                   Restart a container\n"
       "  info                      Show detailed container info\n"
       "  pid                       Show the live PID of the container init\n"
-      "  show                      List all running containers\n"
       "  check                     Check system requirements\n"
       "  help                      Show this help message\n"
       "  daemon                    Run daemon mode (use --foreground for "
@@ -36,40 +34,40 @@ static void print_usage(void) {
  * CLI-level configuration validation with professional error reporting.
  * Deters configuration errors early before entering the runtime.
  */
-static int validate_configuration_cli(cfg_t *cfg) {
+static int validate_configuration_cli(asc_conf_t *conf) {
   bool error = false;
 
-  if (!cfg->conf.container_name[0]) {
+  if (!conf->container_name[0]) {
     log_error("Container name is mandatory (--name).");
     error = true;
-  } else if (reject_container_name(cfg->conf.container_name) < 0) {
+  } else if (reject_container_name(conf->container_name) < 0) {
     error = true;
   }
 
-  if (!cfg->conf.rootfs_img_path[0]) {
+  if (!conf->rootfs_img_path[0]) {
     log_error("No rootfs image specified in configuration.");
     error = true;
   }
 
   /* Existence checks */
-  if (cfg->conf.rootfs_img_path[0] && access(cfg->conf.rootfs_img_path, F_OK) != 0) {
-    log_error("Rootfs image not found: '%s' (%s)", cfg->conf.rootfs_img_path,
+  if (conf->rootfs_img_path[0] && access(conf->rootfs_img_path, F_OK) != 0) {
+    log_error("Rootfs image not found: '%s' (%s)", conf->rootfs_img_path,
               strerror(errno));
     error = true;
   }
 
   /* Image mode requires a name for the mount point */
-  if (cfg->conf.rootfs_img_path[0] && !cfg->conf.container_name[0]) {
+  if (conf->rootfs_img_path[0] && !conf->container_name[0]) {
     log_error("Rootfs image requires a container name (--name).");
     error = true;
   }
 
-  if (cfg->conf.custom_init[0]) {
-    if (cfg->conf.custom_init[0] != '/') {
-      log_error("Custom init path must be absolute: %s", cfg->conf.custom_init);
+  if (conf->custom_init[0]) {
+    if (conf->custom_init[0] != '/') {
+      log_error("Custom init path must be absolute: %s", conf->custom_init);
       error = true;
-    } else if (strchr(cfg->conf.custom_init, ' ')) {
-      log_error("Custom init path cannot contain spaces: %s", cfg->conf.custom_init);
+    } else if (strchr(conf->custom_init, ' ')) {
+      log_error("Custom init path cannot contain spaces: %s", conf->custom_init);
       error = true;
     }
   }
@@ -114,18 +112,22 @@ int main(const int argc, char **argv) {
   /* 1. Discovery Pass: Capture identity and command without permuting argv.
    * Using '-' at the start of optstring returns non-options as '1'. */
   while ((opt = getopt_long(argc, argv, "-n:fC:", long_options, nullptr)) != -1) {
-    if (opt == 1) { /* Non-option argument */
+    switch (opt) {
+    case 1:
       if (!discovered_cmd) {
         discovered_cmd = optarg;
       }
-    } else if (opt == 'C') {
+      break;
+    case 'C':
       safe_strncpy(cfg.rt.config_file, optarg, sizeof(cfg.rt.config_file));
-    } else if (opt == 'n') {
+      break;
+    case 'n':
       if (reject_container_name(optarg) < 0) {
         ret = 1;
         goto cleanup;
       }
       safe_strncpy(cfg.conf.container_name, optarg, sizeof(cfg.conf.container_name));
+      break;
     }
   }
   optind = 0; /* Reset for next steps */
@@ -172,7 +174,6 @@ int main(const int argc, char **argv) {
    */
   const bool is_stateful =
       discovered_cmd && (strcmp(discovered_cmd, "stop") == 0 ||
-                         strcmp(discovered_cmd, "restart") == 0 ||
                          strcmp(discovered_cmd, "pid") == 0 ||
                          strcmp(discovered_cmd, "info") == 0);
 
@@ -232,18 +233,8 @@ int main(const int argc, char **argv) {
 
   while ((opt = getopt_long(argc, argv, optstring, long_options, nullptr)) != -1) {
     switch (opt) {
-    case 'n':
-      if (reject_container_name(optarg) < 0) {
-        ret = 1;
-        goto cleanup;
-      }
-      safe_strncpy(cfg.conf.container_name, optarg, sizeof(cfg.conf.container_name));
-      break;
     case 'f':
       cfg.rt.foreground = 1;
-      break;
-    case 'C':
-      safe_strncpy(cfg.rt.config_file, optarg, sizeof(cfg.rt.config_file));
       break;
     case 265:
       /* --format: machine-parseable output */
@@ -292,14 +283,9 @@ int main(const int argc, char **argv) {
 
   ensure_runtime();
 
-  if (strcmp(cmd, "show") == 0) {
-    ret = show_containers(&cfg);
-    goto cleanup;
-  }
-
-  /* start/restart: single container only */
+  /* single container only */
   if (strcmp(cmd, "start") == 0) {
-    if (validate_configuration_cli(&cfg) < 0) {
+    if (validate_configuration_cli(&cfg.conf) < 0) {
       ret = 1;
       goto cleanup;
     }
@@ -320,27 +306,13 @@ int main(const int argc, char **argv) {
   }
 
   if (strcmp(cmd, "stop") == 0) {
-    ret = stop_rootfs(&cfg, false);
-    goto cleanup;
-  }
-
-  if (strcmp(cmd, "restart") == 0) {
-    if (check_requirements_hw(cfg.conf.hw_access) < 0) {
-      ret = 1;
-      goto cleanup;
-    }
-    print_privileged_warning(cfg.conf.privileged_mask);
-    if (cfg.conf.privileged_mask & PRIV_NOSEC && cfg.conf.block_nested_ns)
-      log_warn("--privileged=noseccomp is active: --block-nested-namespaces "
-               "is now a NO-OP.");
-    cgroup_host_bootstrap(cfg.conf.force_cgroupv1);
-    ret = restart_rootfs(&cfg);
+    ret = stop_rootfs(&cfg);
     goto cleanup;
   }
 
   if (strcmp(cmd, "pid") == 0) {
     pid_t pid = 0;
-    if (is_container_running(&cfg, &pid) && pid > 0) {
+    if (is_container_running(cfg.conf.uuid, &pid) && pid > 0) {
       printf("%d\n", (int)pid);
       ret = 0;
     } else {

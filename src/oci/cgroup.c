@@ -476,8 +476,8 @@ int cgroup_apply_limits(cfg_t *cfg) {
   return err ? -1 : 0;
 }
 
-int cgroup_get_usage(const cfg_t *cfg, long long *mem, long long *cpu_us,
-                     long long *pids) {
+int cgroup_get_usage(const char *container_name, long long *mem,
+                     long long *cpu_us, long long *pids) {
   if (mem)
     *mem = -1;
   if (cpu_us)
@@ -486,7 +486,7 @@ int cgroup_get_usage(const cfg_t *cfg, long long *mem, long long *cpu_us,
     *pids = -1;
 
   char safe_name[256];
-  sanitize_container_name(cfg->conf.container_name, safe_name, sizeof(safe_name));
+  sanitize_container_name(container_name, safe_name, sizeof(safe_name));
 
   const bool v2 = cgroup_host_is_v2();
   /* Keep cg strictly within PATH_MAX-64 so the suffix appended
