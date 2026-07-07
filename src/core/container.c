@@ -656,7 +656,7 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
 
   /* Case 2: Validate running status */
   pid_t pid = 0;
-  if (trust_cfg_pid && cfg->rt.container_pid > 0) {
+  if (trust_cfg_pid) {
     /* Trust the PID we just got from the sync pipe.
      * We assume it's running because parent waited for boot marker. */
     pid = cfg->rt.container_pid;
@@ -670,172 +670,103 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
     return -1;
   }
 
-  /* Success - print Host and detailed Container info */
-  if (cfg->rt.format_output) {
-    const char *arch = get_architecture();
-    printf("HOST_ARCH=%s\n", arch);
-    printf("CONTAINER_NAME=%s\n", cfg->conf.container_name);
-    printf("CONTAINER_PID=%d\n", pid);
+  /* Human-readable output */
+  const char *arch = get_architecture();
+  printf("Host: %s\n", arch);
 
-    char pretty[256];
-    char osr_path[PATH_MAX];
-    if (build_proc_root_path(pid, OS_RELEASE, osr_path,
-                             sizeof(osr_path)) == 0) {
-      get_os_pretty(osr_path, pretty, sizeof(pretty));
-      if (pretty[0])
-        printf("CONTAINER_OS=%s\n", pretty);
+  printf("\nContainer: %s (RUNNING)\n",
+         cfg->conf.container_name);
+  printf("  PID: %d\n", pid);
+
+  char pretty[256];
+  char osr_path[PATH_MAX];
+  if (build_proc_root_path(pid, OS_RELEASE, osr_path,
+                           sizeof(osr_path)) == 0) {
+    get_os_pretty(osr_path, pretty, sizeof(pretty));
+    if (pretty[0])
+      printf("  OS: %s\n", pretty);
+  }
+
+  /* Uptime (only if called from info command) */
+  if (!trust_cfg_pid) {
+    const long uptime_sec = get_container_uptime(pid);
+    if (uptime_sec >= 0) {
+      char uptime_str[128];
+      format_uptime(uptime_sec, uptime_str, sizeof(uptime_str));
+      printf("  Uptime: %s\n", uptime_str);
     }
+  }
 
-    if (!trust_cfg_pid) {
-      const long uptime_sec = get_container_uptime(pid);
-      if (uptime_sec >= 0) {
-        char uptime_str[128];
-        format_uptime(uptime_sec, uptime_str, sizeof(uptime_str));
-        printf("CONTAINER_UPTIME=%s\n", uptime_str);
+  printf("\nFeatures:\n");
+  int feat_count = 0;
+
+  /* 1. Isolation Network */
+  if (cfg->conf.isolation_network) {
+    printf("  Isolation network: enabled\n");
+    feat_count++;
+  }
+
+  /* 2. HW/GPU Access */
+  if (cfg->conf.hw_access) {
+    printf("  HW access: full\n");
+    feat_count++;
+  } else if (cfg->conf.gpu_mode) {
+    printf("  HW access: GPU\n");
+    feat_count++;
+  }
+
+  /* 3. Volatile Mode */
+  if (cfg->conf.volatile_mode) {
+    printf("  Volatile mode: enabled\n");
+    feat_count++;
+  }
+
+  /* 4. Cgroup v1 */
+  if (cfg->conf.force_cgroupv1) {
+    printf("  Force Cgroup V1: yes\n");
+    feat_count++;
+  }
+
+  /* 5. Deadlock Shield (block_nested_ns) */
+  if (cfg->conf.block_nested_ns) {
+    printf("  Deadlock Shield: enabled\n");
+    feat_count++;
+  }
+
+  /* 6. Privileged Mode */
+  if (cfg->conf.privileged_mask > 0) {
+    printf("  Privileged mode: ");
+    if (cfg->conf.privileged_mask == PRIV_FULL) {
+      printf("full");
+    } else {
+      bool first = true;
+      if (cfg->conf.privileged_mask & PRIV_NOMASK) {
+        printf("%snomask", first ? "" : ", ");
+        first = false;
+      }
+      if (cfg->conf.privileged_mask & PRIV_NOCAPS) {
+        printf("%snocaps", first ? "" : ", ");
+        first = false;
+      }
+      if (cfg->conf.privileged_mask & PRIV_NOSEC) {
+        printf("%snoseccomp", first ? "" : ", ");
+        first = false;
+      }
+      if (cfg->conf.privileged_mask & PRIV_SHARED) {
+        printf("%sshared", first ? "" : ", ");
+        first = false;
+      }
+      if (cfg->conf.privileged_mask & PRIV_UNFILT) {
+        printf("%sunfiltered-dev", first ? "" : ", ");
+        first = false;
       }
     }
+    printf("\n");
+    feat_count++;
+  }
 
-    printf("ISOLATION_NETWORK=%d\n", cfg->conf.isolation_network);
-
-    if (cfg->conf.hw_access)
-      printf("HW_ACCESS=full\n");
-    else if (cfg->conf.gpu_mode)
-      printf("HW_ACCESS=GPU\n");
-    else
-      printf("HW_ACCESS=none\n");
-
-    printf("VOLATILE_MODE=%d\n", cfg->conf.volatile_mode);
-    printf("FORCE_CGROUP_V1=%d\n", cfg->conf.force_cgroupv1);
-    printf("DEADLOCK_SHIELD=%d\n", cfg->conf.block_nested_ns);
-
-    if (cfg->conf.privileged_mask > 0) {
-      printf("PRIVILEGED_MODE=");
-      if (cfg->conf.privileged_mask == PRIV_FULL) {
-        printf("full");
-      } else {
-        bool first = true;
-        if (cfg->conf.privileged_mask & PRIV_NOMASK) {
-          printf("%snomask", first ? "" : ",");
-          first = false;
-        }
-        if (cfg->conf.privileged_mask & PRIV_NOCAPS) {
-          printf("%snocaps", first ? "" : ",");
-          first = false;
-        }
-        if (cfg->conf.privileged_mask & PRIV_NOSEC) {
-          printf("%snoseccomp", first ? "" : ",");
-          first = false;
-        }
-        if (cfg->conf.privileged_mask & PRIV_SHARED) {
-          printf("%sshared", first ? "" : ",");
-          first = false;
-        }
-        if (cfg->conf.privileged_mask & PRIV_UNFILT) {
-          printf("%sunfiltered-dev", first ? "" : ",");
-          first = false;
-        }
-      }
-      printf("\n");
-    }
-  } else {
-    /* Human-readable output */
-    const char *arch = get_architecture();
-    printf("Host: %s\n", arch);
-
-    printf("\nContainer: %s (RUNNING)\n",
-           cfg->conf.container_name);
-    printf("  PID: %d\n", pid);
-
-    char pretty[256];
-    char osr_path[PATH_MAX];
-    if (build_proc_root_path(pid, OS_RELEASE, osr_path,
-                             sizeof(osr_path)) == 0) {
-      get_os_pretty(osr_path, pretty, sizeof(pretty));
-      if (pretty[0])
-        printf("  OS: %s\n", pretty);
-    }
-
-    /* Uptime (only if called from info command) */
-    if (!trust_cfg_pid) {
-      const long uptime_sec = get_container_uptime(pid);
-      if (uptime_sec >= 0) {
-        char uptime_str[128];
-        format_uptime(uptime_sec, uptime_str, sizeof(uptime_str));
-        printf("  Uptime: %s\n", uptime_str);
-      }
-    }
-
-    printf("\nFeatures:\n");
-    int feat_count = 0;
-
-    /* 1. Isolation Network */
-    if (cfg->conf.isolation_network) {
-      printf("  Isolation network: enabled\n");
-      feat_count++;
-    }
-
-    /* 2. HW/GPU Access */
-    if (cfg->conf.hw_access) {
-      printf("  HW access: full\n");
-      feat_count++;
-    } else if (cfg->conf.gpu_mode) {
-      printf("  HW access: GPU\n");
-      feat_count++;
-    }
-
-    /* 3. Volatile Mode */
-    if (cfg->conf.volatile_mode) {
-      printf("  Volatile mode: enabled\n");
-      feat_count++;
-    }
-
-    /* 4. Cgroup v1 */
-    if (cfg->conf.force_cgroupv1) {
-      printf("  Force Cgroup V1: yes\n");
-      feat_count++;
-    }
-
-    /* 5. Deadlock Shield (block_nested_ns) */
-    if (cfg->conf.block_nested_ns) {
-      printf("  Deadlock Shield: enabled\n");
-      feat_count++;
-    }
-
-    /* 6. Privileged Mode */
-    if (cfg->conf.privileged_mask > 0) {
-      printf("  Privileged mode: ");
-      if (cfg->conf.privileged_mask == PRIV_FULL) {
-        printf("full");
-      } else {
-        bool first = true;
-        if (cfg->conf.privileged_mask & PRIV_NOMASK) {
-          printf("%snomask", first ? "" : ", ");
-          first = false;
-        }
-        if (cfg->conf.privileged_mask & PRIV_NOCAPS) {
-          printf("%snocaps", first ? "" : ", ");
-          first = false;
-        }
-        if (cfg->conf.privileged_mask & PRIV_NOSEC) {
-          printf("%snoseccomp", first ? "" : ", ");
-          first = false;
-        }
-        if (cfg->conf.privileged_mask & PRIV_SHARED) {
-          printf("%sshared", first ? "" : ", ");
-          first = false;
-        }
-        if (cfg->conf.privileged_mask & PRIV_UNFILT) {
-          printf("%sunfiltered-dev", first ? "" : ", ");
-          first = false;
-        }
-      }
-      printf("\n");
-      feat_count++;
-    }
-
-    if (feat_count == 0) {
-      printf("  None\n");
-    }
+  if (feat_count == 0) {
+    printf("  None\n");
   }
 
   /* Resource limits & live usage. Only show if Cgroup V2 is active,

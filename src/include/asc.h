@@ -142,7 +142,6 @@ typedef struct {
 typedef struct {
   bool foreground;
   bool reboot_cycle;
-  bool format_output;
   bool config_file_existed;
 
   char volatile_dir[PATH_MAX];

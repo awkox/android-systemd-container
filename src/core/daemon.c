@@ -984,42 +984,18 @@ int client_run(int argc, char **argv) {
   if (argc < 1)
     return -2;
 
-  bool interactive = false;
-  for (int i = 0; i < argc; i++) {
-    if (strcmp(argv[i], "start") == 0) {
-      interactive = true;
-      break;
-    }
-  }
-
+  /* Under the strict CLI, the command is always the first argument */
+  bool interactive = (strcmp(argv[0], "start") == 0);
   bool has_tty = isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
 
   if (interactive && !has_tty) {
-    bool forces_tty = false;
-    for (int i = 0; i < argc; i++) {
-      if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--foreground") == 0) {
-        for (int j = 0; j < argc; j++) {
-          if (strcmp(argv[j], "start") == 0) {
-            forces_tty = true;
-            break;
-          }
-        }
-        if (forces_tty)
-          break;
-      }
-    }
+    /* Since the format is strict `asc start NAME [CONFIG] [-f]`, 
+     * `-f` will always be the last argument if provided. */
+    bool forces_tty = (argc > 1 && strcmp(argv[argc - 1], "-f") == 0);
+
     if (forces_tty) {
-      /* Strip -f/--foreground; start_rootfs() will warn and flip the switch.
-       */
-      for (int i = 0; i < argc; i++) {
-        if (strcmp(argv[i], "-f") == 0 ||
-            strcmp(argv[i], "--foreground") == 0) {
-          for (int j = i; j < argc - 1; j++)
-            argv[j] = argv[j + 1];
-          argv[--argc] = nullptr;
-          break;
-        }
-      }
+      /* Strip -f; start_rootfs() will warn and flip the switch. */
+      argv[--argc] = nullptr;
     }
     interactive = false;
   }

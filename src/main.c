@@ -8,26 +8,15 @@
 
 static void print_usage(void) {
   printf(
-      "Usage: " PROJECT_NAME " [options] <command> [args]\n\n"
+      "Usage: " PROJECT_NAME " <command> [args]\n\n"
       "Commands:\n"
-      "  start                     Start a new container\n"
-      "  stop                      Stop one or more containers\n"
-      "  info                      Show detailed container info\n"
-      "  pid                       Show the live PID of the container init\n"
+      "  daemon start [-f]         Start the background daemon (-f for foreground)\n"
+      "  daemon stop               Stop the running background daemon\n"
+      "  start NAME [CONFIG] [-f]  Start container NAME with optional CONFIG file\n"
+      "  stop NAME                 Stop container NAME\n"
+      "  info NAME                 Show detailed container info\n"
       "  check                     Check system requirements\n"
-      "  help                      Show this help message\n"
-      "  daemon                    Run daemon mode (use --foreground for "
-      "foreground execution)\n"
-      "  daemon-stop               Stop the running background daemon\n\n"
-
-      "Options (Container Setup):\n"
-      "  -n, --name=NAME           Container name (mandatory)\n"
-      "  -C, --conf=PATH           Load configuration from file\n\n"
-
-      "Options (Runtime):\n"
-      "  -f, --foreground          Run in foreground (attach console)\n"
-      "      --format              Machine-parseable output (KEY=VALUE)\n"
-      "      --help                Show this help message\n\n");
+      "  help                      Show this help message\n\n");
 }
 
 /**
@@ -38,7 +27,7 @@ static int validate_configuration_cli(asc_conf_t *conf) {
   bool error = false;
 
   if (!conf->container_name[0]) {
-    log_error("Container name is mandatory (--name).");
+    log_error("Container name is mandatory.");
     error = true;
   } else if (reject_container_name(conf->container_name) < 0) {
     error = true;
@@ -58,7 +47,7 @@ static int validate_configuration_cli(asc_conf_t *conf) {
 
   /* Image mode requires a name for the mount point */
   if (conf->rootfs_img_path[0] && !conf->container_name[0]) {
-    log_error("Rootfs image requires a container name (--name).");
+    log_error("Rootfs image requires a container name.");
     error = true;
   }
 
@@ -80,74 +69,96 @@ int main(const int argc, char **argv) {
   /* CRITICAL: Zero all fields to avoid garbage pointer in dynamic arrays */
   cfg_t cfg = {};
 
-  static const struct option long_options[] = {
-    {"name", required_argument, nullptr, 'n'},
-    {"foreground", no_argument, nullptr, 'f'},
-    {"config", required_argument, nullptr, 'C'},
-    {"format", no_argument, nullptr, 265},
-    {"help", no_argument, nullptr, 270},
-    {nullptr, 0, nullptr, 0}
-  };
-
-  opterr = 0;
+  if (argc < 2) {
+    print_usage();
+    return 1;
+  }
 
   /* Resolve relative path arguments to absolute before any parsing.
    * The daemon runs from CWD='/' (daemonize calls chdir("/")), so a relative
-   * path like --conf=./file.conf would resolve against '/' in the re-exec'd
-   * child.  Doing this here - while we still own the user's CWD - means every
-   * subsequent getopt pass reads absolute paths, covering all execution modes.
+   * path would resolve against '/' in the re-exec'd child.
    */
   resolve_argv_paths(argc - 1, argv + 1);
 
-  /*
-   * Multi-pass argument parsing:
-   * 1. Discovery Pass: Find command and identity (name/rootfs/conf) anywhere.
-   * 2. Load config.
-   * 3. Override Pass: Apply CLI overrides on top of loaded config.
-   */
-  const char *discovered_cmd = nullptr;
-  constexpr char temp_i[PATH_MAX] = "";
-  int opt;
+  const char *cmd = argv[1];
+  const char *subcmd = nullptr;
+  const char *name = nullptr;
+  const char *config_path = nullptr;
+  bool foreground = false;
+  bool is_daemon_cmd = false;
+  bool is_no_root_cmd = false;
+  bool is_stateful = false;
 
-  /* 1. Discovery Pass: Capture identity and command without permuting argv.
-   * Using '-' at the start of optstring returns non-options as '1'. */
-  while ((opt = getopt_long(argc, argv, "-n:fC:", long_options, nullptr)) != -1) {
-    switch (opt) {
-    case 1:
-      if (!discovered_cmd) {
-        discovered_cmd = optarg;
+  /* Strict CLI matching */
+  if (strcmp(cmd, "daemon") == 0) {
+    is_daemon_cmd = true;
+    if (argc < 3) goto usage_error;
+    subcmd = argv[2];
+    if (strcmp(subcmd, "start") == 0) {
+      if (argc == 4) {
+        if (strcmp(argv[3], "-f") == 0) foreground = true;
+        else goto usage_error;
+      } else if (argc > 4) {
+        goto usage_error;
       }
-      break;
-    case 'C':
-      safe_strncpy(cfg.rt.config_file, optarg, sizeof(cfg.rt.config_file));
-      break;
-    case 'n':
-      if (reject_container_name(optarg) < 0) {
-        ret = 1;
-        goto cleanup;
-      }
-      safe_strncpy(cfg.conf.container_name, optarg, sizeof(cfg.conf.container_name));
-      break;
+    } else if (strcmp(subcmd, "stop") == 0) {
+      if (argc > 3) goto usage_error;
+    } else {
+      goto usage_error;
     }
+  } else if (strcmp(cmd, "start") == 0) {
+    if (argc < 3 || argc > 5) goto usage_error;
+    name = argv[2];
+    if (argc == 4) {
+      if (strcmp(argv[3], "-f") == 0) {
+        foreground = true;
+      } else {
+        config_path = argv[3];
+      }
+    } else if (argc == 5) {
+      config_path = argv[3];
+      if (strcmp(argv[4], "-f") == 0) {
+        foreground = true;
+      } else {
+        goto usage_error;
+      }
+    }
+  } else if (strcmp(cmd, "stop") == 0) {
+    if (argc != 3) goto usage_error;
+    name = argv[2];
+    is_stateful = true;
+  } else if (strcmp(cmd, "info") == 0) {
+    if (argc != 3) goto usage_error;
+    name = argv[2];
+    is_stateful = true;
+  } else if (strcmp(cmd, "check") == 0) {
+    if (argc != 2) goto usage_error;
+    is_no_root_cmd = true;
+  } else if (strcmp(cmd, "help") == 0) {
+    if (argc != 2) goto usage_error;
+    is_no_root_cmd = true;
+  } else {
+    goto usage_error;
   }
-  optind = 0; /* Reset for next steps */
+
+  /* Populate cfg with parsed arguments */
+  if (name) {
+    if (reject_container_name(name) < 0) {
+      ret = 1;
+      goto cleanup;
+    }
+    safe_strncpy(cfg.conf.container_name, name, sizeof(cfg.conf.container_name));
+  }
+  if (config_path) {
+    safe_strncpy(cfg.rt.config_file, config_path, sizeof(cfg.rt.config_file));
+  }
+  cfg.rt.foreground = foreground ? 1 : 0;
 
   /*
    * Daemon Proxying:
    * Optimistically attempt to proxy commands to the background daemon.
    * If the daemon is not reachable, fall back to direct execution.
    */
-  const bool is_daemon_cmd = discovered_cmd && strcmp(discovered_cmd, "daemon") == 0;
-
-  /*
-   * Commands that do not require root access (help, version) or
-   * must be run locally to avoid recursive loops (mode) are never proxied.
-   */
-  const bool is_no_root_cmd =
-      discovered_cmd && (strcmp(discovered_cmd, "help") == 0 ||
-                         strcmp(discovered_cmd, "mode") == 0 ||
-                         strcmp(discovered_cmd, "check") == 0);
-
   if (!is_daemon_cmd && !is_no_root_cmd && getenv("NO_PROXY") == nullptr) {
     const int proxy_ret = client_run(argc - 1, argv + 1);
     if (proxy_ret != -2) {
@@ -158,8 +169,7 @@ int main(const int argc, char **argv) {
 
   /* Unified root gate: block all non-exempt commands before any work begins */
   if (!is_no_root_cmd && getuid() != 0) {
-    log_error("Root privileges required for '%s'",
-              discovered_cmd ? discovered_cmd : "(unknown)");
+    log_error("Root privileges required for '%s'", cmd);
     ret = 1;
     goto cleanup;
   }
@@ -172,12 +182,9 @@ int main(const int argc, char **argv) {
    * 4. 如果配置尚未成功加载，执行恢复扫描以尝试从
    *    <workspace dir>/config/<name>/container.config 加载。
    */
-  const bool is_stateful =
-      discovered_cmd && (strcmp(discovered_cmd, "stop") == 0 ||
-                         strcmp(discovered_cmd, "pid") == 0 ||
-                         strcmp(discovered_cmd, "info") == 0);
-
   bool loaded = false;
+  constexpr char temp_i[PATH_MAX] = "";
+
   if (cfg.rt.config_file[0]) {
     if (config_load(cfg.rt.config_file, &cfg) < 0) {
       log_error("Failed to load configuration from '%s': %s", cfg.rt.config_file,
@@ -203,7 +210,6 @@ int main(const int argc, char **argv) {
    * If we don't have one by now, try to guess the active container. */
   if (is_stateful && cfg.conf.container_name[0] == '\0') {
     log_error("Container name is required for this command.");
-    log_info("Please specify the container using '-n' or '--name'.");
     ret = 1;
     goto cleanup;
   }
@@ -226,38 +232,6 @@ int main(const int argc, char **argv) {
     }
   }
 
-  /* Apply configuration reset immediately AFTER disk load, BEFORE CLI overrides
-   */
-
-  const char *optstring = "n:fC:";
-
-  while ((opt = getopt_long(argc, argv, optstring, long_options, nullptr)) != -1) {
-    switch (opt) {
-    case 'f':
-      cfg.rt.foreground = 1;
-      break;
-    case 265:
-      /* --format: machine-parseable output */
-      cfg.rt.format_output = true;
-      break;
-    case 270: /* --help */
-      print_usage();
-      ret = 0;
-      goto cleanup;
-    default:
-      break;
-    }
-  }
-
-  if (optind >= argc) {
-    log_error("Missing command");
-    log_info("Run '%s help' for usage information.", argv[0]);
-    ret = 1;
-    goto cleanup;
-  }
-
-  const char *cmd = argv[optind];
-
   /* Set up global logging context for centralized logging engine */
   if (cfg.conf.container_name[0] != '\0') {
     safe_strncpy(log_container_name, cfg.conf.container_name,
@@ -271,12 +245,6 @@ int main(const int argc, char **argv) {
   }
   if (strcmp(cmd, "help") == 0) {
     print_usage();
-    ret = 0;
-    goto cleanup;
-  }
-
-  if (strcmp(cmd, "mode") == 0) {
-    printf("%s\n", daemon_probe() ? "daemon" : "direct");
     ret = 0;
     goto cleanup;
   }
@@ -298,9 +266,6 @@ int main(const int argc, char **argv) {
       log_warn("--privileged=noseccomp is active: --block-nested-namespaces "
                "is now a NO-OP.");
     cgroup_host_bootstrap(cfg.conf.force_cgroupv1);
-    if (cfg.conf.container_name[0] == '\0' && cfg.conf.rootfs_img_path[0])
-      generate_container_name(cfg.conf.rootfs_img_path, cfg.conf.container_name,
-                              sizeof(cfg.conf.container_name));
     ret = start_rootfs(&cfg);
     goto cleanup;
   }
@@ -310,36 +275,27 @@ int main(const int argc, char **argv) {
     goto cleanup;
   }
 
-  if (strcmp(cmd, "pid") == 0) {
-    pid_t pid = 0;
-    if (is_container_running(cfg.conf.uuid, &pid) && pid > 0) {
-      printf("%d\n", (int)pid);
-      ret = 0;
-    } else {
-      printf("NONE\n");
-      ret = 1;
-    }
-    goto cleanup;
-  }
-
   if (strcmp(cmd, "info") == 0) {
     ret = show_info(&cfg, false);
     goto cleanup;
   }
 
   if (strcmp(cmd, "daemon") == 0) {
-    ret = daemon_run(cfg.rt.foreground);
+    if (strcmp(subcmd, "start") == 0) {
+      ret = daemon_run(cfg.rt.foreground);
+    } else if (strcmp(subcmd, "stop") == 0) {
+      /* 如果执行到这里，说明 Daemon 没启动（client_run 代理失败并回退了） */
+      log_info("Daemon is not running.");
+      ret = 0;
+    }
     goto cleanup;
   }
 
-  /* 如果执行到这里，说明 Daemon 没启动（client_run 代理失败并回退了） */
-  if (strcmp(cmd, "daemon-stop") == 0) {
-    log_info("Daemon is not running.");
-    ret = 0;
-    goto cleanup;
-  }
+  // Fallback (should be unreachable due to previous strict checking)
+  goto usage_error;
 
-  log_error("Unknown command: '%s'", cmd);
+usage_error:
+  log_error("Invalid arguments or missing command.");
   log_info("Run '%s help' for usage information.", argv[0]);
   ret = 1;
 
