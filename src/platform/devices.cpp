@@ -289,51 +289,53 @@ static const char *gpu_static_devices[] = {
 };
 
 static bool is_dangerous_node(const char *name) {
-  if ((strncmp(name, "card", 4) == 0 &&
+  std::string_view sv_name{name};
+
+  if ((sv_name.starts_with("card") &&
        (name[4] == '\0' || isdigit(name[4]))) ||
-      (strncmp(name, "controlD", 8) == 0 &&
+      (sv_name.starts_with("controlD") &&
        (name[8] == '\0' || isdigit(name[8])))) {
     return true;
   }
 
   if (strcmp(name, "nvidiactl") == 0 || strcmp(name, "nvidia-modeset") == 0)
     return true;
-  if (strncmp(name, "nvidia", 6) == 0 && isdigit(name[6]))
+  if (sv_name.starts_with("nvidia") && isdigit(name[6]))
     return true;
-  if (strncmp(name, "nvidia-cap", 10) == 0)
+  if (sv_name.starts_with("nvidia-cap"))
     return true;
 
   if (strcmp(name, "vga_arbiter") == 0)
     return true;
-  if (strncmp(name, "fb", 2) == 0 && isdigit(name[2]))
+  if (sv_name.starts_with("fb") && isdigit(name[2]))
     return true;
 
-  if (strncmp(name, "tty", 3) == 0) {
-    if (strncmp(name, "ttyUSB", 6) == 0 || strncmp(name, "ttyACM", 6) == 0 ||
-        strncmp(name, "ttyAMA", 6) == 0 || strncmp(name, "ttyTHS", 6) == 0 ||
-        strncmp(name, "ttymxc", 6) == 0)
+  if (sv_name.starts_with("tty")) {
+    if (sv_name.starts_with("ttyUSB") || sv_name.starts_with("ttyACM") ||
+        sv_name.starts_with("ttyAMA") || sv_name.starts_with("ttyTHS") ||
+        sv_name.starts_with("ttymxc"))
       return false;
     if (isdigit(name[3]))
       return true;
     return true;
   }
 
-  if (strncmp(name, "ccci", 4) == 0 || strncmp(name, "umts_", 5) == 0)
+  if (sv_name.starts_with("ccci") || sv_name.starts_with("umts_"))
     return true;
-  if (strncmp(name, "pty", 3) == 0) 
+  if (sv_name.starts_with("pty")) 
     return true;
   if (strcmp(name, "uinput") == 0 || strcmp(name, "rfkill") == 0)
     return true;
-  if (strncmp(name, "tz", 2) == 0 || strncmp(name, "trusty", 6) == 0 ||
-      strncmp(name, "gz_", 3) == 0 || strncmp(name, "tee", 3) == 0)
+  if (sv_name.starts_with("tz") || sv_name.starts_with("trusty") ||
+      sv_name.starts_with("gz_") || sv_name.starts_with("tee"))
     return true; 
-  if (strncmp(name, "conn", 4) == 0 || strcmp(name, "mtk_sec") == 0)
+  if (sv_name.starts_with("conn") || strcmp(name, "mtk_sec") == 0)
     return true; 
   if (strncasecmp(name, "mt_pmic", 7) == 0)
     return true; 
   if (strcmp(name, "tuihw") == 0 || strcmp(name, "wlan") == 0)
     return true;
-  if (strncmp(name, "ram", 3) == 0 && isdigit(name[3]))
+  if (sv_name.starts_with("ram") && isdigit(name[3]))
     return true; 
 
   if (strcmp(name, "console") == 0 || strcmp(name, "tty") == 0 ||
@@ -346,9 +348,9 @@ static bool is_dangerous_node(const char *name) {
   if (strcmp(name, "mem") == 0 || strcmp(name, "kmem") == 0 ||
       strcmp(name, "port") == 0 || strcmp(name, "kmsg") == 0)
     return true;
-  if (strncmp(name, "drm_dp_aux", 10) == 0)
+  if (sv_name.starts_with("drm_dp_aux"))
     return true;
-  if (strncmp(name, "vcs", 3) == 0)
+  if (sv_name.starts_with("vcs"))
     return true;
   if (strstr(name, "watchdog") != nullptr)
     return true;
@@ -359,45 +361,45 @@ static bool is_dangerous_node(const char *name) {
 
   if (strcmp(name, "udmabuf") == 0 || strcmp(name, "snapshot") == 0)
     return true;
-  if (strncmp(name, "tpm", 3) == 0)
+  if (sv_name.starts_with("tpm"))
     return true;
-  if (strncmp(name, "stp", 3) == 0)
+  if (sv_name.starts_with("stp"))
     return true;
 
-  if (strncmp(name, "rmnet_", 6) == 0 || strncmp(name, "ipa", 3) == 0 ||
-      strncmp(name, "at_usb", 6) == 0 || strncmp(name, "at_mdm", 6) == 0 ||
-      strncmp(name, "wwan_", 5) == 0 || strncmp(name, "btfmslim", 8) == 0 ||
-      strncmp(name, "btpower", 7) == 0 || strncmp(name, "smd", 3) == 0 ||
-      strncmp(name, "apr_", 4) == 0 || strstr(name, "aud_") != nullptr ||
+  if (sv_name.starts_with("rmnet_") || sv_name.starts_with("ipa") ||
+      sv_name.starts_with("at_usb") || sv_name.starts_with("at_mdm") ||
+      sv_name.starts_with("wwan_") || sv_name.starts_with("btfmslim") ||
+      sv_name.starts_with("btpower") || sv_name.starts_with("smd") ||
+      sv_name.starts_with("apr_") || strstr(name, "aud_") != nullptr ||
       strstr(name, "icnss_") != nullptr)
     return true;
 
-  if (strncmp(name, "hvc", 3) == 0 || strncmp(name, "gh_", 3) == 0)
+  if (sv_name.starts_with("hvc") || sv_name.starts_with("gh_"))
     return true;
 
   if (strcmp(name, "audio_ipi") == 0 || strcmp(name, "scp_audio_ipi") == 0 ||
       strcmp(name, "vow") == 0 || strcmp(name, "vcp") == 0)
     return true;
 
-  if (strncmp(name, "coresight", 9) == 0 ||
-      strncmp(name, "remoteproc", 10) == 0 || strncmp(name, "rpmsg_", 6) == 0 ||
-      strcmp(name, "cvp") == 0 || strncmp(name, "rdbg_", 5) == 0 ||
+  if (sv_name.starts_with("coresight") ||
+      sv_name.starts_with("remoteproc") || sv_name.starts_with("rpmsg_") ||
+      strcmp(name, "cvp") == 0 || sv_name.starts_with("rdbg_") ||
       strcmp(name, "dcc_sram") == 0 || strcmp(name, "spec_sync") == 0 ||
       strcmp(name, "synx_device") == 0)
     return true;
 
-  if (strncmp(name, "anbox-", 6) == 0 || strcmp(name, "android_ssusbcon") == 0)
+  if (sv_name.starts_with("anbox-") || strcmp(name, "android_ssusbcon") == 0)
     return true;
-  if (strncmp(name, "rpmb", 4) == 0)
+  if (sv_name.starts_with("rpmb"))
     return true;
   if (strcmp(name, "mmp") == 0 || strcmp(name, "met") == 0)
     return true;
   if (strcmp(name, "mcupm") == 0 || strcmp(name, "sspm") == 0 ||
       strcmp(name, "scp") == 0)
     return true;
-  if (strncmp(name, "aed", 3) == 0 && (name[3] == '\0' || isdigit(name[3])))
+  if (sv_name.starts_with("aed") && (name[3] == '\0' || isdigit(name[3])))
     return true;
-  if (strncmp(name, "pmsg", 4) == 0)
+  if (sv_name.starts_with("pmsg"))
     return true;
   if (strcmp(name, "mdp_sync") == 0 || strcmp(name, "fmt_sync") == 0 ||
       strcmp(name, "mtk_mdp") == 0 || strcmp(name, "mml_pq") == 0 ||
@@ -411,30 +413,30 @@ static bool is_dangerous_node(const char *name) {
   if (strcmp(name, "eara-io") == 0 || strcmp(name, "RT_Monitor") == 0 ||
       strcmp(name, "stats") == 0)
     return true;
-  if (strncmp(name, "wmt", 3) == 0) 
+  if (sv_name.starts_with("wmt")) 
     return true;
-  if (strncmp(name, "fw_log_", 7) == 0 || strcmp(name, "sa_log_wifi") == 0)
+  if (sv_name.starts_with("fw_log_") || strcmp(name, "sa_log_wifi") == 0)
     return true;
-  if (strncmp(name, "sipa_", 5) == 0 || strcmp(name, "mddp") == 0 ||
+  if (sv_name.starts_with("sipa_") || strcmp(name, "mddp") == 0 ||
       strcmp(name, "usip") == 0)
     return true;
-  if (strncmp(name, "gpiochip", 8) == 0 || strncmp(name, "i2c-", 4) == 0 ||
-      strncmp(name, "iio:device", 10) == 0)
+  if (sv_name.starts_with("gpiochip") || sv_name.starts_with("i2c-") ||
+      sv_name.starts_with("iio:device"))
     return true;
-  if (strncmp(name, "cluster", 7) == 0 || strncmp(name, "gpu_freq", 8) == 0 ||
-      strncmp(name, "cpu_online_", 11) == 0 ||
+  if (sv_name.starts_with("cluster") || sv_name.starts_with("gpu_freq") ||
+      sv_name.starts_with("cpu_online_") ||
       strcmp(name, "memory_bandwidth") == 0 ||
       strstr(name, "msm_audio_ion") != nullptr ||
       strstr(name, "msm_hdcp") != nullptr || strstr(name, "msm_sps") != nullptr)
     return true;
-  if (strncmp(name, "nr_", 3) == 0 || strncmp(name, "multipdp", 8) == 0 ||
-      strncmp(name, "modem_boot", 10) == 0 || strcmp(name, "radio0") == 0)
+  if (sv_name.starts_with("nr_") || sv_name.starts_with("multipdp") ||
+      sv_name.starts_with("modem_boot") || strcmp(name, "radio0") == 0)
     return true;
-  if (strncmp(name, "bbd_", 4) == 0 || strncmp(name, "ssp_", 4) == 0 ||
+  if (sv_name.starts_with("bbd_") || sv_name.starts_with("ssp_") ||
       strcmp(name, "ssp_sensorhub") == 0)
     return true;
-  if (strcmp(name, "mst_ctrl") == 0 || strncmp(name, "qbt", 3) == 0 ||
-      strncmp(name, "dek_", 4) == 0)
+  if (strcmp(name, "mst_ctrl") == 0 || sv_name.starts_with("qbt") ||
+      sv_name.starts_with("dek_"))
     return true;
   if (strstr(name, "throughput") != nullptr || strstr(name, "latency") != nullptr)
     return true;
@@ -444,9 +446,9 @@ static bool is_dangerous_node(const char *name) {
     return true;
   if (strcmp(name, "ccic_misc") == 0 || strcmp(name, "hqm_event") == 0)
     return true;
-  if (strstr(name, "multipdp") != nullptr || strncmp(name, "ttyBCM", 6) == 0)
+  if (strstr(name, "multipdp") != nullptr || sv_name.starts_with("ttyBCM"))
     return true; 
-  if (strcmp(name, "s5p-smem") == 0 || strncmp(name, "als_", 4) == 0)
+  if (strcmp(name, "s5p-smem") == 0 || sv_name.starts_with("als_"))
     return true; 
   if (strstr(name, "throughput") != nullptr)
     return true; 

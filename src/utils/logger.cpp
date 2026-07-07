@@ -73,12 +73,13 @@ void log_internal(const char *prefix, const bool is_err, const char *fmt, ...) {
     return;
 
   if (!is_err) {
-    if (strncmp(raw_msg, "[CGROUP]", 8) == 0 ||
-        strncmp(raw_msg, "[VIRT]", 6) == 0 ||
-        strncmp(raw_msg, "[NET]", 5) == 0 ||
-        strncmp(raw_msg, "[SEC]", 5) == 0 ||
-        strncmp(raw_msg, "[GPU]", 5) == 0 ||
-        strncmp(raw_msg, "[FW]", 4) == 0
+    std::string_view sv_msg{raw_msg};
+    if (sv_msg.starts_with("[CGROUP]") ||
+        sv_msg.starts_with("[VIRT]") ||
+        sv_msg.starts_with("[NET]") ||
+        sv_msg.starts_with("[SEC]") ||
+        sv_msg.starts_with("[GPU]") ||
+        sv_msg.starts_with("[FW]")
     ) {
       return;
     }
