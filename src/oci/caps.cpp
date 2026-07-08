@@ -28,16 +28,12 @@ static constexpr int caps_to_drop[] = {
  * apply_capability_hardening()
  *
  * 从环境边界集(bounding set)中移除危险的 capabilities 以缩减容器的攻击面。
- * 
- * 在标准模式下 (hw_access=0)，我们会移除大量敏感的能力。
- * 在硬件直通模式下 (hw_access=1)，为了保证底层的刷机、USB、串口调试工具可用，
- * 我们保留大多数能力。
  */
-void apply_capability_hardening(const bool hw_access, const int privileged_mask) {
+void apply_capability_hardening(const int privileged_mask) {
   int total_dropped = 0;
 
   if (privileged_mask & PRIV_NOCAPS) {
-    log_info("[SEC] 已激活 --privileged=nocaps: 跳过 Capabilities 裁剪。");
+    log_info("[SEC] 已激活 privileged=nocaps: 跳过 Capabilities 裁剪。");
     return;
   }
 
@@ -50,13 +46,6 @@ void apply_capability_hardening(const bool hw_access, const int privileged_mask)
     } else {
       total_dropped++;
     }
-  }
-
-  if (hw_access) {
-    log_info(
-        "[SEC] 硬件直通模式: 保留大部分环境边界集 (仅禁用了 %d 个极其危险的 Cap)。",
-        total_dropped);
-    return;
   }
 
   for (int i = 0; caps_to_drop[i] != -1; i++) {

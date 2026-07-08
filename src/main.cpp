@@ -255,13 +255,13 @@ int main(const int argc, char **argv) {
       ret = 1;
       goto cleanup;
     }
-    if (check_requirements_hw(false) < 0) {
+    if (check_requirements_hw() < 0) {
       ret = 1;
       goto cleanup;
     }
     print_privileged_warning(cfg.conf.privileged_mask);
     if (cfg.conf.privileged_mask & PRIV_NOSEC && cfg.conf.block_nested_ns)
-      log_warn("警告：由于启用了 --privileged=noseccomp，--block-nested-namespaces 已失效。");
+      log_warn("警告：由于启用了 privileged=noseccomp，block-nested-namespaces 已失效。");
     cgroup_host_bootstrap(cfg.conf.force_cgroupv1);
     ret = start_rootfs(&cfg);
     goto cleanup;

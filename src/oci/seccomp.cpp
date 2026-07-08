@@ -248,7 +248,7 @@ int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask)
 
   if (block_nested_ns) {
     log_info(
-        "[SEC] 激活 --block-nested-namespaces: 已强制拦截后续的命名空间系统调用。");
+        "[SEC] 激活 block-nested-namespaces: 已强制拦截后续的命名空间系统调用。");
     memcpy(final_filter + curr, filter_ns, sizeof(filter_ns));
     curr += sizeof(filter_ns) / sizeof(struct sock_filter);
   }

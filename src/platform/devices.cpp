@@ -4,101 +4,19 @@ static int create_devices(const char *rootfs);
 static bool is_dangerous_node(const char *name);
 static void mirror_gpu_nodes(const char *dev_path);
 
-static void prune_host_devices(const char *dev_path, const int privileged_mask) {
-  if (privileged_mask & PRIV_UNFILT) {
-    log_info("[SEC] 已激活 --privileged=unfiltered-dev: 跳过设备节点黑名单过滤。");
-    return;
-  }
-  auto_closedir DIR *dir = opendir(dev_path);
-  if (!dir)
-    return;
-
-  struct dirent *entry;
-  char path[PATH_MAX];
-
-  while ((entry = readdir(dir)) != nullptr) {
-    const char *name = entry->d_name;
-    bool should_unlink = false;
-
-    if (is_dangerous_node(name)) {
-      should_unlink = true;
-    }
-
-    if (should_unlink) {
-      snprintf(path, sizeof(path), "%.3800s/%s", dev_path, name);
-      umount2(path, MNT_DETACH);
-      force_unlink(path);
-      continue;
-    }
-
-    if (strcmp(name, "dri") == 0 || strcmp(name, "nvidia-caps") == 0) {
-      snprintf(path, sizeof(path), "%.3800s/%s", dev_path, name);
-      auto_closedir DIR *subdir = opendir(path);
-      if (subdir) {
-        struct dirent *subentry;
-        while ((subentry = readdir(subdir)) != nullptr) {
-          bool sub_unlink = false;
-          const char *subname = subentry->d_name;
-
-          if (is_dangerous_node(subname)) {
-            sub_unlink = true;
-          }
-
-          if (sub_unlink) {
-            char subpath[PATH_MAX];
-            snprintf(subpath, sizeof(subpath), "%.3800s/%s", path, subname);
-            unlink(subpath);
-          }
-        }
-
-        if (strcmp(name, "dri") == 0) {
-          char bp_path[PATH_MAX];
-          snprintf(bp_path, sizeof(bp_path), "%.3800s/by-path", path);
-          auto_closedir DIR *bp_dir = opendir(bp_path);
-          if (bp_dir) {
-            while ((subentry = readdir(bp_dir)) != nullptr) {
-              if (strstr(subentry->d_name, "-card")) {
-                char bppath[PATH_MAX];
-                snprintf(bppath, sizeof(bppath), "%.3800s/%s", bp_path,
-                         subentry->d_name);
-                unlink(bppath);
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-int setup_dev(const char *rootfs, const bool hw_access, const bool gpu_mode,
-              const int privileged_mask) {
+int setup_dev(const char *rootfs, const bool gpu_mode, const int privileged_mask) {
   char dev_path[PATH_MAX];
   snprintf(dev_path, sizeof(dev_path), "%s/dev", rootfs);
 
   mkdir(dev_path, 0755);
 
-  if (hw_access) {
-    if (domount("devtmpfs", dev_path, "devtmpfs", MS_NOSUID | MS_NOEXEC,
-                "mode=755") == 0) {
-      prune_host_devices(dev_path, privileged_mask);
-      mirror_gpu_nodes(dev_path);
-    } else {
-      log_warn("挂载 devtmpfs 失败，回退使用受限的 tmpfs 伪终端");
-      if (domount("none", dev_path, "tmpfs", MS_NOSUID | MS_NOEXEC,
-                  "size=8M,mode=755") < 0)
-        return -1;
-    }
-  } else {
-    if (domount("none", dev_path, "tmpfs", MS_NOSUID | MS_NOEXEC,
-                "size=8M,mode=755") < 0)
-      return -1;
+  if (domount("none", dev_path, "tmpfs", MS_NOSUID | MS_NOEXEC,
+              "size=8M,mode=755") < 0)
+    return -1;
 
-    if (gpu_mode) {
-      log_info(
-          "[GPU] --gpu 加速模式：正在将宿主机的安全 GPU 节点映射入虚拟 tmpfs");
-      mirror_gpu_nodes(dev_path);
-    }
+  if (gpu_mode) {
+    log_info("[GPU] GPU 加速模式：正在将宿主机的安全 GPU 节点映射入虚拟 tmpfs");
+    mirror_gpu_nodes(dev_path);
   }
 
   return create_devices(rootfs);
@@ -177,7 +95,7 @@ static int create_devices(const char *rootfs) {
   return 0;
 }
 
-int setup_devpts(const bool hw_access) {
+int setup_devpts() {
   const char *pts_path = "/dev/pts";
 
   umount2(pts_path, MNT_DETACH);
@@ -205,28 +123,22 @@ int setup_devpts(const bool hw_access) {
       const char *ptmx_path = "/dev/ptmx";
       const char *pts_ptmx = "/dev/pts/ptmx";
 
-      if (hw_access) {
+      unlink(ptmx_path);
+
+      if (write_file(ptmx_path, "") == 0) {
         if (mount(pts_ptmx, ptmx_path, nullptr, MS_BIND, nullptr) == 0) {
           return 0;
         }
-      } else {
-        unlink(ptmx_path);
+      }
 
-        if (write_file(ptmx_path, "") == 0) {
-          if (mount(pts_ptmx, ptmx_path, nullptr, MS_BIND, nullptr) == 0) {
-            return 0;
-          }
-        }
+      unlink(ptmx_path);
+      if (symlink("pts/ptmx", ptmx_path) == 0 && access(pts_ptmx, F_OK) == 0)
+        return 0;
 
-        unlink(ptmx_path);
-        if (symlink("pts/ptmx", ptmx_path) == 0 && access(pts_ptmx, F_OK) == 0)
-          return 0;
-
-        unlink(ptmx_path);
-        if (mknod(ptmx_path, S_IFCHR | 0666, makedev(5, 2)) == 0) {
-          chmod(ptmx_path, 0666);
-          return 0;
-        }
+      unlink(ptmx_path);
+      if (mknod(ptmx_path, S_IFCHR | 0666, makedev(5, 2)) == 0) {
+        chmod(ptmx_path, 0666);
+        return 0;
       }
 
       log_warn("无法虚拟化 /dev/ptmx，部分伪终端应用可能会失败");

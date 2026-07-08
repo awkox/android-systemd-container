@@ -83,19 +83,13 @@ static bool check_kernel_version_supported(void) {
   return true;
 }
 
-int check_requirements_hw(const bool hw_access) {
+int check_requirements_hw() {
   int missing = 0;
 
   if (!check_root()) {
     log_error("必须以 root 用户身份运行");
     log_info("本工具需要 root 权限来进行命名空间和挂载操作。");
     missing++;
-  }
-
-  /* 只有在启用了 --hw-access 模式时才需要 devtmpfs，否则我们使用私有 tmpfs */
-  if (hw_access && grep_file("/proc/filesystems", "devtmpfs") == 0) {
-    log_warn("已激活硬件直通模式，但您的内核不支持 devtmpfs。\n"
-             "部分 GPU 和硬件设备节点可能无法可用。");
   }
 
   /* 功能性命名空间检查 */
@@ -267,9 +261,9 @@ int check_requirements_detailed(void) {
               access("/dev/fuse", F_OK) == 0 || grep_file("/proc/filesystems", "fuse"));
   print_check("TUN/TAP 支持", "虚拟网络设备 (TUN/TAP) 创建能力",
               access("/dev/net/tun", F_OK) == 0);
-  print_check("OverlayFS 支持", "开启 --volatile 易失模式所必需的支持",
+  print_check("OverlayFS 支持", "开启 volatile 易失模式所必需的支持",
               grep_file("/proc/filesystems", "overlay"));
-  print_check("Network 命名空间", "支持在 --net=none 下使用隔离的网络栈",
+  print_check("Network 命名空间", "支持在 isolation_network 下使用隔离的网络栈",
               check_ns(CLONE_NEWNET, "net"));
 
   /* 安全加固 (HARDENING) */

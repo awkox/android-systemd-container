@@ -276,9 +276,9 @@ void print_cgroup_status(const cfg_t *cfg) {
   const bool limits_set = cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit;
 
   if (cfg->conf.force_cgroupv1) {
-    log_warn("正在使用传统的 Cgroup V1 架构 (由于启用了 --force-cgroupv1)");
+    log_warn("正在使用传统的 Cgroup V1 架构 (由于启用了 force-cgroupv1)");
     if (limits_set) {
-      log_warn("资源限制 (--memory/--cpus/--pids-limit) 需要 Cgroup V2 的支持，"
+      log_warn("资源限制 (memory/cpus/pids-limit) 需要 Cgroup V2 的支持，"
                "在当前模式下将不会生效。");
     }
     return;
@@ -290,7 +290,7 @@ void print_cgroup_status(const cfg_t *cfg) {
     log_warn("宿主机内核不支持 Cgroup V2 (自动回退至 V1 架构)");
     if (limits_set) {
       log_warn(
-          "[CGROUP] 资源限制 (--memory/--cpus/--pids-limit) 需要 Cgroup V2 的支持，"
+          "[CGROUP] 资源限制 (memory/cpus/pids-limit) 需要 Cgroup V2 的支持，"
           "在当前宿主机上将不会生效。");
     }
   }

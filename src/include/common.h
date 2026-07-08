@@ -115,8 +115,8 @@ typedef struct {
 } nl_ctx_t;
 
 struct tty_info {
-  int master;
-  int slave;
+  int master = -1;
+  int slave  = -1;
   char name[PATH_MAX];
 };
 

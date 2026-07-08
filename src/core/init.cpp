@@ -103,7 +103,7 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* 8. 配置 /dev (设备节点，或 devtmpfs) */
-  if (setup_dev(".", false, cfg->conf.gpu_mode, cfg->conf.privileged_mask) < 0) {
+  if (setup_dev(".", cfg->conf.gpu_mode, cfg->conf.privileged_mask) < 0) {
     log_error("设置 /dev 环境失败。");
     goto boot_fail;
   }
@@ -197,10 +197,10 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* 16. 设置 devpts */
-  setup_devpts(false);
+  setup_devpts();
 
   /* 在 pivot_root 后应用监狱掩码保护 */
-  apply_jail_mask(false cfg->conf.privileged_mask);
+  apply_jail_mask(cfg->conf.privileged_mask);
 
   /* 16b. 资源可见性虚拟化 */
   if (is_mountpoint("/proc")) {
@@ -266,7 +266,7 @@ void internal_boot(cfg_t *cfg) {
       !(cfg->conf.privileged_mask & PRIV_NOSEC),
       cfg->conf.privileged_mask);
 
-  apply_capability_hardening(false, cfg->conf.privileged_mask);
+  apply_capability_hardening(cfg->conf.privileged_mask);
 
   /* 20. 重定向标准输入输出至 /dev/console
    * 使用局部代码块，防止 console_fd 触发 C++ 的 goto 跳跃错误 */

@@ -16,7 +16,7 @@ extern "C" {
  * 同时解决了 const 变量传递时丢失 const 限定符的警告。
  */
 
-static void cfree(const void *p) {
+[[maybe_unused]] static void cfree(const void *p) {
     void **pp = (void **)p;
     if (pp && *pp) {
         free(*pp);
@@ -24,7 +24,7 @@ static void cfree(const void *p) {
     }
 }
 
-static void cfclose(const void *p) {
+[[maybe_unused]] static void cfclose(const void *p) {
     FILE **f = (FILE **)p;
     if (f && *f) {
         fclose(*f);
@@ -32,14 +32,14 @@ static void cfclose(const void *p) {
     }
 }
 
-static void cclose(const void *p) {
+[[maybe_unused]] static void cclose(const void *p) {
     const int *fd = (const int *)p;
     if (fd && *fd >= 0) {
         close(*fd);
     }
 }
 
-static void cclosedir(const void *p) {
+[[maybe_unused]] static void cclosedir(const void *p) {
     DIR **d = (DIR **)p;
     if (d && *d) {
         closedir(*d);

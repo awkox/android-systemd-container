@@ -108,14 +108,11 @@ static void block_read_path(const char *path) {
  *
  * 通过绑定自身并重新挂载为只读来保护敏感内核接口。
  * 这极大地减少了容器的攻击面，并防止其通过 /proc 和 /sys 操作宿主机。
- *
- * 在标准模式下 (hw_access=0)，我们的限制非常严格。
- * 在硬件模式下 (hw_access=1)，我们保留了部分路径以支持低级硬件工具。
  */
-void apply_jail_mask(const bool hw_access, const int privileged_mask) {
+void apply_jail_mask(const int privileged_mask) {
   if (privileged_mask & PRIV_NOMASK) {
     log_info(
-        "[SEC] 已激活 --privileged=nomask: 跳过 /proc 与 /sys 的 Jail 路径保护。");
+        "[SEC] 已激活 privileged=nomask: 跳过 /proc 与 /sys 的 Jail 路径保护。");
     return;
   }
 
@@ -176,11 +173,6 @@ void apply_jail_mask(const bool hw_access, const int privileged_mask) {
                  strerror(errno));
     }
     log_info("[SEC] 已开启 /proc/sys 隔离豁免洞 (保证 hostname/domainname 修改可用)。");
-  }
-
-  if (hw_access) {
-    log_info("[SEC] 硬件直通模式: 豁免保护大部分敏感的 /proc 与 /sys 路径。");
-    return;
   }
 
   for (int i = 0; standard_ro[i]; i++) {
