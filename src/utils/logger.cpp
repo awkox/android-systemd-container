@@ -14,10 +14,8 @@ void rotate_log(const char *path, const size_t max_size) {
 }
 
 static void make_container_log_dir(const char *name, char *dir, const size_t size) {
-  char safe_log_name[256];
-  sanitize_container_name(name, safe_log_name, sizeof(safe_log_name));
   snprintf(dir, size, "%.2048s/" RUNTIME_LOGS_SUBDIR "/%.256s",
-           get_runtime_dir(), safe_log_name);
+           get_runtime_dir(), name);
 }
 
 static void write_to_log_file(const char *name, const char *component,

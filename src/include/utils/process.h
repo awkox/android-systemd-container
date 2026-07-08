@@ -3,7 +3,7 @@
 
 #include "common.h"
 
-int collect_pids(pid_t **pids_out, size_t *count_out);
+std::optional<std::vector<pid_t>> collect_pids();
 int build_proc_root_path(const pid_t pid, const char *suffix, char *buf, const size_t size);
 bool is_container_init(const pid_t pid);
 pid_t find_container_init_pid(const char *uuid);

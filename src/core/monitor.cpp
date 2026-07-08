@@ -26,7 +26,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
   signal(SIGUSR1, SIG_IGN);
   signal(SIGUSR2, SIG_IGN);
 
-  /* 保护监控器不被 OOM Killer 杀掉 */
+  /* 保护监控器及后续创建的所有容器进程不被 OOM Killer 杀掉 */
   oom_protect();
 
   prctl(PR_SET_NAME, "[ds-monitor]", 0, 0, 0);
@@ -37,10 +37,6 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
                  cgroup_host_is_v2() && !cfg->conf.force_cgroupv1;
   if (allow_cgroup_ns) {
     if (access("/sys/fs/cgroup/cgroup.procs", F_OK) == 0) {
-      char safe_name[256];
-      sanitize_container_name(cfg->rt.container_name, safe_name,
-                              sizeof(safe_name));
-
       if (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit) {
         char enable[64] = "";
         char buf[256];
@@ -79,7 +75,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
 
       char cg_path[PATH_MAX];
       snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/" PROJECT_NAME "/%s",
-               safe_name);
+               cfg->rt.container_name);
       mkdir_p(cg_path, 0755);
 
       char cg_procs[PATH_MAX];
@@ -114,10 +110,8 @@ reboot_loop:;
      * 负责为本次引导周期创建全新的命名空间 */
      
     if (allow_cgroup_ns) {
-      char safe_name[256];
-      sanitize_container_name(cfg->rt.container_name, safe_name, sizeof(safe_name));
       char cg_procs[PATH_MAX];
-      snprintf(cg_procs, sizeof(cg_procs), "/sys/fs/cgroup/" PROJECT_NAME "/%s/cgroup.procs", safe_name);
+      snprintf(cg_procs, sizeof(cg_procs), "/sys/fs/cgroup/" PROJECT_NAME "/%s/cgroup.procs", cfg->rt.container_name);
       
       FILE *f = fopen(cg_procs, "we");
       if (f) {

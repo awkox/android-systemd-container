@@ -19,6 +19,9 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <optional>
+#include <vector>
+#include <stdexcept>
 
 #include <sys/epoll.h>
 #include <sys/ioctl.h>

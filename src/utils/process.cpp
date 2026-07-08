@@ -1,49 +1,28 @@
 #include "asc.h"
 
-int collect_pids(pid_t **pids_out, size_t *count_out) {
-  if (!pids_out || !count_out)
-    return -1;
-
-  *pids_out = nullptr;
-  *count_out = 0;
-
-  auto_closedir DIR *d = opendir("/proc");
-  if (!d)
-    return -1;
-
-  size_t cap = 256;
-  size_t count = 0;
-
-  pid_t *pids = static_cast<pid_t *>(malloc(cap * sizeof(pid_t)));
-  if (!pids)
-    return -1;
-
-  struct dirent *ent;
-  while ((ent = readdir(d)) != nullptr) {
-
-    char *end;
-    errno = 0;
-    const long val = strtol(ent->d_name, &end, 10);
-
-    if (errno != 0 || *end != '\0' || val <= 0)
-      continue;
-
-    if (count >= cap) {
-      cap *= 2;
-      pid_t *tmp = static_cast<pid_t *>(realloc(pids, cap * sizeof(pid_t)));
-      if (!tmp) {
-        free(pids);
-        return -1;
-      }
-      pids = tmp;
+std::optional<std::vector<pid_t>> collect_pids() {
+    std::vector<pid_t> pids;
+    std::error_code ec;
+    
+    // 使用 C++17 filesystem 遍历目录，更安全简洁
+    for (const auto& entry : std::filesystem::directory_iterator("/proc", ec)) {
+        if (!entry.is_directory()) continue;
+        
+        std::string filename = entry.path().filename().string();
+        try {
+            size_t pos;
+            long val = std::stol(filename, &pos);
+            // 确保整个字符串都是数字且 > 0
+            if (pos == filename.length() && val > 0) {
+                pids.push_back(static_cast<pid_t>(val));
+            }
+        } catch (...) {
+            // 忽略非数字目录（如 /proc/sys）
+        }
     }
-
-    pids[count++] = static_cast<pid_t>(val);
-  }
-
-  *pids_out = pids;
-  *count_out = count;
-  return 0;
+    
+    if (ec) return std::nullopt; // 遍历失败
+    return pids;
 }
 
 int build_proc_root_path(const pid_t pid, const char *suffix, char *buf,
@@ -143,23 +122,21 @@ pid_t find_container_init_pid(const char *uuid) {
   char marker[PATH_MAX];
   snprintf(marker, sizeof(marker), FORK_MARKER "/%s", uuid);
 
-  auto_free pid_t *pids = nullptr;
-  size_t count = 0;
   char path[PATH_MAX];
 
-  if (collect_pids(&pids, &count) < 0)
-    return 0;
+  auto pids_opt = collect_pids();
 
-  for (size_t i = 0; i < count; i++) {
-    if (build_proc_root_path(pids[i], FORK_MARKER, path, sizeof(path)) < 0)
+  if (!pids_opt) return 0;
+
+  for (pid_t pid : *pids_opt) {
+    if (build_proc_root_path(pid, FORK_MARKER, path, sizeof(path)) < 0)
       continue;
 
     if (access(path, F_OK) == 0) {
-      build_proc_root_path(pids[i], marker, path, sizeof(path));
+      build_proc_root_path(pid, marker, path, sizeof(path));
       if (access(path, F_OK) == 0) {
-        if (is_valid_container_pid(pids[i])) {
-          const pid_t found = pids[i];
-          return found;
+        if (is_valid_container_pid(pid)) {
+          return pid;
         }
       }
     }

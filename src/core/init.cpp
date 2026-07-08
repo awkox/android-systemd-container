@@ -10,6 +10,7 @@ void internal_boot(cfg_t *cfg) {
   char *init_args[16];
   int argc = 0;
   struct statfs _cgsfs;
+  unsigned long root_prop = MS_PRIVATE;
 
   /* 防御性检查：确保配置有效 */
   if (!cfg) {
@@ -54,7 +55,6 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* 2. 挂载传播隔离 */
-  unsigned long root_prop = MS_PRIVATE;
   if (cfg->conf.privileged_mask & PRIV_SHARED) {
     root_prop = MS_SLAVE;
   }

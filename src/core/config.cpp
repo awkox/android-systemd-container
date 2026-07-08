@@ -268,35 +268,19 @@ int config_save(const char *config_path, cfg_t *cfg) {
 }
 
 int config_load_by_name(const char *name, cfg_t *cfg) {
-  if (!name || name[0] == '\0')
-    return -1;
-  if (!validate_container_name(name))
-    return -1;
-
-  char safe_name[256];
-  sanitize_container_name(name, safe_name, sizeof(safe_name));
-
   char config_path[PATH_MAX];
   snprintf(config_path, sizeof(config_path),
            "%s/" RUNTIME_CONFIG_SUBDIR "/%s/container.config",
-           get_runtime_dir(), safe_name);
+           get_runtime_dir(), name);
 
   return config_load(config_path, cfg);
 }
 
 int config_save_by_name(const char *name, cfg_t *cfg) {
-  if (!name || name[0] == '\0')
-    return -1;
-  if (!validate_container_name(name))
-    return -1;
-
-  char safe_name[256];
-  sanitize_container_name(name, safe_name, sizeof(safe_name));
-
   char container_dir[PATH_MAX];
   snprintf(container_dir, sizeof(container_dir),
            "%s/" RUNTIME_CONFIG_SUBDIR "/%s",
-           get_runtime_dir(), safe_name);
+           get_runtime_dir(), name);
 
   mkdir_p(container_dir, 0755);
 

@@ -3,26 +3,27 @@
 static int active_lock_fd = -1;
 static char active_lock_path[PATH_MAX] = "";
 
-int get_lock_path(const char *name, char *buf, const size_t size) {
-  if (!name || !buf || size == 0 || !validate_container_name(name))
+static int get_lock_path(const char *name, char *buf, const size_t size) {
+  if (!buf || size == 0)
     return -1;
 
-  char safe_name[256];
-  sanitize_container_name(name, safe_name, sizeof(safe_name));
   const int r =
-      snprintf(buf, size, "%.2048s/%.256s.lock", get_lock_dir(), safe_name);
+      snprintf(buf, size, "%.2048s/%.256s.lock", get_lock_dir(), name);
   return r > 0 && (size_t)r < size ? 0 : -1;
+}
+
+std::string get_lock_path(std::string_view name) {
+  return std::format("{}/{}.lock", get_lock_dir(), name);
 }
 
 int acquire_external_lock(const char *name) {
   if (active_lock_fd >= 0)
     return 0;
 
-  char lock_path[PATH_MAX];
-  if (get_lock_path(name, lock_path, sizeof(lock_path)) < 0)
-    return -1;
+  std::string lock_path = get_lock_path(name);
+  if (lock_path.size() >= PATH_MAX) return -1;
 
-  const int fd = open(lock_path, O_CREAT | O_RDWR | O_CLOEXEC, 0644);
+  const int fd = open(lock_path.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644);
   if (fd < 0)
     return -1;
 
@@ -66,9 +67,8 @@ void release_external_lock(void) {
 }
 
 bool is_external_lock_active(const char *name) {
-  char lock_path[PATH_MAX];
-  if (get_lock_path(name, lock_path, sizeof(lock_path)) < 0)
-    return false;
+  std::string lock_path = get_lock_path(name);
+  if (lock_path.size() >= PATH_MAX) return false;
 
   auto_close const int fd = open(lock_path, O_RDONLY | O_CLOEXEC);
   return !(fd < 0);
@@ -132,9 +132,8 @@ int start_rootfs(cfg_t *cfg) {
   bool booted = false;
 
   if (cfg->rt.container_name[0]) {
-    char lock_path[PATH_MAX];
-    if (get_lock_path(cfg->rt.container_name, lock_path, sizeof(lock_path)) == 0 &&
-        access(lock_path, F_OK) == 0) {
+    std::string lock_path = get_lock_path(name);
+    if (lock_path.size() < PATH_MAX && access(lock_path, F_OK) == 0) {
       if (acquire_external_lock(cfg->rt.container_name) == 0) {
         lock_acquired = true;
 

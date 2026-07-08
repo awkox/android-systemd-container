@@ -241,12 +241,6 @@ static void rmdir_cgroup_tree(const char *path) {
 }
 
 void cgroup_cleanup_container(const char *container_name) {
-  if (!container_name || !container_name[0])
-    return;
-
-  char safe_name[256];
-  sanitize_container_name(container_name, safe_name, sizeof(safe_name));
-
   auto_closedir DIR *d = opendir("/sys/fs/cgroup");
   if (!d)
     return;
@@ -258,11 +252,11 @@ void cgroup_cleanup_container(const char *container_name) {
 
     char cg_path[PATH_MAX];
     snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/%s/" PROJECT_NAME "/%s",
-             de->d_name, safe_name);
+             de->d_name, container_name);
 
     if (strcmp(de->d_name, "cgroup.procs") == 0)
       snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/" PROJECT_NAME "/%s",
-               safe_name);
+               container_name);
 
     if (access(cg_path, F_OK) != 0)
       continue;
@@ -348,14 +342,11 @@ int cgroup_apply_limits(cfg_t *cfg) {
     return 0;
   }
 
-  char safe_name[256];
-  sanitize_container_name(cfg->rt.container_name, safe_name, sizeof(safe_name));
-
   char cg[PATH_MAX - 64];
   char path[PATH_MAX + 64], val[64];
   int err = 0;
 
-  snprintf(cg, sizeof(cg), "/sys/fs/cgroup/" PROJECT_NAME "/%s", safe_name);
+  snprintf(cg, sizeof(cg), "/sys/fs/cgroup/" PROJECT_NAME "/%s", cfg->rt.container_name);
   if (access(cg, F_OK) != 0) {
     log_warn("[CGROUP] 未找到容器的专属子组，跳过资源限制应用。");
     return -1;
@@ -416,15 +407,12 @@ int cgroup_get_usage(const char *container_name, long long *mem,
   if (pids)
     *pids = -1;
 
-  char safe_name[256];
-  sanitize_container_name(container_name, safe_name, sizeof(safe_name));
-
   const bool v2 = cgroup_host_is_v2();
   char cg[PATH_MAX - 64];
   char path[PATH_MAX + 64], buf[256];
 
   if (v2) {
-    snprintf(cg, sizeof(cg), "/sys/fs/cgroup/" PROJECT_NAME "/%s", safe_name);
+    snprintf(cg, sizeof(cg), "/sys/fs/cgroup/" PROJECT_NAME "/%s", container_name);
     if (access(cg, F_OK) != 0)
       return -1;
     if (mem) {

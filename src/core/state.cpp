@@ -18,16 +18,14 @@ int collect_active_uuids(char uuids[][UUID_LEN + 1], const int max_uuids) {
   if (!uuids || max_uuids <= 0)
     return 0;
 
-  auto_free pid_t *pids = nullptr;
-  size_t count = 0;
   char path[PATH_MAX];
   int found = 0;
 
-  if (collect_pids(&pids, &count) < 0)
-    return 0;
+  auto pids_opt = collect_pids();
 
-  for (size_t i = 0; i < count && found < max_uuids; i++) {
-    if (build_proc_root_path(pids[i], FORK_MARKER, path, sizeof(path)) < 0)
+  for (pid_t pid : *pids_opt) {
+    if (found == max_uuids) break;
+    if (build_proc_root_path(pid, FORK_MARKER, path, sizeof(path)) < 0)
       continue;
     if (access(path, F_OK) != 0)
       continue;

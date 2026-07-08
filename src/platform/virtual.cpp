@@ -39,12 +39,10 @@ static int container_cpus(const asc_conf_t *conf) {
 }
 
 static long long read_cg_ll(const char *container_name, const char *file) {
-  char safe_name[256];
-  sanitize_container_name(container_name, safe_name, sizeof(safe_name));
   char path[PATH_MAX];
   char buf[64];
   snprintf(path, sizeof(path), "/sys/fs/cgroup/" PROJECT_NAME "/%s/%s",
-           safe_name, file);
+           container_name, file);
   if (read_file(path, buf, sizeof(buf)) <= 0)
     return -1;
   if (strncmp(buf, "max", 3) == 0)
@@ -78,11 +76,9 @@ static char *gen_meminfo(const cfg_t *cfg, size_t *out_len) {
 
   long long cg_anon = -1, cg_file = -1, cg_slab = -1;
   {
-    char safe_name[256];
-    sanitize_container_name(cfg->rt.container_name, safe_name, sizeof(safe_name));
     char path[PATH_MAX], sbuf[4096];
     snprintf(path, sizeof(path),
-             "/sys/fs/cgroup/" PROJECT_NAME "/%s/memory.stat", safe_name);
+             "/sys/fs/cgroup/" PROJECT_NAME "/%s/memory.stat", cfg->rt.container_name);
     if (read_file(path, sbuf, sizeof(sbuf)) > 0) {
       char *p;
       if ((p = strstr(sbuf, "anon ")))
@@ -263,11 +259,9 @@ static char *gen_stat(const cfg_t *cfg, size_t *out_len) {
 }
 
 static double cg_cpu_busy_secs(const char *container_name) {
-  char safe_name[256];
-  sanitize_container_name(container_name, safe_name, sizeof(safe_name));
   char path[PATH_MAX], buf[128];
   snprintf(path, sizeof(path), "/sys/fs/cgroup/" PROJECT_NAME "/%s/cpu.stat",
-           safe_name);
+           container_name);
   if (read_file(path, buf, sizeof(buf)) <= 0)
     return -1.0;
   char *p = strstr(buf, "usage_usec ");

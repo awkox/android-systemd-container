@@ -23,10 +23,7 @@ static int find_available_mountpoint(const char *name, char *mount_path,
 
   mkdir(base_dir, 0755);
 
-  char safe_name[256];
-  sanitize_container_name(name, safe_name, sizeof(safe_name));
-
-  snprintf(mount_path, size, "%s/%s", base_dir, safe_name);
+  snprintf(mount_path, size, "%s/%s", base_dir, name);
 
   if (mkdir(mount_path, 0755) < 0) {
     log_error("创建挂载目录 %s 失败: %s", mount_path,

@@ -15,13 +15,6 @@ void safe_strncpy(char *dst, const char *src, const size_t size) {
   snprintf(dst, size, "%s", src);
 }
 
-void sanitize_container_name(const char *name, char *out, const size_t size) {
-  size_t i;
-  for (i = 0; i < size - 1 && name[i] != '\0'; i++)
-    out[i] = name[i] == ' ' ? '-' : name[i];
-  out[i] = '\0';
-}
-
 char *resolve_path_arg(const char *path) {
   // 拦截空路径
   if (!path || !*path)
@@ -89,24 +82,19 @@ void format_uptime(const long uptime_sec, char *buf, const size_t size) {
   safe_strncpy(buf, tmp, size);
 }
 
-int validate_container_name(const char *name) {
-  if (!name || !name[0])
-    return 0;
+static bool validate_container_name(std::string_view name, size_t max_len = 256) {
+    if (name.empty() || name.size() > max_len) return false;
 
-  if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
-    return 0;
-
-  const size_t len = strlen(name);
-  if (len >= 256)
-    return 0;
-
-  for (size_t i = 0; i < len; i++) {
-    const unsigned char c = static_cast<unsigned char>(name[i]);
-    if (!(isalnum(c) || c == '.' || c == '_' || c == '-' || c == ' '))
-      return 0;
-  }
-
-  return 1;
+    for (char ch : name) {
+        // 严格限定在 [0-9A-Za-z_]
+        if (!((ch >= '0' && ch <= '9') ||
+              (ch >= 'A' && ch <= 'Z') ||
+              (ch >= 'a' && ch <= 'z') ||
+              ch == '_')) {
+            return false;
+        }
+    }
+    return true;
 }
 
 int reject_container_name(const char *name) {
