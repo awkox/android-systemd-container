@@ -206,47 +206,10 @@ static void config_serialize_known(FILE *f, asc_conf_t *conf) {
 }
 
 int config_save(const char *config_path, cfg_t *cfg) {
-  /* 与磁盘上的现有配置进行比较，避免多余的重复写入 */
-  struct stat st;
-  if (stat(config_path, &st) == 0) {
-    cfg_t disk_cfg = {};
-    if (config_load(config_path, &disk_cfg) == 0) {
-      auto_free char *buf_cfg = nullptr;
-      auto_free char *buf_disk = nullptr;
-      size_t size_cfg = 0;
-      size_t size_disk = 0;
-      FILE *f_cfg = open_memstream(&buf_cfg, &size_cfg);
-      FILE *f_disk = open_memstream(&buf_disk, &size_disk);
-      bool is_equal = false;
-
-      if (f_cfg && f_disk) {
-        config_serialize_known(f_cfg, &cfg->conf);
-        config_serialize_known(f_disk, &disk_cfg.conf);
-        fclose(f_cfg);
-        fclose(f_disk);
-        if (size_cfg == size_disk && memcmp(buf_cfg, buf_disk, size_cfg) == 0) {
-          is_equal = true;
-        }
-      } else {
-        if (f_cfg)
-          fclose(f_cfg);
-        if (f_disk)
-          fclose(f_disk);
-      }
-
-      if (is_equal) {
-        if (!cfg->rt.config_file_existed) {
-          cfg->rt.config_file_existed = true;
-        }
-        return 0;
-      }
-    }
-  }
-
   char temp_path[PATH_MAX];
   snprintf(temp_path, sizeof(temp_path), "%s.tmp", config_path);
 
-  /* 步骤 2: 将所有配置写入临时文件 */
+  /* 步骤 1: 将所有配置写入临时文件 */
   FILE *f_out = fopen(temp_path, "we");
   if (!f_out)
     return -1;
@@ -255,7 +218,7 @@ int config_save(const char *config_path, cfg_t *cfg) {
 
   fclose(f_out);
 
-  /* 步骤 3: 通过原子重命名提交修改 */
+  /* 步骤 2: 通过原子重命名提交修改 */
   if (rename(temp_path, config_path) < 0) {
     unlink(temp_path);
     return -1;
