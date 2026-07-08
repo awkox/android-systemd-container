@@ -3,7 +3,7 @@
 static int create_devices(const char *rootfs);
 static void mirror_gpu_nodes(const char *dev_path);
 
-int setup_dev(const char *rootfs, const bool gpu_mode, const int privileged_mask) {
+int setup_dev(const char *rootfs, const bool gpu_mode) {
   char dev_path[PATH_MAX];
   snprintf(dev_path, sizeof(dev_path), "%s/dev", rootfs);
 
@@ -200,169 +200,82 @@ static const char *gpu_static_devices[] = {
 };
 
 static bool is_dangerous_node(const char *name) {
-  std::string_view sv_name{name};
+  if (!name || name[0] == '\0') 
+    return false;
 
-  if ((sv_name.starts_with("card") &&
-       (name[4] == '\0' || isdigit(name[4]))) ||
-      (sv_name.starts_with("controlD") &&
-       (name[8] == '\0' || isdigit(name[8])))) {
-    return true;
-  }
+  std::string_view sv{name};
+  const size_t len = sv.length();
 
-  if (strcmp(name, "nvidiactl") == 0 || strcmp(name, "nvidia-modeset") == 0)
-    return true;
-  if (sv_name.starts_with("nvidia") && isdigit(name[6]))
-    return true;
-  if (sv_name.starts_with("nvidia-cap"))
-    return true;
-
-  if (strcmp(name, "vga_arbiter") == 0)
-    return true;
-  if (sv_name.starts_with("fb") && isdigit(name[2]))
-    return true;
-
-  if (sv_name.starts_with("tty")) {
-    if (sv_name.starts_with("ttyUSB") || sv_name.starts_with("ttyACM") ||
-        sv_name.starts_with("ttyAMA") || sv_name.starts_with("ttyTHS") ||
-        sv_name.starts_with("ttymxc"))
+  // 1. 特殊逻辑判断 (高频 & 包含放行逻辑的规则)
+  // 提前执行，快速放行安全节点或处理带通配数字的设备
+  if (sv.starts_with("tty")) {
+    // 白名单放行特定的串口通信节点
+    if (sv.starts_with("ttyUSB") || sv.starts_with("ttyACM") ||
+        sv.starts_with("ttyAMA") || sv.starts_with("ttyTHS") ||
+        sv.starts_with("ttymxc")) {
       return false;
-    if (isdigit(name[3]))
-      return true;
+    }
+    if (len > 3 && std::isdigit(name[3])) return true;
+    if (sv.starts_with("ttyBCM")) return true;
+  }
+
+  // 处理前缀 + 可选/必填数字的逻辑
+  if (sv.starts_with("card") && (len == 4 || std::isdigit(name[4]))) return true;
+  if (sv.starts_with("controlD") && (len == 8 || std::isdigit(name[8]))) return true;
+  if (sv.starts_with("nvidia") && len > 6 && std::isdigit(name[6])) return true;
+  if (sv.starts_with("fb") && len > 2 && std::isdigit(name[2])) return true;
+  if (sv.starts_with("ram") && len > 3 && std::isdigit(name[3])) return true;
+  if (sv.starts_with("aed") && (len == 3 || std::isdigit(name[3]))) return true;
+
+  // 唯一需要忽略大小写的匹配项
+  if (len >= 7 && strncasecmp(name, "mt_pmic", 7) == 0) return true;
+
+
+  // 2. O(log N) 二分查找精确匹配 (Exact Matches)
+  // 将所有的 strcmp == 0 提取并按字典序(ASCII)排序，使用二分查找瞬间出结果
+  static constexpr std::string_view exact_matches[] = {
+      "RT_Monitor", "android_ssusbcon", "audio_ipi", "ccic_misc", "console",
+      "cvp", "dcc_sram", "drm_wv", "eara-io", "fimg2d", "fmp", "fmt_sync",
+      "full", "g2d", "goodix_fp", "gps_emi", "gps_pwr", "hqm_event", "initctl",
+      "k250a", "kmem", "kmsg", "mcupm", "mddp", "mdp_sync", "mem",
+      "memory_bandwidth", "met", "mml_pq", "mmp", "mst_ctrl", "mtk_mdp",
+      "mtk_sec", "null", "nvidia-modeset", "nvidiactl", "port", "ptmx",
+      "radio0", "random", "rfkill", "s5p-smem", "sa_log_wifi", "scp",
+      "scp_audio_ipi", "sec-nfc", "sec_display_debug", "self_display",
+      "snapshot", "spec_sync", "ssp_sensorhub", "sspm", "stats", "synx_device",
+      "tty", "tuihw", "udmabuf", "uinput", "urandom", "usip", "vcp",
+      "vertex10", "vga_arbiter", "vow", "wlan", "zero"
+  };
+  if (std::binary_search(std::begin(exact_matches), std::end(exact_matches), sv)) {
     return true;
   }
 
-  if (sv_name.starts_with("ccci") || sv_name.starts_with("umts_"))
-    return true;
-  if (sv_name.starts_with("pty")) 
-    return true;
-  if (strcmp(name, "uinput") == 0 || strcmp(name, "rfkill") == 0)
-    return true;
-  if (sv_name.starts_with("tz") || sv_name.starts_with("trusty") ||
-      sv_name.starts_with("gz_") || sv_name.starts_with("tee"))
-    return true; 
-  if (sv_name.starts_with("conn") || strcmp(name, "mtk_sec") == 0)
-    return true; 
-  if (strncasecmp(name, "mt_pmic", 7) == 0)
-    return true; 
-  if (strcmp(name, "tuihw") == 0 || strcmp(name, "wlan") == 0)
-    return true;
-  if (sv_name.starts_with("ram") && isdigit(name[3]))
-    return true; 
 
-  if (strcmp(name, "console") == 0 || strcmp(name, "tty") == 0 ||
-      strcmp(name, "full") == 0 || strcmp(name, "null") == 0 ||
-      strcmp(name, "zero") == 0 || strcmp(name, "random") == 0 ||
-      strcmp(name, "urandom") == 0 || strcmp(name, "ptmx") == 0 ||
-      strcmp(name, "initctl") == 0)
-    return true;
+  // 3. 线性前缀匹配 (Prefix Matches)
+  // 将所有的 starts_with 归拢在一起统一遍历
+  static constexpr std::string_view prefixes[] = {
+      "als_", "anbox-", "apr_", "at_mdm", "at_usb", "bbd_", "btfmslim",
+      "btpower", "ccci", "cluster", "conn", "coresight", "cpu_online_",
+      "dek_", "drm_dp_aux", "fw_log_", "gh_", "gpiochip", "gpu_freq",
+      "gz_", "hvc", "i2c-", "iio:device", "ipa", "modem_boot", "nr_",
+      "nvidia-cap", "pmsg", "pty", "qbt", "rdbg_", "remoteproc", "rmnet_",
+      "rpmb", "rpmsg_", "sipa_", "smd", "ssp_", "stp", "tee", "tpm",
+      "trusty", "tz", "umts_", "vcs", "wmt", "wwan_"
+  };
+  for (const auto& prefix : prefixes) {
+    if (sv.starts_with(prefix)) return true;
+  }
 
-  if (strcmp(name, "mem") == 0 || strcmp(name, "kmem") == 0 ||
-      strcmp(name, "port") == 0 || strcmp(name, "kmsg") == 0)
-    return true;
-  if (sv_name.starts_with("drm_dp_aux"))
-    return true;
-  if (sv_name.starts_with("vcs"))
-    return true;
-  if (strstr(name, "watchdog") != nullptr)
-    return true;
 
-  if (strstr(name, "qseecom") != nullptr || strstr(name, "smcinvoke") != nullptr ||
-      strstr(name, "adsprpc") != nullptr)
-    return true;
-
-  if (strcmp(name, "udmabuf") == 0 || strcmp(name, "snapshot") == 0)
-    return true;
-  if (sv_name.starts_with("tpm"))
-    return true;
-  if (sv_name.starts_with("stp"))
-    return true;
-
-  if (sv_name.starts_with("rmnet_") || sv_name.starts_with("ipa") ||
-      sv_name.starts_with("at_usb") || sv_name.starts_with("at_mdm") ||
-      sv_name.starts_with("wwan_") || sv_name.starts_with("btfmslim") ||
-      sv_name.starts_with("btpower") || sv_name.starts_with("smd") ||
-      sv_name.starts_with("apr_") || strstr(name, "aud_") != nullptr ||
-      strstr(name, "icnss_") != nullptr)
-    return true;
-
-  if (sv_name.starts_with("hvc") || sv_name.starts_with("gh_"))
-    return true;
-
-  if (strcmp(name, "audio_ipi") == 0 || strcmp(name, "scp_audio_ipi") == 0 ||
-      strcmp(name, "vow") == 0 || strcmp(name, "vcp") == 0)
-    return true;
-
-  if (sv_name.starts_with("coresight") ||
-      sv_name.starts_with("remoteproc") || sv_name.starts_with("rpmsg_") ||
-      strcmp(name, "cvp") == 0 || sv_name.starts_with("rdbg_") ||
-      strcmp(name, "dcc_sram") == 0 || strcmp(name, "spec_sync") == 0 ||
-      strcmp(name, "synx_device") == 0)
-    return true;
-
-  if (sv_name.starts_with("anbox-") || strcmp(name, "android_ssusbcon") == 0)
-    return true;
-  if (sv_name.starts_with("rpmb"))
-    return true;
-  if (strcmp(name, "mmp") == 0 || strcmp(name, "met") == 0)
-    return true;
-  if (strcmp(name, "mcupm") == 0 || strcmp(name, "sspm") == 0 ||
-      strcmp(name, "scp") == 0)
-    return true;
-  if (sv_name.starts_with("aed") && (name[3] == '\0' || isdigit(name[3])))
-    return true;
-  if (sv_name.starts_with("pmsg"))
-    return true;
-  if (strcmp(name, "mdp_sync") == 0 || strcmp(name, "fmt_sync") == 0 ||
-      strcmp(name, "mtk_mdp") == 0 || strcmp(name, "mml_pq") == 0 ||
-      strcmp(name, "sec_display_debug") == 0)
-    return true;
-  if (strcmp(name, "gps_emi") == 0 || strcmp(name, "gps_pwr") == 0)
-    return true;
-  if (strcmp(name, "goodix_fp") == 0 || strcmp(name, "k250a") == 0 ||
-      strcmp(name, "drm_wv") == 0 || strcmp(name, "sec-nfc") == 0)
-    return true;
-  if (strcmp(name, "eara-io") == 0 || strcmp(name, "RT_Monitor") == 0 ||
-      strcmp(name, "stats") == 0)
-    return true;
-  if (sv_name.starts_with("wmt")) 
-    return true;
-  if (sv_name.starts_with("fw_log_") || strcmp(name, "sa_log_wifi") == 0)
-    return true;
-  if (sv_name.starts_with("sipa_") || strcmp(name, "mddp") == 0 ||
-      strcmp(name, "usip") == 0)
-    return true;
-  if (sv_name.starts_with("gpiochip") || sv_name.starts_with("i2c-") ||
-      sv_name.starts_with("iio:device"))
-    return true;
-  if (sv_name.starts_with("cluster") || sv_name.starts_with("gpu_freq") ||
-      sv_name.starts_with("cpu_online_") ||
-      strcmp(name, "memory_bandwidth") == 0 ||
-      strstr(name, "msm_audio_ion") != nullptr ||
-      strstr(name, "msm_hdcp") != nullptr || strstr(name, "msm_sps") != nullptr)
-    return true;
-  if (sv_name.starts_with("nr_") || sv_name.starts_with("multipdp") ||
-      sv_name.starts_with("modem_boot") || strcmp(name, "radio0") == 0)
-    return true;
-  if (sv_name.starts_with("bbd_") || sv_name.starts_with("ssp_") ||
-      strcmp(name, "ssp_sensorhub") == 0)
-    return true;
-  if (strcmp(name, "mst_ctrl") == 0 || sv_name.starts_with("qbt") ||
-      sv_name.starts_with("dek_"))
-    return true;
-  if (strstr(name, "throughput") != nullptr || strstr(name, "latency") != nullptr)
-    return true;
-  if (strcmp(name, "fimg2d") == 0 || strcmp(name, "fmp") == 0 ||
-      strcmp(name, "g2d") == 0 || strcmp(name, "vertex10") == 0 ||
-      strcmp(name, "self_display") == 0)
-    return true;
-  if (strcmp(name, "ccic_misc") == 0 || strcmp(name, "hqm_event") == 0)
-    return true;
-  if (strstr(name, "multipdp") != nullptr || sv_name.starts_with("ttyBCM"))
-    return true; 
-  if (strcmp(name, "s5p-smem") == 0 || sv_name.starts_with("als_"))
-    return true; 
-  if (strstr(name, "throughput") != nullptr)
-    return true; 
+  // 4. 最重负载的子串匹配 (Substring Matches) 
+  // 将所有 strstr 放到最后兜底，避免非必要的高消耗查找
+  static constexpr std::string_view substrings[] = {
+      "adsprpc", "aud_", "icnss_", "latency", "msm_audio_ion", "msm_hdcp",
+      "msm_sps", "multipdp", "qseecom", "smcinvoke", "throughput", "watchdog"
+  };
+  for (const auto& sub : substrings) {
+    if (sv.find(sub) != std::string_view::npos) return true;
+  }
 
   return false;
 }

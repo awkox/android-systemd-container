@@ -19,51 +19,6 @@ static void print_usage() {
       "  help                      显示此帮助信息\n\n");
 }
 
-/**
- * 命令行级别的配置验证，提供专业的错误报告。
- * 在进入运行时之前尽早拦截配置错误。
- */
-static int validate_configuration_cli(asc_conf_t *conf) {
-  bool error = false;
-
-  if (!conf->container_name[0]) {
-    log_error("容器名称是必填项。");
-    error = true;
-  } else if (reject_container_name(conf->container_name) < 0) {
-    error = true;
-  }
-
-  if (!conf->rootfs_img_path[0]) {
-    log_error("配置中未指定 rootfs 镜像。");
-    error = true;
-  }
-
-  /* 存在性检查 */
-  if (conf->rootfs_img_path[0] && access(conf->rootfs_img_path, F_OK) != 0) {
-    log_error("未找到 rootfs 镜像: '%s' (%s)", conf->rootfs_img_path,
-              strerror(errno));
-    error = true;
-  }
-
-  /* 镜像模式需要一个名称作为挂载点 */
-  if (conf->rootfs_img_path[0] && !conf->container_name[0]) {
-    log_error("rootfs 镜像需要提供容器名称。");
-    error = true;
-  }
-
-  if (conf->custom_init[0]) {
-    if (conf->custom_init[0] != '/') {
-      log_error("自定义 init 路径必须是绝对路径: %s", conf->custom_init);
-      error = true;
-    } else if (strchr(conf->custom_init, ' ')) {
-      log_error("自定义 init 路径不能包含空格: %s", conf->custom_init);
-      error = true;
-    }
-  }
-
-  return error ? -1 : 0;
-}
-
 int main(const int argc, char **argv) {
   int ret = 0;
   /* 严重警告：将所有字段归零以避免动态数组中出现垃圾指针 */
@@ -151,7 +106,7 @@ int main(const int argc, char **argv) {
       ret = 1;
       goto cleanup;
     }
-    safe_strncpy(cfg.conf.container_name, name, sizeof(cfg.conf.container_name));
+    safe_strncpy(cfg.rt.container_name, name, sizeof(cfg.rt.container_name));
   }
   if (config_path) {
     safe_strncpy(cfg.rt.config_file, config_path, sizeof(cfg.rt.config_file));
@@ -208,21 +163,21 @@ int main(const int argc, char **argv) {
   }
 
   /* 对于有状态的命令，我们绝对需要一个容器名称。 */
-  if (is_stateful && cfg.conf.container_name[0] == '\0') {
+  if (is_stateful && cfg.rt.container_name[0] == '\0') {
     log_error("执行此命令必须指定容器名称。");
     ret = 1;
     goto cleanup;
   }
 
   /* 如果我们有名称但尚未成功加载配置文件，按名称加载。 */
-  if (!loaded && cfg.conf.container_name[0] != '\0') {
-    if (config_load_by_name(cfg.conf.container_name, &cfg) < 0) {
+  if (!loaded && cfg.rt.container_name[0] != '\0') {
+    if (config_load_by_name(cfg.rt.container_name, &cfg) < 0) {
       /* 如果按名称加载失败且它是一个有状态命令，可能容器已被移动或重命名。
        * 作为最后手段，对正在运行的系统执行恢复扫描。 */
       if (is_stateful) {
-        if (config_load_by_name(cfg.conf.container_name, &cfg) < 0) {
+        if (config_load_by_name(cfg.rt.container_name, &cfg) < 0) {
           log_error("未找到容器 '%s' 或元数据丢失。",
-                    cfg.conf.container_name);
+                    cfg.rt.container_name);
           ret = 1;
           goto cleanup;
         }
@@ -231,8 +186,8 @@ int main(const int argc, char **argv) {
   }
 
   /* 为集中式日志引擎设置全局日志上下文 */
-  if (cfg.conf.container_name[0] != '\0') {
-    safe_strncpy(log_container_name, cfg.conf.container_name,
+  if (cfg.rt.container_name[0] != '\0') {
+    safe_strncpy(log_container_name, cfg.rt.container_name,
                  sizeof(log_container_name));
   }
 
@@ -251,10 +206,6 @@ int main(const int argc, char **argv) {
 
   /* 容器启动流程 */
   if (strcmp(cmd, "start") == 0) {
-    if (validate_configuration_cli(&cfg.conf) < 0) {
-      ret = 1;
-      goto cleanup;
-    }
     if (check_requirements_hw() < 0) {
       ret = 1;
       goto cleanup;

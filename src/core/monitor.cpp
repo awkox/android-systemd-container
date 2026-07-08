@@ -40,7 +40,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
   if (allow_cgroup_ns) {
     if (access("/sys/fs/cgroup/cgroup.procs", F_OK) == 0) {
       char safe_name[256];
-      sanitize_container_name(cfg->conf.container_name, safe_name,
+      sanitize_container_name(cfg->rt.container_name, safe_name,
                               sizeof(safe_name));
 
       if (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit) {
@@ -117,7 +117,7 @@ reboot_loop:;
      
     if (allow_cgroup_ns) {
       char safe_name[256];
-      sanitize_container_name(cfg->conf.container_name, safe_name, sizeof(safe_name));
+      sanitize_container_name(cfg->rt.container_name, safe_name, sizeof(safe_name));
       char cg_procs[PATH_MAX];
       snprintf(cg_procs, sizeof(cg_procs), "/sys/fs/cgroup/" PROJECT_NAME "/%s/cgroup.procs", safe_name);
       
@@ -227,7 +227,7 @@ reboot_loop:;
         if (p > 0) {
           cfg->rt.container_pid = p;
           cfg->rt.ns_inode = get_pid_ns_inode(p);
-          write_monitor_debug_log(cfg->conf.container_name,
+          write_monitor_debug_log(cfg->rt.container_name,
                                   "[VIRT] 已通过 /proc 扫描解析到 container_pid=%d "
                                   "ns_inode=%lu",
                                   (int)p, cfg->rt.ns_inode);
@@ -256,28 +256,28 @@ reboot_loop:;
   if (WIFEXITED(status)) {
     int code = WEXITSTATUS(status);
     if (code == REBOOT_EXIT) {
-      write_monitor_debug_log(cfg->conf.container_name, "检测到容器内部发起了重启请求");
+      write_monitor_debug_log(cfg->rt.container_name, "检测到容器内部发起了重启请求");
     } else {
-      write_monitor_debug_log(cfg->conf.container_name,
+      write_monitor_debug_log(cfg->rt.container_name,
                               "检测到容器正常关机 (退出码: %d)", code);
     }
   } else if (WIFSIGNALED(status)) {
-    write_monitor_debug_log(cfg->conf.container_name,
+    write_monitor_debug_log(cfg->rt.container_name,
                             "中间进程被信号异常终止: %d (%s)",
                             WTERMSIG(status), strsignal(WTERMSIG(status)));
   }
 
   /* 重启检测 */
   if (WIFEXITED(status) && WEXITSTATUS(status) == REBOOT_EXIT) {
-    if (is_external_lock_active(cfg->conf.container_name)) {
+    if (is_external_lock_active(cfg->rt.container_name)) {
       write_monitor_debug_log(
-          cfg->conf.container_name,
+          cfg->rt.container_name,
           "检测到外部命令锁 - 中止内部重启，移交控制权给 CLI");
       goto monitor_cleanup_and_exit;
     }
 
     if (cfg->rt.foreground) {
-      printf("\n容器 %s 正在重启\n", cfg->conf.container_name);
+      printf("\n容器 %s 正在重启\n", cfg->rt.container_name);
       fflush(stdout);
     }
 
@@ -300,7 +300,7 @@ reboot_loop:;
       bool old_force_cgv1 = cfg->conf.force_cgroupv1;
 
       cfg_t reboot_cfg = *cfg;
-      if (config_load_by_name(cfg->conf.container_name, &reboot_cfg) == 0) {
+      if (config_load_by_name(cfg->rt.container_name, &reboot_cfg) == 0) {
         if (reboot_cfg.conf.force_cgroupv1 != old_force_cgv1) {
           printf("\n警告: force_cgroupv1 已被修改，但这需要完全重启容器才能生效。\n");
           reboot_cfg.conf.force_cgroupv1 = old_force_cgv1;
@@ -321,14 +321,14 @@ reboot_loop:;
     goto reboot_loop;
   }
 
-  if (is_external_lock_active(cfg->conf.container_name)) {
-    write_monitor_debug_log(cfg->conf.container_name,
+  if (is_external_lock_active(cfg->rt.container_name)) {
+    write_monitor_debug_log(cfg->rt.container_name,
                             "检测到外部命令锁 - 将资源清理交由 CLI 完成");
     goto monitor_cleanup_and_exit;
   }
 
   /* 正常退出清理 */
-  write_monitor_debug_log(cfg->conf.container_name, "监控器正在执行退出清理工作");
+  write_monitor_debug_log(cfg->rt.container_name, "监控器正在执行退出清理工作");
 
   cleanup_container_resources(cfg, false);
 

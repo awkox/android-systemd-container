@@ -132,12 +132,9 @@ void print_privileged_warning(const int privileged_mask) {
   fflush(stdout);
 }
 
-void open_container_log(cfg_t *cfg) {
-  if (!cfg || !cfg->conf.container_name[0])
-    return;
-
+void open_container_log(const char *container_name) {
   char log_dir[PATH_MAX];
-  make_container_log_dir(cfg->conf.container_name, log_dir, sizeof(log_dir));
+  make_container_log_dir(container_name, log_dir, sizeof(log_dir));
   mkdir_p(log_dir, 0755);
 
   char log_path[PATH_MAX];

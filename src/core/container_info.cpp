@@ -40,13 +40,13 @@ static void get_os_pretty(const char *osrelease_path, char *buf, const size_t si
 }
 
 int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
-  if (cfg->conf.container_name[0] == '\0') {
+  if (cfg->rt.container_name[0] == '\0') {
     log_error("未指定容器名称。");
     return 0;
   }
 
   if (!trust_cfg_pid) {
-    config_load_by_name(cfg->conf.container_name, cfg);
+    config_load_by_name(cfg->rt.container_name, cfg);
   }
 
   pid_t pid = 0;
@@ -57,7 +57,7 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
   }
 
   if (pid <= 0) {
-    log_error("容器 '%s' 未运行或状态无效。", cfg->conf.container_name);
+    log_error("容器 '%s' 未运行或状态无效。", cfg->rt.container_name);
     return -1;
   }
 
@@ -65,7 +65,7 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
   printf("宿主机架构: %s\n", arch);
 
   printf("\n容器: %s (运行中)\n",
-         cfg->conf.container_name);
+         cfg->rt.container_name);
   printf("  PID: %d\n", pid);
 
   char pretty[256];
@@ -129,7 +129,7 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
       (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit) &&
       !cfg->conf.force_cgroupv1 && cgroup_host_is_v2()) {
     long long mu = -1, cu = -1, pu = -1;
-    cgroup_get_usage(cfg->conf.container_name, &mu, &cu, &pu);
+    cgroup_get_usage(cfg->rt.container_name, &mu, &cu, &pu);
     printf("\n资源限制与使用状态:\n");
 
     if (cfg->conf.memory_limit) {

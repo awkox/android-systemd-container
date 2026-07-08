@@ -130,7 +130,7 @@ int setup_volatile_overlay(cfg_t *cfg) {
     fs::path base = std::format("{}/{}/{}", 
                                 get_runtime_dir(), 
                                 RUNTIME_VOLATILE_SUBDIR, 
-                                cfg->conf.container_name);
+                                cfg->rt.container_name);
 
     if (mkdir_p(base, 0755) < 0) {
         log_error("创建易失模式工作区失败: %s", base.c_str());

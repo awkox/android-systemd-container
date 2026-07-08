@@ -349,7 +349,7 @@ int cgroup_apply_limits(cfg_t *cfg) {
   }
 
   char safe_name[256];
-  sanitize_container_name(cfg->conf.container_name, safe_name, sizeof(safe_name));
+  sanitize_container_name(cfg->rt.container_name, safe_name, sizeof(safe_name));
 
   char cg[PATH_MAX - 64];
   char path[PATH_MAX + 64], val[64];

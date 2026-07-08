@@ -24,13 +24,13 @@ static int write_inplace(const pid_t pid, const char *subpath, const char *buf,
   return w == static_cast<ssize_t>(len) ? 0 : -1;
 }
 
-static int container_cpus(const cfg_t *cfg) {
+static int container_cpus(const asc_conf_t *conf) {
   int host = static_cast<int>(sysconf(_SC_NPROCESSORS_ONLN));
   if (host < 1)
     host = 1;
-  if (cfg->conf.cpu_quota <= 0 || cfg->conf.cpu_period <= 0)
+  if (conf->cpu_quota <= 0 || conf->cpu_period <= 0)
     return host;
-  int n = static_cast<int>((cfg->conf.cpu_quota + cfg->conf.cpu_period - 1) / cfg->conf.cpu_period);
+  int n = static_cast<int>((conf->cpu_quota + conf->cpu_period - 1) / conf->cpu_period);
   if (n < 1)
     n = 1;
   if (n > host)
@@ -56,7 +56,7 @@ static long long read_cg_ll(const char *container_name, const char *file) {
 
 static char *gen_meminfo(const cfg_t *cfg, size_t *out_len) {
   const long long mem_limit = cfg->conf.memory_limit; 
-  long long mem_used = read_cg_ll(cfg->conf.container_name, "memory.current");
+  long long mem_used = read_cg_ll(cfg->rt.container_name, "memory.current");
   if (mem_used < 0)
     mem_used = 0;
 
@@ -79,7 +79,7 @@ static char *gen_meminfo(const cfg_t *cfg, size_t *out_len) {
   long long cg_anon = -1, cg_file = -1, cg_slab = -1;
   {
     char safe_name[256];
-    sanitize_container_name(cfg->conf.container_name, safe_name, sizeof(safe_name));
+    sanitize_container_name(cfg->rt.container_name, safe_name, sizeof(safe_name));
     char path[PATH_MAX], sbuf[4096];
     snprintf(path, sizeof(path),
              "/sys/fs/cgroup/" PROJECT_NAME "/%s/memory.stat", safe_name);
@@ -162,7 +162,7 @@ static char *gen_meminfo(const cfg_t *cfg, size_t *out_len) {
 }
 
 static char *gen_cpuinfo(const cfg_t *cfg, size_t *out_len) {
-  const int max_cpus = container_cpus(cfg);
+  const int max_cpus = container_cpus(&cfg->conf);
   auto_fclose FILE *f = fopen("/proc/cpuinfo", "r");
   if (!f)
     return nullptr;
@@ -200,7 +200,7 @@ static char *gen_cpuinfo(const cfg_t *cfg, size_t *out_len) {
 }
 
 static char *gen_stat(const cfg_t *cfg, size_t *out_len) {
-  const int max_cpus = container_cpus(cfg);
+  const int max_cpus = container_cpus(&cfg->conf);
   auto_fclose FILE *f = fopen("/proc/stat", "r");
   if (!f)
     return nullptr;
@@ -316,8 +316,8 @@ static char *gen_uptime(const cfg_t *cfg, size_t *out_len) {
   if (up < 0.0)
     up = 0.0;
 
-  const int ccpus = container_cpus(cfg);
-  const double busy = cg_cpu_busy_secs(cfg->conf.container_name);
+  const int ccpus = container_cpus(&cfg->conf);
+  const double busy = cg_cpu_busy_secs(cfg->rt.container_name);
   double idle = busy >= 0.0 ? up * ccpus - busy : up * ccpus * 0.1;
   if (idle < 0.0)
     idle = 0.0;
@@ -339,7 +339,7 @@ static char *gen_loadavg(const cfg_t *cfg, size_t *out_len) {
     return nullptr;
 
   const int hcpus = static_cast<int>(sysconf(_SC_NPROCESSORS_ONLN));
-  const int ccpus = container_cpus(cfg);
+  const int ccpus = container_cpus(&cfg->conf);
   const double r = static_cast<double>(ccpus) / static_cast<double>(hcpus);
 
   int srun = static_cast<int>(run * r);
@@ -358,7 +358,7 @@ static char *gen_loadavg(const cfg_t *cfg, size_t *out_len) {
 }
 
 static char *gen_cpu_sysfs(const cfg_t *cfg, size_t *out_len) {
-  const int n = container_cpus(cfg);
+  const int n = container_cpus(&cfg->conf);
   char *buf = static_cast<char *>(malloc(32));
   if (!buf)
     return nullptr;
@@ -388,8 +388,8 @@ static void bind_vfile(const char *vpath, const char *target,
     log_warn("[VIRT] bind_mount %s -> %s 失败 (将继续执行)", vpath, target);
 }
 
-static void virtualize_affinity(const cfg_t *cfg) {
-  const int n = container_cpus(cfg);
+static void virtualize_affinity(const asc_conf_t *conf) {
+  const int n = container_cpus(conf);
   const int host = static_cast<int>(sysconf(_SC_NPROCESSORS_ONLN));
   if (n >= host || n <= 0)
     return;
@@ -421,7 +421,7 @@ int virtualize_init(const cfg_t *cfg) {
   const bool has_cpu = cfg->conf.cpu_quota > 0;
 
   if (has_cpu)
-    virtualize_affinity(cfg);
+    virtualize_affinity(&cfg->conf);
 
   if (mkdir_p(VPROC_PATH, 0755) < 0) {
     log_warn("[VIRT] mkdir_p %s 失败: %s", VPROC_PATH, strerror(errno));
@@ -463,7 +463,7 @@ int virtualize_init(const cfg_t *cfg) {
     char sysfs_base[PATH_MAX];
     snprintf(sysfs_base, sizeof(sysfs_base), VPROC_PATH "/cpu_sysfs");
     if (mkdir_p(sysfs_base, 0755) == 0) {
-      const int n = container_cpus(cfg);
+      const int n = container_cpus(&cfg->conf);
       for (int i = 0; i < n; i++) {
         char vcpu[PATH_MAX + 32], realcpu[PATH_MAX];
         snprintf(vcpu, sizeof(vcpu), "%s/cpu%d", sysfs_base, i);
@@ -504,7 +504,7 @@ void virtualize_update(const cfg_t *cfg) {
   if (cfg->rt.ns_inode) {
     const unsigned long live = get_pid_ns_inode(cfg->rt.container_pid);
     if (live != cfg->rt.ns_inode) {
-      write_monitor_debug_log(cfg->conf.container_name,
+      write_monitor_debug_log(cfg->rt.container_name,
                               "[VIRT] 更新跳过: 命名空间 ns_inode 不匹配 "
                               "(预期为 %lu, 得到 %lu) pid=%d",
                               cfg->rt.ns_inode, live, static_cast<int>(cfg->rt.container_pid));
@@ -539,7 +539,7 @@ void virtualize_update(const cfg_t *cfg) {
     size_t len = 0;
     auto_free char *buf = dyn[i].gen(cfg, &len);
     if (!buf) {
-      write_monitor_debug_log(cfg->conf.container_name,
+      write_monitor_debug_log(cfg->rt.container_name,
                               "[VIRT] 生成器 gen_%s 返回了空指针 NULL", dyn[i].name);
       continue;
     }
@@ -551,14 +551,14 @@ void virtualize_update(const cfg_t *cfg) {
     char path[PATH_MAX];
     build_proc_root_path(cfg->rt.container_pid, subpath, path, sizeof(path));
     if (stat(path, &st) != 0) {
-      write_monitor_debug_log(cfg->conf.container_name,
+      write_monitor_debug_log(cfg->rt.container_name,
                               "[VIRT] 虚拟文件丢失: %s (%s)", path,
                               strerror(errno));
       continue;
     }
 
     if (write_inplace(cfg->rt.container_pid, subpath, buf, len) < 0)
-      write_monitor_debug_log(cfg->conf.container_name,
+      write_monitor_debug_log(cfg->rt.container_name,
                               "[VIRT] 就地覆盖写入 write_inplace 失败: %s (%s)", path,
                               strerror(errno));
   }

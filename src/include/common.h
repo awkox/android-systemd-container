@@ -16,6 +16,9 @@
 #include <fstream>
 #include <string>
 #include <format>
+#include <algorithm>
+#include <array>
+#include <cstring>
 
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
@@ -127,7 +130,6 @@ struct container_info {
 
 typedef struct {
   char rootfs_img_path[PATH_MAX];
-  char container_name[256];
   char uuid[UUID_LEN + 1];
   char img_mount_point[PATH_MAX];
   char custom_init[PATH_MAX];
@@ -146,6 +148,8 @@ typedef struct {
 } asc_conf_t;
 
 typedef struct {
+  char container_name[256];
+
   bool foreground;
   bool reboot_cycle;
   bool config_file_existed;

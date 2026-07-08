@@ -19,7 +19,7 @@ void internal_boot(cfg_t *cfg) {
 
   /* 在隔离挂载命名空间 / 执行 pivot_root 之前，预先打开容器日志文件。
    * 这个文件描述符将在挂载命名空间变更中存活，确保能够捕获所有的底层日志。 */
-  open_container_log(cfg);
+  open_container_log(cfg->rt.container_name);
 
   /* 对于启用网络隔离的情况：在隔离的网络命名空间中启动 loopback 回环网卡 */
   if (cfg->conf.isolation_network) {
@@ -33,7 +33,7 @@ void internal_boot(cfg_t *cfg) {
 
   /* 0. 引导防护：确保名称存在且唯一。
    * 这是一个关键的安全检查，防止无名或冲突的容器被意外引导。 */
-  if (!cfg->conf.container_name[0]) {
+  if (!cfg->rt.container_name[0]) {
     log_error("严重错误：引导终止 — 容器名称为空。");
     goto boot_fail;
   }
@@ -42,7 +42,7 @@ void internal_boot(cfg_t *cfg) {
     if (existing_pid != getpid()) {
       log_error(
           "严重错误：引导终止 — 名称 '%s' 已被 PID %d 占用。",
-          cfg->conf.container_name, existing_pid);
+          cfg->rt.container_name, existing_pid);
       goto boot_fail;
     }
   }
@@ -215,7 +215,7 @@ void internal_boot(cfg_t *cfg) {
   }
 
   if (!cfg->rt.reboot_cycle) {
-    log_info("正在引导容器 '%s' (使用 init: %s)...", cfg->conf.container_name,
+    log_info("正在引导容器 '%s' (使用 init: %s)...", cfg->rt.container_name,
              cfg->conf.custom_init[0] ? cfg->conf.custom_init : DEFAULT_INIT);
   }
 
@@ -231,7 +231,7 @@ void internal_boot(cfg_t *cfg) {
     log_warn("引导警告: 无法备份内部配置元数据");
   }
 
-  write_file(FORK_MARKER "/name", cfg->conf.container_name);
+  write_file(FORK_MARKER "/name", cfg->rt.container_name);
 
   if (cfg->conf.img_mount_point[0])
     write_file(FORK_MARKER "/mount", cfg->conf.img_mount_point);

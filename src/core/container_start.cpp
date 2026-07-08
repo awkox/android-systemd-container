@@ -105,7 +105,7 @@ void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
     }
   }
 
-  cgroup_cleanup_container(cfg->conf.container_name);
+  cgroup_cleanup_container(cfg->rt.container_name);
 }
 
 bool is_valid_container_pid(const pid_t pid) {
@@ -131,11 +131,11 @@ int start_rootfs(cfg_t *cfg) {
   char marker[PATH_MAX];
   bool booted = false;
 
-  if (cfg->conf.container_name[0]) {
+  if (cfg->rt.container_name[0]) {
     char lock_path[PATH_MAX];
-    if (get_lock_path(cfg->conf.container_name, lock_path, sizeof(lock_path)) == 0 &&
+    if (get_lock_path(cfg->rt.container_name, lock_path, sizeof(lock_path)) == 0 &&
         access(lock_path, F_OK) == 0) {
-      if (acquire_external_lock(cfg->conf.container_name) == 0) {
+      if (acquire_external_lock(cfg->rt.container_name) == 0) {
         lock_acquired = true;
 
         if (cfg->conf.img_mount_point[0] && is_mountpoint(cfg->conf.img_mount_point)) {
@@ -150,7 +150,7 @@ int start_rootfs(cfg_t *cfg) {
   if (!lock_acquired) {
     if (is_container_running(cfg->conf.uuid, &existing_pid)) {
       log_error("容器名称 '%s' 已被 PID %d 占用。",
-                cfg->conf.container_name, existing_pid);
+                cfg->rt.container_name, existing_pid);
       goto cleanup;
     }
   }
@@ -178,7 +178,7 @@ int start_rootfs(cfg_t *cfg) {
 
   if (cfg->conf.rootfs_img_path[0] && !lock_acquired) {
     if (mount_rootfs_img(cfg->conf.rootfs_img_path, cfg->conf.img_mount_point,
-                         sizeof(cfg->conf.img_mount_point), cfg->conf.container_name) < 0) {
+                         sizeof(cfg->conf.img_mount_point), cfg->rt.container_name) < 0) {
       goto cleanup;
     }
   }
@@ -249,15 +249,15 @@ int start_rootfs(cfg_t *cfg) {
     }
   }
 
-  if (config_save_by_name(cfg->conf.container_name, cfg) < 0) {
+  if (config_save_by_name(cfg->rt.container_name, cfg) < 0) {
     log_warn("无法将工作区镜像配置同步至 '%s': %s",
-             cfg->conf.container_name, strerror(errno));
+             cfg->rt.container_name, strerror(errno));
   }
 
   if (cfg->conf.volatile_mode) {
     snprintf(cfg->rt.volatile_dir, sizeof(cfg->rt.volatile_dir),
              "%s/" RUNTIME_VOLATILE_SUBDIR "/%s", get_runtime_dir(),
-             cfg->conf.container_name);
+             cfg->rt.container_name);
   }
 
   fix_host_ptys();
@@ -316,7 +316,7 @@ int start_rootfs(cfg_t *cfg) {
 
   if (cfg->conf.img_mount_point[0]) {
     cfg_t save_cfg = *cfg;
-    config_save_by_name(cfg->conf.container_name, &save_cfg);
+    config_save_by_name(cfg->rt.container_name, &save_cfg);
   }
 
   if (cfg->rt.foreground) {
@@ -344,7 +344,7 @@ int start_rootfs(cfg_t *cfg) {
     }
 
     show_info(cfg, true);
-    log_info("容器 '%s' 正在后台运行。", cfg->conf.container_name);
+    log_info("容器 '%s' 正在后台运行。", cfg->rt.container_name);
   }
 
   if (lock_acquired)

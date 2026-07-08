@@ -108,12 +108,7 @@ int config_load(const char *config_path, cfg_t *cfg) {
     const char *key = trim_whitespace(trimmed);
     const char *val = trim_whitespace(equals + 1);
 
-    if (strcmp(key, "name") == 0) {
-      if (validate_container_name(val))
-        safe_strncpy(conf->container_name, val, sizeof(conf->container_name));
-      else
-        log_warn("配置警告: 忽略无效的容器名称 '%s'", val);
-    } else if (strcmp(key, "rootfs_path") == 0) {
+    if (strcmp(key, "rootfs_path") == 0) {
       safe_strncpy(conf->rootfs_img_path, val, sizeof(conf->rootfs_img_path));
     } else if (strcmp(key, "img_mount_point") == 0) {
       safe_strncpy(conf->img_mount_point, val, sizeof(conf->img_mount_point));
@@ -175,9 +170,6 @@ static void config_serialize_known(FILE *f, asc_conf_t *conf) {
   fprintf(f, "# 此文件由程序自动生成 - 手动修改可能会被覆盖\n\n");
 
   /* 写入被管理的键 */
-  if (conf->container_name[0])
-    fprintf(f, "name=%s\n", conf->container_name);
-
   if (conf->rootfs_img_path[0]) {
     auto_free char *abs_path = resolve_path_arg(conf->rootfs_img_path);
     fprintf(f, "rootfs_path=%s\n", abs_path ? abs_path : conf->rootfs_img_path);

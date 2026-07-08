@@ -4,20 +4,20 @@ static int stop_rootfs_with_timeout(cfg_t *cfg, int timeout_seconds) {
   if (timeout_seconds < 0)
     timeout_seconds = STOP_TIMEOUT;
 
-  if (acquire_external_lock(cfg->conf.container_name) != 0) {
+  if (acquire_external_lock(cfg->rt.container_name) != 0) {
     log_error("无法停止 '%s': 另一个命令正在管理此容器",
-              cfg->conf.container_name);
+              cfg->rt.container_name);
     return -1;
   }
 
   pid_t pid = 0;
   if (!is_container_running(cfg->conf.uuid, &pid) || pid <= 0) {
-    log_error("容器 '%s' 未运行或状态无效。", cfg->conf.container_name);
+    log_error("容器 '%s' 未运行或状态无效。", cfg->rt.container_name);
     release_external_lock();
     return -1;
   }
 
-  log_info("正在停止容器 '%s' (PID %d)...", cfg->conf.container_name, pid);
+  log_info("正在停止容器 '%s' (PID %d)...", cfg->rt.container_name, pid);
 
   if (cfg->conf.img_mount_point[0] == '\0') {
     read_proc_environ(pid, "RUNTIME_MOUNT_PATH", cfg->conf.img_mount_point,
@@ -63,7 +63,7 @@ static int stop_rootfs_with_timeout(cfg_t *cfg, int timeout_seconds) {
   cleanup_container_resources(cfg, unkillable);
 
   if (!cfg->rt.foreground)
-    log_info("容器 '%s' 已停止。", cfg->conf.container_name);
+    log_info("容器 '%s' 已停止。", cfg->rt.container_name);
 
   release_external_lock();
 
