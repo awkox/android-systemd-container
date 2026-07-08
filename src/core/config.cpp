@@ -92,9 +92,7 @@ int config_load(const char *config_path, cfg_t *cfg) {
   char line[2048];
 
   while (fgets(line, sizeof(line), f)) {
-    char line_copy[2048];
-    safe_strncpy(line_copy, line, sizeof(line_copy));
-    char *trimmed = trim_whitespace(line_copy);
+    char *trimmed = trim_whitespace(line);
 
     if (trimmed[0] == '#' || trimmed[0] == '\0')
       continue;

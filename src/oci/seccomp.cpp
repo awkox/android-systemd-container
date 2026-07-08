@@ -10,7 +10,7 @@ int seccomp_apply_minimal(const int privileged_mask) {
   if (privileged_mask & PRIV_NOSEC)
     return 0;
 
-  static struct sock_filter filter[78];
+  struct sock_filter filter[78];
   int curr = 0;
 
   /* 1. 验证运行架构 */

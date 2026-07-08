@@ -20,7 +20,6 @@ extern "C" {
     void **pp = (void **)p;
     if (pp && *pp) {
         free(*pp);
-        *pp = nullptr;
     }
 }
 
@@ -28,7 +27,6 @@ extern "C" {
     FILE **f = (FILE **)p;
     if (f && *f) {
         fclose(*f);
-        *f = nullptr;
     }
 }
 
@@ -43,7 +41,6 @@ extern "C" {
     DIR **d = (DIR **)p;
     if (d && *d) {
         closedir(*d);
-        *d = nullptr;
     }
 }
 
