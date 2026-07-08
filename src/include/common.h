@@ -97,7 +97,6 @@ constexpr int MAX_TRACKED_ENTRIES = 512;
 #define PROC_STATUS_FMT "/proc/%d/status"
 #define PROC_MOUNTINFO "/proc/self/mountinfo"
 #define OS_RELEASE "/etc/os-release"
-#define FW_PATH_FILE "/sys/module/firmware_class/parameters/path"
 #define FORK_MARKER "/run/asc"
 #define VPROC_PATH "/run/asc/vproc"
 
@@ -133,7 +132,6 @@ typedef struct {
   char img_mount_point[PATH_MAX];
   char custom_init[PATH_MAX];
 
-  bool hw_access;
   bool gpu_mode;
   bool volatile_mode;
   bool force_cgroupv1;
@@ -157,8 +155,8 @@ typedef struct {
 
   pid_t container_pid;
 
-  struct tty_info console;
-  struct timespec start_time;
+  tty_info console;
+  timespec start_time;
   unsigned long ns_inode;
 } asc_rt_t;
 

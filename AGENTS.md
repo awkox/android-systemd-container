@@ -55,7 +55,7 @@ src/
 ├── core/              # 容器生命周期、守护进程 IPC、init、monitor、配置
 ├── oci/               # 能力集、cgroups、seccomp、命名空间监狱
 ├── platform/          # loop 设备、PTY、netlink、/proc|/sys|/dev
-├── utils/             # fileio、logger、process、string、uuid、system、workspace、firmware
+├── utils/             # fileio、logger、process、string、uuid、system、workspace
 └── include/           # 所有头文件；asc.h 是聚合引用
 ```
 

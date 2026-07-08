@@ -5,7 +5,7 @@
 
 bool is_external_lock_active(const char *name);
 int acquire_external_lock(const char *name);
-void release_external_lock(void);
+void release_external_lock();
 int get_lock_path(const char *name, char *buf, const size_t size);
 void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup);
 bool is_valid_container_pid(const pid_t pid);

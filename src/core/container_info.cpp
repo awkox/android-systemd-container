@@ -94,11 +94,8 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
     feat_count++;
   }
 
-  if (cfg->conf.hw_access) {
-    printf("  硬件直通: 完整\n");
-    feat_count++;
-  } else if (cfg->conf.gpu_mode) {
-    printf("  硬件直通: 仅 GPU\n");
+  if (cfg->conf.gpu_mode) {
+    printf("  GPU直通：是\n");
     feat_count++;
   }
 

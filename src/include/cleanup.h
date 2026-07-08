@@ -16,34 +16,34 @@ extern "C" {
  * 同时解决了 const 变量传递时丢失 const 限定符的警告。
  */
 
-static inline void cfree(const void *p) {
+static void cfree(const void *p) {
     void **pp = (void **)p;
     if (pp && *pp) {
         free(*pp);
-        *pp = NULL;
+        *pp = nullptr;
     }
 }
 
-static inline void cfclose(const void *p) {
+static void cfclose(const void *p) {
     FILE **f = (FILE **)p;
     if (f && *f) {
         fclose(*f);
-        *f = NULL;
+        *f = nullptr;
     }
 }
 
-static inline void cclose(const void *p) {
+static void cclose(const void *p) {
     const int *fd = (const int *)p;
     if (fd && *fd >= 0) {
         close(*fd);
     }
 }
 
-static inline void cclosedir(const void *p) {
+static void cclosedir(const void *p) {
     DIR **d = (DIR **)p;
     if (d && *d) {
         closedir(*d);
-        *d = NULL;
+        *d = nullptr;
     }
 }
 

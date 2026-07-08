@@ -151,10 +151,6 @@ int get_kernel_version(int *major, int *minor) {
   return 0;
 }
 
-void build_firmware_path(const char *mount_point, char *buf, const size_t size) {
-  snprintf(buf, size, "%s/lib/firmware", mount_point);
-}
-
 void oom_protect(void) {
   auto_fclose FILE *f = fopen("/proc/self/oom_score_adj", "w");
   if (f)

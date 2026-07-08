@@ -117,8 +117,6 @@ int config_load(const char *config_path, cfg_t *cfg) {
       safe_strncpy(conf->rootfs_img_path, val, sizeof(conf->rootfs_img_path));
     } else if (strcmp(key, "img_mount_point") == 0) {
       safe_strncpy(conf->img_mount_point, val, sizeof(conf->img_mount_point));
-    } else if (strcmp(key, "enable_hw_access") == 0) {
-      conf->hw_access = parse_bool(val);
     } else if (strcmp(key, "enable_gpu_mode") == 0) {
       conf->gpu_mode = parse_bool(val);
     } else if (strcmp(key, "volatile_mode") == 0) {
@@ -188,7 +186,6 @@ static void config_serialize_known(FILE *f, asc_conf_t *conf) {
   if (conf->img_mount_point[0])
     fprintf(f, "img_mount_point=%s\n", conf->img_mount_point);
 
-  fprintf(f, "enable_hw_access=%d\n", conf->hw_access);
   fprintf(f, "enable_gpu_mode=%d\n", conf->gpu_mode);
   fprintf(f, "volatile_mode=%d\n", conf->volatile_mode);
   fprintf(f, "force_cgroupv1=%d\n", conf->force_cgroupv1);

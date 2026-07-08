@@ -3,7 +3,7 @@
 
 #include "common.h"
 
-bool cgroup_host_is_v2(void);
+bool cgroup_host_is_v2();
 void cgroup_host_bootstrap(const bool force_cgroupv1);
 int setup_cgroups(const bool force_cgroupv1);
 void cgroup_cleanup_container(const char *container_name);

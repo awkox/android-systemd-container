@@ -31,7 +31,6 @@
 #include "utils/workspace.h"
 #include "utils/uuid.h"
 #include "utils/system.h"
-#include "utils/firmware.h"
 
 #include "fs_mount.h"
 

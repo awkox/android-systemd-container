@@ -63,7 +63,6 @@ add_executable(asc
 	src/utils/workspace.cpp
 	src/utils/uuid.cpp
 	src/utils/system.cpp
-	src/utils/firmware.cpp
 )
 target_include_directories(asc PRIVATE 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/include"

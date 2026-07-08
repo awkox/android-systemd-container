@@ -78,12 +78,6 @@ void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
   if (!force_cleanup)
     sync();
 
-  if (!force_cleanup && cfg->conf.hw_access && cfg->conf.img_mount_point[0]) {
-    char fw_path[PATH_MAX + 16];
-    build_firmware_path(cfg->conf.img_mount_point, fw_path, sizeof(fw_path));
-    firmware_path_remove(fw_path);
-  }
-
   if (cfg->conf.volatile_mode) {
     if (force_cleanup) {
       char merged[PATH_MAX + 32];
@@ -264,12 +258,6 @@ int start_rootfs(cfg_t *cfg) {
     snprintf(cfg->rt.volatile_dir, sizeof(cfg->rt.volatile_dir),
              "%s/" RUNTIME_VOLATILE_SUBDIR "/%s", get_runtime_dir(),
              cfg->conf.container_name);
-  }
-
-  if (cfg->conf.hw_access) {
-    char fw_path[PATH_MAX + 16];
-    build_firmware_path(cfg->conf.img_mount_point, fw_path, sizeof(fw_path));
-    firmware_path_add(fw_path);
   }
 
   fix_host_ptys();

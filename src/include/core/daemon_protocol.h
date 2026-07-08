@@ -32,7 +32,7 @@ int read_exact(const int fd, void *buf, size_t n);
 int send_frame(const int fd, const uint8_t type, const void *data, const uint32_t len);
 int recv_frame_hdr(const int fd, uint8_t *type_out, uint32_t *len_out);
 void send_exit(const int fd, const int code);
-socklen_t make_addr(struct sockaddr_un *addr);
+socklen_t make_addr(sockaddr_un *addr);
 void free_req(req_t *r);
 int recv_req(const int fd, req_t *r);
 

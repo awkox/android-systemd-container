@@ -103,16 +103,14 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* 8. 配置 /dev (设备节点，或 devtmpfs) */
-  if (setup_dev(".", cfg->conf.hw_access, cfg->conf.gpu_mode, cfg->conf.privileged_mask) < 0) {
+  if (setup_dev(".", false, cfg->conf.gpu_mode, cfg->conf.privileged_mask) < 0) {
     log_error("设置 /dev 环境失败。");
     goto boot_fail;
   }
 
   /* 9. 日志输出硬件访问模式状态 */
   if (!cfg->rt.reboot_cycle) {
-    if (cfg->conf.hw_access)
-      log_info("正在配置硬件完全直通环境...");
-    else if (cfg->conf.gpu_mode)
+    if (cfg->conf.gpu_mode)
       log_info("正在配置 GPU 加速直通环境...");
     else
       log_info("硬件直通已禁用：使用隔离的 tmpfs 伪终端...");
@@ -132,41 +130,19 @@ void internal_boot(cfg_t *cfg) {
   mkdir_p("sys/fs/cgroup", 0755);
 
   /* 系统级 sysfs 漏洞屏蔽策略 */
-  if (cfg->conf.hw_access && cfg->rt.foreground) {
-    auto_closedir DIR *d = opendir("sys");
-    if (d) {
-      struct dirent *de;
-      while ((de = readdir(d)) != nullptr) {
-        if (de->d_name[0] == '.')
-          continue;
-
-        char subpath[PATH_MAX];
-        snprintf(subpath, sizeof(subpath), "sys/%s", de->d_name);
-
-        struct stat st;
-        if (stat(subpath, &st) == 0 && S_ISDIR(st.st_mode)) {
-          if (mount(subpath, subpath, nullptr, MS_BIND | MS_REC, nullptr) < 0) {
-          }
-        }
-      }
-    }
-  } else if (!cfg->conf.hw_access) {
-    if (mkdir("sys/devices", 0755) < 0 && errno != EEXIST) {
-    }
-    if (mkdir("sys/devices/virtual", 0755) < 0 && errno != EEXIST) {
-    }
-    if (mkdir("sys/devices/virtual/net", 0755) < 0 && errno != EEXIST) {
-    }
-    if (mount("sys/devices/virtual/net", "sys/devices/virtual/net", nullptr,
-              MS_BIND | MS_REC, nullptr) < 0) {
-      log_warn("无法绑定挂载网络设备路径 (网络功能可能受限)");
-    }
+  if (mkdir("sys/devices", 0755) < 0 && errno != EEXIST) {
+  }
+  if (mkdir("sys/devices/virtual", 0755) < 0 && errno != EEXIST) {
+  }
+  if (mkdir("sys/devices/virtual/net", 0755) < 0 && errno != EEXIST) {
+  }
+  if (mount("sys/devices/virtual/net", "sys/devices/virtual/net", nullptr,
+            MS_BIND | MS_REC, nullptr) < 0) {
+    log_warn("无法绑定挂载网络设备路径 (网络功能可能受限)");
   }
 
-  if (!cfg->conf.hw_access || cfg->rt.foreground) {
-    if (mount(nullptr, "sys", nullptr, MS_REMOUNT | MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
-      log_warn("无法将 /sys 重新挂载为只读模式: %s", strerror(errno));
-    }
+  if (mount(nullptr, "sys", nullptr, MS_REMOUNT | MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
+    log_warn("无法将 /sys 重新挂载为只读模式: %s", strerror(errno));
   }
 
   /* 11. 在锁定 /sys 之后设置 Cgroups */
@@ -221,10 +197,10 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* 16. 设置 devpts */
-  setup_devpts(cfg->conf.hw_access);
+  setup_devpts(false);
 
   /* 在 pivot_root 后应用监狱掩码保护 */
-  apply_jail_mask(cfg->conf.hw_access, cfg->conf.privileged_mask);
+  apply_jail_mask(false cfg->conf.privileged_mask);
 
   /* 16b. 资源可见性虚拟化 */
   if (is_mountpoint("/proc")) {
@@ -290,7 +266,7 @@ void internal_boot(cfg_t *cfg) {
       !(cfg->conf.privileged_mask & PRIV_NOSEC),
       cfg->conf.privileged_mask);
 
-  apply_capability_hardening(cfg->conf.hw_access, cfg->conf.privileged_mask);
+  apply_capability_hardening(false, cfg->conf.privileged_mask);
 
   /* 20. 重定向标准输入输出至 /dev/console
    * 使用局部代码块，防止 console_fd 触发 C++ 的 goto 跳跃错误 */

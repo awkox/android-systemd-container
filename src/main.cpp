@@ -6,7 +6,7 @@
  * !!! 若程序意外退出，必须重启系统进行清理 !!!
  */
 
-static void print_usage(void) {
+static void print_usage() {
   printf(
       "用法: " PROJECT_NAME " <命令> [参数]\n\n"
       "命令列表:\n"
@@ -255,7 +255,7 @@ int main(const int argc, char **argv) {
       ret = 1;
       goto cleanup;
     }
-    if (check_requirements_hw(cfg.conf.hw_access) < 0) {
+    if (check_requirements_hw(false) < 0) {
       ret = 1;
       goto cleanup;
     }
@@ -287,9 +287,6 @@ int main(const int argc, char **argv) {
     }
     goto cleanup;
   }
-
-  // 兜底分支 (在前面严格检查下正常是不可达的)
-  goto usage_error;
 
 usage_error:
   log_error("无效的参数或缺失命令。");
