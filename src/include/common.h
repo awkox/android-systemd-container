@@ -129,7 +129,6 @@ typedef struct {
   char img_mount_point[PATH_MAX];
   char custom_init[PATH_MAX];
 
-  bool gpu_mode;
   bool volatile_mode;
   bool force_cgroupv1;
   bool isolation_network;

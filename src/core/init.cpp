@@ -103,20 +103,12 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* 8. 配置 /dev (设备节点，或 devtmpfs) */
-  if (setup_dev(".", cfg->conf.gpu_mode) < 0) {
+  if (setup_dev(".") < 0) {
     log_error("设置 /dev 环境失败。");
     goto boot_fail;
   }
 
-  /* 9. 日志输出硬件访问模式状态 */
-  if (!cfg->rt.reboot_cycle) {
-    if (cfg->conf.gpu_mode)
-      log_info("正在配置 GPU 加速直通环境...");
-    else
-      log_info("硬件直通已禁用：使用隔离的 tmpfs 伪终端...");
-  }
-
-  /* 10. 挂载虚拟文件系统 (proc, sys) */
+  /* 9. 挂载虚拟文件系统 (proc, sys) */
   if (domount("proc", "proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
     log_error("挂载 procfs 失败: %s", strerror(errno));
     goto boot_fail;
@@ -145,7 +137,7 @@ void internal_boot(cfg_t *cfg) {
     log_warn("无法将 /sys 重新挂载为只读模式: %s", strerror(errno));
   }
 
-  /* 11. 在锁定 /sys 之后设置 Cgroups */
+  /* 10. 在锁定 /sys 之后设置 Cgroups */
   if (setup_cgroups(cfg->conf.force_cgroupv1) < 0) {
     log_error("容器 Cgroups 配置失败。");
     goto boot_fail;
@@ -159,12 +151,12 @@ void internal_boot(cfg_t *cfg) {
   if (domount("tmpfs", "tmp", "tmpfs", MS_NOSUID | MS_NODEV, "mode=1777") < 0)
     log_warn("挂载 /tmp (tmpfs) 失败: %s", strerror(errno));
 
-  /* 14. 在 pivot_root 前绑定挂载控制台 */
+  /* 11. 在 pivot_root 前绑定挂载控制台 */
   if (mount(cfg->rt.console.name, "dev/console", nullptr, MS_BIND, nullptr) < 0)
     log_warn("无法绑定挂载 Console '%s': %s", cfg->rt.console.name,
              strerror(errno));
 
-  /* 15. 执行根目录无缝切换 (pivot_root) */
+  /* 12. 执行根目录无缝切换 (pivot_root) */
   if (is_ramfs("/")) {
     log_info("检测到 rootfs/ramfs 宿主机 - 自动回退至 MS_MOVE + chroot 机制");
     used_ms_move = true;
@@ -196,13 +188,13 @@ void internal_boot(cfg_t *cfg) {
     }
   }
 
-  /* 16. 设置 devpts */
+  /* 13. 设置 devpts */
   setup_devpts();
 
   /* 在 pivot_root 后应用监狱掩码保护 */
   apply_jail_mask(cfg->conf.privileged_mask);
 
-  /* 16b. 资源可见性虚拟化 */
+  /* 13b. 资源可见性虚拟化 */
   if (is_mountpoint("/proc")) {
     if (virtualize_init(cfg) < 0)
       log_warn("[VIRT] 虚拟化资源初始化失败，将以无虚拟化状态继续运行。");
@@ -219,7 +211,7 @@ void internal_boot(cfg_t *cfg) {
              cfg->conf.custom_init[0] ? cfg->conf.custom_init : DEFAULT_INIT);
   }
 
-  /* 17. 写入容器标识，供 PID 发现 */
+  /* 14b 写入容器标识，供 PID 发现 */
   mkdir(FORK_MARKER, 0755);
   if (cfg->conf.uuid[0] != '\0') {
     char uuid_path[PATH_MAX];
@@ -240,7 +232,7 @@ void internal_boot(cfg_t *cfg) {
   printf("\r\n");
   fflush(stdout);
 
-  /* 18. 清理卸载旧的根文件系统目录 */
+  /* 15. 清理卸载旧的根文件系统目录 */
   if (!used_ms_move) {
     if (umount2("/.old_root", MNT_DETACH) < 0)
       log_warn("卸载 /.old_root 失败: %s", strerror(errno));
@@ -250,7 +242,7 @@ void internal_boot(cfg_t *cfg) {
     rmdir("/.old_root");
   }
 
-  /* 19. 清除环境变量并设置默认值 */
+  /* 16. 清除环境变量并设置默认值 */
   // 设置的环境变量会在proc environ形成快照
   // 除非故意修改内核的环境变量指针，否则proc environ不会被修改
   clearenv();
@@ -266,7 +258,7 @@ void internal_boot(cfg_t *cfg) {
 
   apply_capability_hardening(cfg->conf.privileged_mask);
 
-  /* 20. 重定向标准输入输出至 /dev/console
+  /* 17. 重定向标准输入输出至 /dev/console
    * 使用局部代码块，防止 console_fd 触发 C++ 的 goto 跳跃错误 */
   {
     const int console_fd = open("/dev/console", O_RDWR);
@@ -295,7 +287,7 @@ void internal_boot(cfg_t *cfg) {
     }
   }
 
-  /* 21. 最终执行 INIT 程序 */
+  /* 18. 最终执行 INIT 程序 */
   init_bin = cfg->conf.custom_init[0] ? cfg->conf.custom_init : (char *)DEFAULT_INIT;
   init_args[argc++] = init_bin;
 

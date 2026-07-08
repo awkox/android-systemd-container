@@ -94,11 +94,6 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
     feat_count++;
   }
 
-  if (cfg->conf.gpu_mode) {
-    printf("  GPU直通：是\n");
-    feat_count++;
-  }
-
   if (cfg->conf.volatile_mode) {
     printf("  易失模式: 是\n");
     feat_count++;
