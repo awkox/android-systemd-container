@@ -212,15 +212,12 @@ int start_rootfs(cfg_t *cfg) {
   }
 
   {
-    char active_uuids[MAX_CONTAINERS][UUID_LEN + 1];
-    int uuid_count = collect_active_uuids(active_uuids, MAX_CONTAINERS);
-    bool need_new = cfg->conf.uuid[0] == '\0';
+    auto active_uuids = collect_active_uuids();
+    bool need_new = (cfg->conf.uuid[0] == '\0');
     if (!need_new) {
-      for (int _i = 0; _i < uuid_count; _i++) {
-        if (strcmp(cfg->conf.uuid, active_uuids[_i]) == 0) {
-          need_new = true;
-          break;
-        }
+      // 借助 std::find 一行完成查找
+      if (std::find(active_uuids.begin(), active_uuids.end(), cfg->conf.uuid) != active_uuids.end()) {
+        need_new = true;
       }
     }
     if (need_new)

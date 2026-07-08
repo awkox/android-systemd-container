@@ -4,6 +4,6 @@
 #include "common.h"
 
 bool is_container_running(char *uuid, pid_t *pid_out);
-int collect_active_uuids(char uuids[][UUID_LEN + 1], const int max_uuids);
+std::vector<std::string> collect_active_uuids(size_t max_uuids = MAX_CONTAINERS);
 
 #endif

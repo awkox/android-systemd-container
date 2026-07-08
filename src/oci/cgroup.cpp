@@ -175,41 +175,25 @@ int setup_cgroups(const bool force_cgroupv1) {
   return 0;
 }
 
-static void rmdir_cgroup_tree(const char *path) {
-  DIR *d = opendir(path);
-  if (!d) {
-    rmdir(path);
-    return;
-  }
+static void rmdir_cgroup_tree(const std::filesystem::path& path) {
+  std::error_code ec;
+  if (!std::filesystem::exists(path, ec)) return;
 
-  struct dirent *de;
-  char **subdirs = nullptr;
-  size_t count = 0, cap = 16;
-  subdirs = static_cast<char **>(malloc(cap * sizeof(char *)));
-  while ((de = readdir(d)) != nullptr) {
-    if (de->d_name[0] == '.')
-      continue;
-    if (de->d_type != DT_DIR && de->d_type != DT_UNKNOWN)
-      continue;
-
-    if (count >= cap) {
-      cap *= 2;
-      subdirs = static_cast<char **>(realloc(subdirs, cap * sizeof(char *)));
+  // 使用 vector 自动管理内存，彻底消灭 malloc/realloc/free
+  std::vector<std::filesystem::path> subdirs;
+  for (const auto& entry : std::filesystem::directory_iterator(path, ec)) {
+    if (entry.is_directory(ec)) {
+      subdirs.push_back(entry.path());
     }
-    subdirs[count++] = strdup(de->d_name);
   }
-  closedir(d); /* 关闭目录后再递归，彻底避免 FD 泄漏 */
 
-  for (size_t i = 0; i < count; i++) {
-    char child[PATH_MAX];
-    snprintf(child, sizeof(child), "%s/%s", path, subdirs[i]);
-    rmdir_cgroup_tree(child);
-    free(subdirs[i]);
+  // 递归删除子目录
+  for (const auto& sub : subdirs) {
+    rmdir_cgroup_tree(sub);
   }
-  free(subdirs);
 
   char kill_path[PATH_MAX];
-  safe_strncpy(kill_path, path, sizeof(kill_path));
+  safe_strncpy(kill_path, path.string().c_str(), sizeof(kill_path));
   strncat(kill_path, "/cgroup.kill", sizeof(kill_path) - strlen(kill_path) - 1);
   if (access(kill_path, W_OK) == 0) {
     auto_close const int kfd = open(kill_path, O_WRONLY | O_CLOEXEC);
@@ -219,7 +203,7 @@ static void rmdir_cgroup_tree(const char *path) {
   }
 
   char events_path[PATH_MAX];
-  safe_strncpy(events_path, path, sizeof(events_path));
+  safe_strncpy(events_path, path.string().c_str(), sizeof(events_path));
   strncat(events_path, "/cgroup.events",
           sizeof(events_path) - strlen(events_path) - 1);
   for (int i = 0; i < 50; i++) {
@@ -231,11 +215,10 @@ static void rmdir_cgroup_tree(const char *path) {
     usleep(10000); 
   }
 
+  // 原有的不断重试 rmdir 逻辑
   for (int attempt = 0; attempt < 10; attempt++) {
-    if (rmdir(path) == 0 || errno == ENOENT)
-      return;
-    if (errno != EBUSY)
-      return;
+    if (rmdir(path.string().c_str()) == 0 || errno == ENOENT) return;
+    if (errno != EBUSY) return;
     usleep(20000);
   }
 }
