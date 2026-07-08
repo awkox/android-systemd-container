@@ -49,7 +49,7 @@ bool cgroup_host_is_v2(void) {
 }
 
 static bool cgroup_kernel_supports_v2(void) {
-  return grep_file("/proc/filesystems", "cgroup2") > 0;
+  return grep_file("/proc/filesystems", "cgroup2");
 }
 
 void cgroup_host_bootstrap(const bool force_cgroupv1) {
@@ -61,7 +61,7 @@ void cgroup_host_bootstrap(const bool force_cgroupv1) {
       sfs.f_type == CGROUP2_SUPER_MAGIC)
     return;
 
-  if (grep_file("/proc/filesystems", "cgroup2") <= 0) {
+  if (!cgroup_kernel_supports_v2()) {
     log_info("[CGROUP] 系统文件系统不支持 cgroup2，跳过引导初始化。");
     return;
   }

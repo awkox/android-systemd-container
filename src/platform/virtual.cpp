@@ -375,8 +375,7 @@ unsigned long get_pid_ns_inode(const pid_t pid) {
 }
 
 static void bind_vfile(const char *vpath, const char *target,
-                       const char *content,
-                       size_t len [[maybe_unused]]) {
+                       const char *content) {
   if (write_file(vpath, content) < 0)
     return;
   if (access(target, F_OK) != 0) {
@@ -456,7 +455,7 @@ int virtualize_init(const cfg_t *cfg) {
     char vpath[PATH_MAX], target[PATH_MAX];
     snprintf(vpath, sizeof(vpath), VPROC_PATH "/%s", proc_files[i].name);
     snprintf(target, sizeof(target), "/proc/%s", proc_files[i].name);
-    bind_vfile(vpath, target, buf, len);
+    bind_vfile(vpath, target, buf);
   }
 
   if (has_cpu) {

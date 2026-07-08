@@ -108,7 +108,7 @@ int check_volatile_mode(asc_conf_t *conf) {
   if (!conf->volatile_mode)
     return 0;
 
-  if (grep_file("/proc/filesystems", "overlay") != 1) {
+  if (!grep_file("/proc/filesystems", "overlay")) {
     log_error("您的内核不支持 OverlayFS。无法使用易失模式。");
     return -1;
   }

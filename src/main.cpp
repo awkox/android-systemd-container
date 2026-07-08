@@ -15,22 +15,18 @@ static void print_usage() {
       "  start NAME [CONFIG] [-f]  使用可选的 CONFIG 配置文件启动名为 NAME 的容器\n"
       "  stop NAME                 停止名为 NAME 的容器\n"
       "  info NAME                 显示详细的容器信息\n"
-      "  check                     检查系统运行要求\n"
       "  help                      显示此帮助信息\n\n");
 }
 
 int main(const int argc, char **argv) {
-  int ret = 0;
-  /* 严重警告：将所有字段归零以避免动态数组中出现垃圾指针 */
-  cfg_t cfg = {};
-
-  bool loaded = false;
-
   if (argc < 2) {
     print_usage();
     return 1;
   }
 
+  int ret = 0;
+  cfg_t cfg = {};
+  bool loaded = false;
   const char *cmd = argv[1];
   const char *subcmd = nullptr;
   const char *name = nullptr;
@@ -82,9 +78,6 @@ int main(const int argc, char **argv) {
     if (argc != 3) goto usage_error;
     name = argv[2];
     is_stateful = true;
-  } else if (strcmp(cmd, "check") == 0) {
-    if (argc != 2) goto usage_error;
-    is_no_root_cmd = true;
   } else if (strcmp(cmd, "help") == 0) {
     if (argc != 2) goto usage_error;
     is_no_root_cmd = true;
@@ -161,10 +154,6 @@ int main(const int argc, char **argv) {
   }
 
   /* 基础信息命令 */
-  if (strcmp(cmd, "check") == 0) {
-    ret = check_requirements_detailed();
-    goto cleanup;
-  }
   if (strcmp(cmd, "help") == 0) {
     print_usage();
     ret = 0;
