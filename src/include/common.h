@@ -123,11 +123,6 @@ struct tty_info {
   char name[PATH_MAX];
 };
 
-struct container_info {
-  char name[128];
-  pid_t pid;
-};
-
 typedef struct {
   char rootfs_img_path[PATH_MAX];
   char uuid[UUID_LEN + 1];

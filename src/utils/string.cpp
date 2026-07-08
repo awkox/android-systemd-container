@@ -64,54 +64,6 @@ char *resolve_path_arg(const char *path) {
   return strdup(result.c_str());
 }
 
-static const struct {
-  const char *opt;
-} path_opts[] = {
-  {"--config"},
-  {"-C"},
-  {nullptr},
-};
-
-void resolve_argv_paths(const int argc, char **argv) {
-  for (int i = 0; i < argc; i++) {
-    const char *arg = argv[i];
-    if (!arg || arg[0] != '-') 
-      continue;
-
-    for (int j = 0; path_opts[j].opt; j++) {
-      const char *opt = path_opts[j].opt;
-      const size_t olen = strlen(opt);
-
-      if (strncmp(arg, opt, olen) == 0 && arg[olen] == '=') {
-        const char *val = arg + olen + 1;
-        if (!*val || val[0] == '/')
-          break; 
-        auto_free char *resolved = resolve_path_arg(val);
-        if (resolved) {
-          char *new_arg = static_cast<char *>(malloc(olen + 1 + strlen(resolved) + 1));
-          if (new_arg) {
-            memcpy(new_arg, opt, olen);
-            new_arg[olen] = '=';
-            strcpy(new_arg + olen + 1, resolved);
-            argv[i] = new_arg; 
-          }
-        }
-        break;
-      }
-
-      if (strcmp(arg, opt) == 0 && i + 1 < argc) {
-        const char *val = argv[i + 1];
-        if (!val || !*val ||val[0] == '/')
-          continue;
-        char *resolved = resolve_path_arg(val);
-        if (resolved)
-          argv[i + 1] = resolved; 
-        break;
-      }
-    }
-  }
-}
-
 void format_uptime(const long uptime_sec, char *buf, const size_t size) {
   if (uptime_sec < 0) {
     safe_strncpy(buf, "未知", size);

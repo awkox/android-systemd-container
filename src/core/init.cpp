@@ -227,10 +227,6 @@ void internal_boot(cfg_t *cfg) {
     write_file(uuid_path, "");
   }
 
-  if (config_save(FORK_MARKER "/container.config", cfg) < 0) {
-    log_warn("引导警告: 无法备份内部配置元数据");
-  }
-
   write_file(FORK_MARKER "/name", cfg->rt.container_name);
 
   if (cfg->conf.img_mount_point[0])
@@ -255,6 +251,8 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* 19. 清除环境变量并设置默认值 */
+  // 设置的环境变量会在proc environ形成快照
+  // 除非故意修改内核的环境变量指针，否则proc environ不会被修改
   clearenv();
   setenv("container", PROJECT_NAME, 1);
   if (cfg->conf.img_mount_point[0])

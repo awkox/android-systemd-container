@@ -126,23 +126,3 @@ void loop_detach(const char *loop_dev) {
     return;
   ioctl(fd, LOOP_CLR_FD, 0);
 }
-
-/* 通过 /proc/mounts 找到给定的挂载点背后的块设备（loop 节点） */
-int get_backing_dev(const char *mnt, char *dev_out, const size_t dev_size) {
-  auto_fclose FILE *f = fopen("/proc/mounts", "r");
-  if (!f)
-    return -1;
-
-  char line[PATH_MAX + 256];
-  bool found = false;
-  while (fgets(line, sizeof(line), f)) {
-    char dev[256], mntpt[PATH_MAX];
-    if (sscanf(line, "%255s %4095s", dev, mntpt) == 2 &&
-        strcmp(mntpt, mnt) == 0) {
-      safe_strncpy(dev_out, dev, dev_size);
-      found = true;
-      break;
-    }
-  }
-  return found ? 0 : -1;
-}

@@ -102,25 +102,6 @@ bool path_has_symlink(const fs::path& path) {
     return false;
 }
 
-bool is_subpath(const char *parent, const char *child) {
-  auto_free char *real_parent = resolve_path_arg(parent);
-  auto_free char *real_child = resolve_path_arg(child);
-
-  if (!real_parent || !real_child || !real_parent[0] || !real_child[0])
-    return false;
-
-  const size_t len = strlen(real_parent);
-
-  if (len == 1 && real_parent[0] == '/')
-    return true;
-
-  if (strncmp(real_parent, real_child, len) == 0)
-    if (real_child[len] == '\0' || real_child[len] == '/')
-      return true;
-
-  return false;
-}
-
 int force_unlink(const char *path) {
   if (unlink(path) < 0) {
     if (errno == EISDIR) {

@@ -270,25 +270,6 @@ int config_save(const char *config_path, cfg_t *cfg) {
   return 0;
 }
 
-char *config_auto_path(const char *rootfs_path) {
-  if (!rootfs_path || rootfs_path[0] == '\0')
-    return nullptr;
-
-  char temp[PATH_MAX];
-  safe_strncpy(temp, rootfs_path, sizeof(temp));
-
-  char *dir = dirname(temp);
-  char *final_path = static_cast<char*>(malloc(PATH_MAX));
-  if (final_path) {
-    if (strcmp(dir, "/") == 0)
-      snprintf(final_path, PATH_MAX, "/container.config");
-    else
-      snprintf(final_path, PATH_MAX, "%s/container.config", dir);
-  }
-
-  return final_path;
-}
-
 int config_load_by_name(const char *name, cfg_t *cfg) {
   if (!name || name[0] == '\0')
     return -1;

@@ -310,9 +310,6 @@ void unmount_rootfs_img(const char *mount_point, const bool silent) {
   if (!mount_point || !mount_point[0])
     return;
 
-  char loop_dev[256] = "";
-  get_backing_dev(mount_point, loop_dev, sizeof(loop_dev));
-
   /* 1. 懒卸载 (Lazy unmount)：即使文件被打开也会立即从命名空间剥离 */
   sync();
   umount2(mount_point, MNT_DETACH);

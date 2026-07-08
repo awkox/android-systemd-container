@@ -25,19 +25,11 @@ int main(const int argc, char **argv) {
   cfg_t cfg = {};
 
   bool loaded = false;
-  char temp_i[PATH_MAX] = "";
 
   if (argc < 2) {
     print_usage();
     return 1;
   }
-
-  /* 
-   * 在任何解析之前，将相对路径参数解析为绝对路径。
-   * 因为守护进程在 daemonize() 中会调用 chdir("/")，所以如果在
-   * 重新执行(re-exec)的子进程中解析相对于 "/" 的相对路径就会出错。
-   */
-  resolve_argv_paths(argc - 1, argv + 1);
 
   const char *cmd = argv[1];
   const char *subcmd = nullptr;
@@ -100,8 +92,17 @@ int main(const int argc, char **argv) {
     goto usage_error;
   }
 
+  /* 统一 root 权限卡口：在开始任何工作前拦截所有非豁免命令 */
+  if (!is_no_root_cmd && getuid() != 0) {
+    log_error("执行 '%s' 命令需要 Root 权限", cmd);
+    ret = 1;
+    goto cleanup;
+  }
+
   /* 用解析后的参数填充 cfg */
   if (name) {
+    // 检验容器名合规性
+    // 整个程序唯一的container_name来源
     if (reject_container_name(name) < 0) {
       ret = 1;
       goto cleanup;
@@ -126,21 +127,14 @@ int main(const int argc, char **argv) {
     }
   }
 
-  /* 统一 root 权限卡口：在开始任何工作前拦截所有非豁免命令 */
-  if (!is_no_root_cmd && getuid() != 0) {
-    log_error("执行 '%s' 命令需要 Root 权限", cmd);
+  /* 对于有状态的命令，我们绝对需要一个容器名称。 */
+  if (is_stateful && cfg.rt.container_name[0] == '\0') {
+    log_error("执行此命令必须指定容器名称。");
     ret = 1;
     goto cleanup;
   }
 
-  /*
-   * 统一配置发现与加载
-   * 1. 尝试从显式提供的配置文件加载。
-   * 2. 否则尝试根据 rootfs 路径自动检测配置。
-   * 3. 确保对于有状态(stateful)的命令，我们有一个容器名称。
-   * 4. 如果配置尚未成功加载，执行恢复扫描以尝试从
-   *    <workspace dir>/config/<name>/container.config 加载。
-   */
+  // 尝试直接加载配置
   if (cfg.rt.config_file[0]) {
     if (config_load(cfg.rt.config_file, &cfg) < 0) {
       log_error("无法从 '%s' 加载配置: %s", cfg.rt.config_file,
@@ -149,39 +143,14 @@ int main(const int argc, char **argv) {
       goto cleanup;
     }
     loaded = true;
-  } else {
-    auto_free char *auto_p = config_auto_path(temp_i);
-    if (auto_p) {
-      safe_strncpy(cfg.rt.config_file, auto_p, sizeof(cfg.rt.config_file));
-      if (config_load(cfg.rt.config_file, &cfg) == 0) {
-        loaded = true;
-      } else if (errno != ENOENT) {
-        log_warn("无法加载自动检测到的配置文件 '%s': %s",
-                 cfg.rt.config_file, strerror(errno));
-      }
-    }
-  }
-
-  /* 对于有状态的命令，我们绝对需要一个容器名称。 */
-  if (is_stateful && cfg.rt.container_name[0] == '\0') {
-    log_error("执行此命令必须指定容器名称。");
-    ret = 1;
-    goto cleanup;
   }
 
   /* 如果我们有名称但尚未成功加载配置文件，按名称加载。 */
   if (!loaded && cfg.rt.container_name[0] != '\0') {
     if (config_load_by_name(cfg.rt.container_name, &cfg) < 0) {
-      /* 如果按名称加载失败且它是一个有状态命令，可能容器已被移动或重命名。
-       * 作为最后手段，对正在运行的系统执行恢复扫描。 */
-      if (is_stateful) {
-        if (config_load_by_name(cfg.rt.container_name, &cfg) < 0) {
-          log_error("未找到容器 '%s' 或元数据丢失。",
-                    cfg.rt.container_name);
-          ret = 1;
-          goto cleanup;
-        }
-      }
+      log_error("未找到容器 '%s' 或元数据丢失。", cfg.rt.container_name);
+      ret = 1;
+      goto cleanup;
     }
   }
 
