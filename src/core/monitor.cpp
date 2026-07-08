@@ -7,9 +7,7 @@
  * 会调用 _exit() 退出。sync_pipe_write 用于首次引导时向父进程发送 init PID。
  * ---------------------------------------------------------------------------*/
 void monitor_run(cfg_t *cfg, int sync_pipe_write) {
-  int sync_pipe[2];
-  sync_pipe[0] = -1;
-  sync_pipe[1] = sync_pipe_write;
+  int sync_pipe[2] = {-1, sync_pipe_write};
   bool stdio_redirected = false;
 
   if (setsid() < 0 && errno != EPERM) {
@@ -146,6 +144,7 @@ reboot_loop:;
     if (init_pid == 0) {
       /* 容器内的 INIT 进程 (PID 1) */
       close(sync_pipe[1]);
+      sync_pipe[1] = -1;
       internal_boot(cfg);
       _exit(-1); 
     }
@@ -199,11 +198,6 @@ reboot_loop:;
       dup2(devnull, 2);
     }
     stdio_redirected = true;
-  }
-
-  if (sync_pipe[1] >= 0) {
-    close(sync_pipe[1]);
-    sync_pipe[1] = -1;
   }
 
   /* 监控器心跳循环：每 500ms 刷新一次虚拟化数据，并探测子进程 */

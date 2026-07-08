@@ -301,8 +301,6 @@ int start_rootfs(cfg_t *cfg) {
 
   if (read(sync_pipe[0], &cfg->rt.container_pid, sizeof(pid_t)) != sizeof(pid_t)) {
     log_error("Monitor 监控进程未能发送容器 PID。");
-    if (lock_acquired)
-      release_external_lock();
     goto cleanup;
   }
   close(sync_pipe[0]);

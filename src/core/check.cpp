@@ -88,7 +88,6 @@ int check_requirements_hw() {
   if (missing > 0) {
     printf("\n");
     log_error("缺少 %d 项【必须】功能 - 无法继续启动过程", missing);
-    log_info("请运行 './" PROJECT_NAME " check' 来查看完整的系统诊断报告。");
     return -1;
   }
 
