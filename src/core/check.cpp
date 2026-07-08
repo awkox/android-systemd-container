@@ -1,12 +1,5 @@
 #include "asc.h"
 
-static bool is_root = false;
-
-static bool check_root(void) {
-  is_root = getuid() == 0;
-  return is_root;
-}
-
 static bool check_ns(const int flag, const char *name) {
   /* 1. 通过 /proc 快速检查内核支持 */
   char path[PATH_MAX];
@@ -56,12 +49,6 @@ static bool check_kernel_version_supported(void) {
 
 int check_requirements_hw() {
   int missing = 0;
-
-  if (!check_root()) {
-    log_error("必须以 root 用户身份运行");
-    log_info("本工具需要 root 权限来进行命名空间和挂载操作。");
-    missing++;
-  }
 
   /* 功能性命名空间检查 */
   if (!check_ns(CLONE_NEWNS, "mnt")) {

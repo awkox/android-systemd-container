@@ -79,9 +79,7 @@ constexpr int STOP_TIMEOUT = 15;
 constexpr unsigned int RETRY_DELAY_US = 200000;
 constexpr int REBOOT_EXIT = 249;
 constexpr int NL_BUFSIZE = 8192;
-constexpr int BIND_INITIAL_CAP = 4;
 constexpr int DEFAULT_TTY_GID = 5;
-constexpr int MAX_TRACKED_ENTRIES = 512;
 
 // 运行时路径
 #define RUNTIME_DIR "/tmp/asc"
@@ -89,16 +87,12 @@ constexpr int MAX_TRACKED_ENTRIES = 512;
 #define RUNTIME_CONFIG_SUBDIR "config"
 #define RUNTIME_LOGS_SUBDIR "logs"
 #define RUNTIME_VOLATILE_SUBDIR "volatile"
-#define RUNTIME_MNT_SUBDIR "mnt"
 #define IMG_MOUNT_ROOT "/mnt/asc"
 #define DEFAULT_INIT "/sbin/init"
 #define ANDROID_TMPFS_CONTEXT "u:object_r:tmpfs:s0"
 
 // 通用路径与模式
 #define PROC_ROOT_FMT "/proc/%d/root"
-#define PROC_CMDLINE_FMT "/proc/%d/cmdline"
-#define PROC_STATUS_FMT "/proc/%d/status"
-#define PROC_MOUNTINFO "/proc/self/mountinfo"
 #define OS_RELEASE "/etc/os-release"
 #define FORK_MARKER "/run/asc"
 #define VPROC_PATH "/run/asc/vproc"
