@@ -13,6 +13,13 @@ void rotate_log(const char *path, const size_t max_size) {
   }
 }
 
+static void make_container_log_dir(const char *name, char *dir, const size_t size) {
+  char safe_log_name[256];
+  sanitize_container_name(name, safe_log_name, sizeof(safe_log_name));
+  snprintf(dir, size, "%.2048s/" RUNTIME_LOGS_SUBDIR "/%.256s",
+           get_runtime_dir(), safe_log_name);
+}
+
 static void write_to_log_file(const char *name, const char *component,
                               const char *raw_msg, const int pre_opened_fd) {
   if (!name || !name[0])
@@ -37,10 +44,7 @@ static void write_to_log_file(const char *name, const char *component,
   }
 
   char log_dir[PATH_MAX];
-  char safe_log_name[256];
-  sanitize_container_name(name, safe_log_name, sizeof(safe_log_name));
-  snprintf(log_dir, sizeof(log_dir), "%.2048s/" RUNTIME_LOGS_SUBDIR "/%.256s",
-           get_runtime_dir(), safe_log_name);
+  make_container_log_dir(name, log_dir, sizeof(log_dir));
   mkdir_p(log_dir, 0755);
 
   char log_path[PATH_MAX];
@@ -133,11 +137,7 @@ void open_container_log(cfg_t *cfg) {
     return;
 
   char log_dir[PATH_MAX];
-  char safe_log_name[256];
-  sanitize_container_name(cfg->conf.container_name, safe_log_name,
-                          sizeof(safe_log_name));
-  snprintf(log_dir, sizeof(log_dir), "%.2048s/" RUNTIME_LOGS_SUBDIR "/%.256s",
-           get_runtime_dir(), safe_log_name);
+  make_container_log_dir(cfg->conf.container_name, log_dir, sizeof(log_dir));
   mkdir_p(log_dir, 0755);
 
   char log_path[PATH_MAX];

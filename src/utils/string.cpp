@@ -165,6 +165,43 @@ int reject_container_name(const char *name) {
   return 0;
 }
 
+void format_privileged_mask(const int mask, char *buf, const size_t size) {
+  if (size == 0)
+    return;
+  buf[0] = '\0';
+
+  if (mask <= 0)
+    return;
+
+  if (mask == PRIV_FULL) {
+    safe_strncpy(buf, "full", size);
+    return;
+  }
+
+  bool first = true;
+  const struct {
+    int flag;
+    const char *name;
+  } flags[] = {
+    {PRIV_NOMASK, "nomask"},
+    {PRIV_NOCAPS, "nocaps"},
+    {PRIV_NOSEC,  "noseccomp"},
+    {PRIV_SHARED,"shared"},
+    {PRIV_UNFILT,"unfiltered-dev"},
+  };
+
+  size_t pos = 0;
+  for (const auto &f : flags) {
+    if (mask & f.flag) {
+      const int n = snprintf(buf + pos, size - pos, "%s%s",
+                              first ? "" : ",", f.name);
+      if (n > 0)
+        pos += static_cast<size_t>(n);
+      first = false;
+    }
+  }
+}
+
 void format_size(const long long bytes, char *buf, const size_t sz) {
   if (bytes <= 0) {
     snprintf(buf, sz, "N/A");

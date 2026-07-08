@@ -203,33 +203,9 @@ static void config_serialize_known(FILE *f, asc_conf_t *conf) {
     fprintf(f, "pids_limit=%lld\n", conf->pids_limit);
 
   if (conf->privileged_mask > 0) {
-    fprintf(f, "privileged=");
-    if (conf->privileged_mask == PRIV_FULL) {
-      fprintf(f, "full");
-    } else {
-      bool first = true;
-      if (conf->privileged_mask & PRIV_NOMASK) {
-        fprintf(f, "%snomask", first ? "" : ",");
-        first = false;
-      }
-      if (conf->privileged_mask & PRIV_NOCAPS) {
-        fprintf(f, "%snocaps", first ? "" : ",");
-        first = false;
-      }
-      if (conf->privileged_mask & PRIV_NOSEC) {
-        fprintf(f, "%snoseccomp", first ? "" : ",");
-        first = false;
-      }
-      if (conf->privileged_mask & PRIV_SHARED) {
-        fprintf(f, "%sshared", first ? "" : ",");
-        first = false;
-      }
-      if (conf->privileged_mask & PRIV_UNFILT) {
-        fprintf(f, "%sunfiltered-dev", first ? "" : ",");
-        first = false;
-      }
-    }
-    fprintf(f, "\n");
+    char mask_str[256];
+    format_privileged_mask(conf->privileged_mask, mask_str, sizeof(mask_str));
+    fprintf(f, "privileged=%s\n", mask_str);
   }
 
   fprintf(f, "isolation_network=%d\n", conf->isolation_network);

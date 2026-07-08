@@ -164,7 +164,7 @@ void internal_boot(cfg_t *cfg) {
   }
 
   if (!cfg->conf.hw_access || cfg->rt.foreground) {
-    if (mount(nullptr, "sys", nullptr, MS_REMOUNT | MS_BIND | MS_RDONLY, nullptr) < 0) {
+    if (mount(nullptr, "sys", nullptr, MS_REMOUNT | MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
       log_warn("无法将 /sys 重新挂载为只读模式: %s", strerror(errno));
     }
   }

@@ -176,25 +176,37 @@ int setup_cgroups(const bool force_cgroupv1) {
 }
 
 static void rmdir_cgroup_tree(const char *path) {
-  auto_closedir DIR *d = opendir(path);
+  DIR *d = opendir(path);
   if (!d) {
     rmdir(path);
     return;
   }
 
   struct dirent *de;
+  char **subdirs = nullptr;
+  size_t count = 0, cap = 16;
+  subdirs = static_cast<char **>(malloc(cap * sizeof(char *)));
   while ((de = readdir(d)) != nullptr) {
     if (de->d_name[0] == '.')
       continue;
     if (de->d_type != DT_DIR && de->d_type != DT_UNKNOWN)
       continue;
 
-    char child[PATH_MAX];
-    safe_strncpy(child, path, sizeof(child));
-    strncat(child, "/", sizeof(child) - strlen(child) - 1);
-    strncat(child, de->d_name, sizeof(child) - strlen(child) - 1);
-    rmdir_cgroup_tree(child);
+    if (count >= cap) {
+      cap *= 2;
+      subdirs = static_cast<char **>(realloc(subdirs, cap * sizeof(char *)));
+    }
+    subdirs[count++] = strdup(de->d_name);
   }
+  closedir(d); /* 关闭目录后再递归，彻底避免 FD 泄漏 */
+
+  for (size_t i = 0; i < count; i++) {
+    char child[PATH_MAX];
+    snprintf(child, sizeof(child), "%s/%s", path, subdirs[i]);
+    rmdir_cgroup_tree(child);
+    free(subdirs[i]);
+  }
+  free(subdirs);
 
   char kill_path[PATH_MAX];
   safe_strncpy(kill_path, path, sizeof(kill_path));

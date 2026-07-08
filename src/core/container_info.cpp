@@ -118,33 +118,9 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
   }
 
   if (cfg->conf.privileged_mask > 0) {
-    printf("  特权模式掩码: ");
-    if (cfg->conf.privileged_mask == PRIV_FULL) {
-      printf("完整(full)");
-    } else {
-      bool first = true;
-      if (cfg->conf.privileged_mask & PRIV_NOMASK) {
-        printf("%snomask", first ? "" : ", ");
-        first = false;
-      }
-      if (cfg->conf.privileged_mask & PRIV_NOCAPS) {
-        printf("%snocaps", first ? "" : ", ");
-        first = false;
-      }
-      if (cfg->conf.privileged_mask & PRIV_NOSEC) {
-        printf("%snoseccomp", first ? "" : ", ");
-        first = false;
-      }
-      if (cfg->conf.privileged_mask & PRIV_SHARED) {
-        printf("%sshared", first ? "" : ", ");
-        first = false;
-      }
-      if (cfg->conf.privileged_mask & PRIV_UNFILT) {
-        printf("%sunfiltered-dev", first ? "" : ", ");
-        first = false;
-      }
-    }
-    printf("\n");
+    char mask_str[256];
+    format_privileged_mask(cfg->conf.privileged_mask, mask_str, sizeof(mask_str));
+    printf("  特权模式掩码: %s\n", mask_str);
     feat_count++;
   }
 

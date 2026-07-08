@@ -3,7 +3,7 @@
 /* 不依赖 /dev/ptmx 符号链接直接打开 master 与 slave。
  * 对于 4.13+ 内核，使用 TIOCGPTPEER 直接从 master 文件描述符派生打开 slave。
  * 对于 3.x 内核，回退使用 TIOCGPTN + 路径打开的方式。*/
-int openpty(int *master, int *slave, char *name) {
+int asc_openpty(int *master, int *slave, char *name) {
   const int m = open("/dev/ptmx", O_RDWR | O_NOCTTY | O_CLOEXEC);
   if (m < 0)
     return -1;
@@ -44,7 +44,7 @@ err:
 }
 
 int terminal_create(struct tty_info *tty) {
-  if (openpty(&tty->master, &tty->slave, tty->name) < 0) {
+  if (asc_openpty(&tty->master, &tty->slave, tty->name) < 0) {
     log_error("openpty 获取伪终端失败: %s", strerror(errno));
     return -1;
   }

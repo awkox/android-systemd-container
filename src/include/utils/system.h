@@ -8,6 +8,7 @@ int parse_os_release(const char *rootfs_path, char *id_out, char *ver_out, const
 int read_proc_environ(const pid_t pid, const char *key, char *value, const size_t size);
 int run_command_quiet(char *const argv[]);
 int get_kernel_version(int *major, int *minor);
+void build_firmware_path(const char *mount_point, char *buf, const size_t size);
 void oom_protect(void);
 
 #endif

@@ -3,7 +3,7 @@
 
 #include "common.h"
 
-int openpty(int *master, int *slave, char *name);
+int asc_openpty(int *master, int *slave, char *name);
 int terminal_create(struct tty_info *tty);
 int terminal_set_stdfds(const int fd);
 int terminal_make_controlling(const int fd);

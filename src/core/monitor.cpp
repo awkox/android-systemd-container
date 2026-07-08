@@ -49,23 +49,22 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
         int eoff = 0;
         if (read_file("/sys/fs/cgroup/cgroup.controllers", buf, sizeof(buf)) >
             0) {
-          if (cfg->conf.memory_limit && cg_word_in_list(buf, "memory")) {
-            int n = snprintf(enable + eoff, sizeof(enable) - static_cast<size_t>(eoff),
-                             "%s+memory", eoff ? " " : "");
-            if (n > 0)
-              eoff += n;
-          }
-          if (cfg->conf.cpu_quota && cg_word_in_list(buf, "cpu")) {
-            int n = snprintf(enable + eoff, sizeof(enable) - static_cast<size_t>(eoff),
-                             "%s+cpu", eoff ? " " : "");
-            if (n > 0)
-              eoff += n;
-          }
-          if (cfg->conf.pids_limit && cg_word_in_list(buf, "pids")) {
-            int n = snprintf(enable + eoff, sizeof(enable) - static_cast<size_t>(eoff),
-                             "%s+pids", eoff ? " " : "");
-            if (n > 0)
-              eoff += n;
+          const struct {
+            long long limit;
+            const char *controller;
+          } ctrl_map[] = {
+            {cfg->conf.memory_limit, "memory"},
+            {cfg->conf.cpu_quota,    "cpu"},
+            {cfg->conf.pids_limit,   "pids"},
+          };
+          for (const auto &c : ctrl_map) {
+            if (c.limit && cg_word_in_list(buf, c.controller)) {
+              const int n = snprintf(enable + eoff,
+                                     sizeof(enable) - static_cast<size_t>(eoff),
+                                     "%s+%s", eoff ? " " : "", c.controller);
+              if (n > 0)
+                eoff += n;
+            }
           }
         }
         if (eoff > 0) {
@@ -282,19 +281,14 @@ reboot_loop:;
       fflush(stdout);
     }
 
-    if (cfg->conf.uuid[0] != '\0') {
-      pid_t new_pid = find_container_init_pid(cfg->conf.uuid);
-      if (new_pid > 0)
-        cfg->rt.container_pid = new_pid;
-    }
-
-    if (!cfg->conf.volatile_mode && cfg->rt.container_pid > 0) {
+    /* 将 .boot-uuid 写入真实的挂载点内，而非旧容器失效的 proc 路径 */
+    if (!cfg->conf.volatile_mode && cfg->conf.img_mount_point[0]) {
       char run_dir[PATH_MAX];
-      snprintf(run_dir, sizeof(run_dir), "/proc/%d/root/run",
-               cfg->rt.container_pid);
+      snprintf(run_dir, sizeof(run_dir), "%s/run", cfg->conf.img_mount_point);
       mkdir(run_dir, 0755);
-      auto_close int fd = safe_openat_proc(cfg->rt.container_pid, "run/.boot-uuid",
-                                O_WRONLY | O_CREAT | O_TRUNC, 0644);
+      char uuid_path[PATH_MAX];
+      snprintf(uuid_path, sizeof(uuid_path), "%s/.boot-uuid", run_dir);
+      auto_close int fd = open(uuid_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
       if (fd >= 0) {
         size_t ulen = strlen(cfg->conf.uuid);
         write_all(fd, cfg->conf.uuid, ulen);
@@ -318,7 +312,9 @@ reboot_loop:;
     cfg->rt.reboot_cycle = true;
     clock_gettime(CLOCK_BOOTTIME, &cfg->rt.start_time);
 
-    cfg->rt.ns_inode = get_pid_ns_inode(cfg->rt.container_pid);
+    /* 重置容器 PID 以让 Monitor 后续的 while 循环能够正确探测新生容器 */
+    cfg->rt.container_pid = 0;
+    cfg->rt.ns_inode = 0;
     if (cfg->rt.foreground)
       log_silent = 1;
 

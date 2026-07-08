@@ -62,7 +62,7 @@ static int stop_rootfs_with_timeout(cfg_t *cfg, int timeout_seconds) {
 
   if (cfg->conf.img_mount_point[0] && !unkillable && cfg->conf.hw_access) {
     char fw_path[PATH_MAX + 16];
-    snprintf(fw_path, sizeof(fw_path), "%s/lib/firmware", cfg->conf.img_mount_point);
+    build_firmware_path(cfg->conf.img_mount_point, fw_path, sizeof(fw_path));
     firmware_path_remove(fw_path);
   }
 

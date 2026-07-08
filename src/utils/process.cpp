@@ -113,15 +113,13 @@ long get_container_uptime(const pid_t pid) {
 
   unsigned long long start_ticks = 0;
   {
-    auto_fclose FILE *f = fopen(stat_path, "r");
-    if (!f)
-      return -1;
-    for (int i = 1; i <= 21; i++) {
-      if (fscanf(f, "%*s") == EOF)
-        break;
+    char buf[1024];
+    if (read_file(stat_path, buf, sizeof(buf)) > 0) {
+      char *p = strrchr(buf, ')');
+      if (p) {
+        sscanf(p + 1, " %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %*u %*u %*d %*d %*d %*d %*d %*d %llu", &start_ticks);
+      }
     }
-    if (fscanf(f, "%llu", &start_ticks) != 1)
-      start_ticks = 0;
   }
   if (start_ticks == 0)
     return -1;

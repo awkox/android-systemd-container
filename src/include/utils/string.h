@@ -11,5 +11,6 @@ void format_size(const long long bytes, char *buf, const size_t sz);
 void format_uptime(const long uptime_sec, char *buf, const size_t size);
 int validate_container_name(const char *name);
 int reject_container_name(const char *name);
+void format_privileged_mask(const int mask, char *buf, const size_t size);
 
 #endif

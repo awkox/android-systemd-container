@@ -285,12 +285,12 @@ static double container_start_time_secs(const pid_t pid) {
   if (!f)
     return -1.0;
   unsigned long long starttime = 0;
-  const int r = fscanf(f,
-                 "%*d %*s %*c %*d %*d %*d %*d %*d %*u "
-                 "%*u %*u %*u %*u %*u %*u %*d %*d "
-                 "%*d %*d %*d %*d %llu",
-                 &starttime);
-  if (r != 1 || starttime == 0)
+  char buf[1024];
+  if (fgets(buf, sizeof(buf), f)) {
+    char *p = strrchr(buf, ')');
+    if (p) sscanf(p + 1, " %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %*u %*u %*d %*d %*d %*d %*d %*d %llu", &starttime);
+  }
+  if (starttime == 0)
     return -1.0;
   const long ticks = sysconf(_SC_CLK_TCK);
   if (ticks <= 0)
@@ -513,8 +513,7 @@ void virtualize_update(const cfg_t *cfg) {
   }
 
   char vproc_dir[PATH_MAX];
-  snprintf(vproc_dir, sizeof(vproc_dir), PROC_ROOT_FMT VPROC_PATH,
-           static_cast<int>(cfg->rt.container_pid));
+  build_proc_root_path(cfg->rt.container_pid, VPROC_PATH, vproc_dir, sizeof(vproc_dir));
   struct stat st_dir;
   if (stat(vproc_dir, &st_dir) != 0 || !S_ISDIR(st_dir.st_mode)) {
     return;
@@ -550,8 +549,7 @@ void virtualize_update(const cfg_t *cfg) {
 
     struct stat st;
     char path[PATH_MAX];
-    snprintf(path, sizeof(path), PROC_ROOT_FMT "/%s", static_cast<int>(cfg->rt.container_pid),
-             subpath);
+    build_proc_root_path(cfg->rt.container_pid, subpath, path, sizeof(path));
     if (stat(path, &st) != 0) {
       write_monitor_debug_log(cfg->conf.container_name,
                               "[VIRT] 虚拟文件丢失: %s (%s)", path,

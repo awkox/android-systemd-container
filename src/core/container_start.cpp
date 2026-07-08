@@ -80,7 +80,7 @@ void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
 
   if (!force_cleanup && cfg->conf.hw_access && cfg->conf.img_mount_point[0]) {
     char fw_path[PATH_MAX + 16];
-    snprintf(fw_path, sizeof(fw_path), "%s/lib/firmware", cfg->conf.img_mount_point);
+    build_firmware_path(cfg->conf.img_mount_point, fw_path, sizeof(fw_path));
     firmware_path_remove(fw_path);
   }
 
@@ -268,7 +268,7 @@ int start_rootfs(cfg_t *cfg) {
 
   if (cfg->conf.hw_access) {
     char fw_path[PATH_MAX + 16];
-    snprintf(fw_path, sizeof(fw_path), "%s/lib/firmware", cfg->conf.img_mount_point);
+    build_firmware_path(cfg->conf.img_mount_point, fw_path, sizeof(fw_path));
     firmware_path_add(fw_path);
   }
 

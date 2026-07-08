@@ -105,7 +105,7 @@ static void handle_session(int conn, req_t *r) {
   char buf[IOBUF];
 
   if (is_pty) {
-    if (openpty(&master, &slave, nullptr) < 0) {
+    if (asc_openpty(&master, &slave, nullptr) < 0) {
       send_frame(conn, MSG_ERR, "daemon: openpty 失败\n", 23);
       send_exit(conn, 1);
       return;
@@ -685,6 +685,9 @@ int daemon_run(const bool foreground) {
       continue;
     }
     if (h == 0) {
+      // 由于handle_conn中调用_exit
+      // auto_exit无法自动清理，所以手动关闭srv
+      close(srv);
       signal(SIGCHLD, SIG_DFL);
       handle_conn(conn);
     }
