@@ -100,6 +100,44 @@ bool is_container_init(const pid_t pid) {
   return st_pid.st_ino != st_host.st_ino;
 }
 
+long get_container_uptime(const pid_t pid) {
+  if (pid <= 0)
+    return -1;
+
+  long clk_tck = sysconf(_SC_CLK_TCK);
+  if (clk_tck <= 0)
+    clk_tck = 100;
+
+  char stat_path[PATH_MAX];
+  snprintf(stat_path, sizeof(stat_path), "/proc/%d/stat", static_cast<int>(pid));
+
+  unsigned long long start_ticks = 0;
+  {
+    auto_fclose FILE *f = fopen(stat_path, "r");
+    if (!f)
+      return -1;
+    for (int i = 1; i <= 21; i++) {
+      if (fscanf(f, "%*s") == EOF)
+        break;
+    }
+    if (fscanf(f, "%llu", &start_ticks) != 1)
+      start_ticks = 0;
+  }
+  if (start_ticks == 0)
+    return -1;
+
+  {
+    auto_fclose FILE *f = fopen("/proc/uptime", "r");
+    if (!f)
+      return -1;
+    double host_uptime_sec = 0.0;
+    if (fscanf(f, "%lf", &host_uptime_sec) != 1)
+      host_uptime_sec = 0.0;
+    const long uptime_sec = static_cast<long>(host_uptime_sec - static_cast<double>(start_ticks) / static_cast<double>(clk_tck));
+    return uptime_sec < 0 ? 0 : uptime_sec;
+  }
+}
+
 pid_t find_container_init_pid(const char *uuid) {
   if (!uuid || uuid[0] == '\0')
     return 0;

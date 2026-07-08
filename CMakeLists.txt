@@ -24,30 +24,46 @@ configure_file(
 
 add_executable(asc
 	src/main.cpp
-	src/utils.cpp
 	src/fs_mount.cpp
-	src/core/state.cpp
-	src/core/init.cpp
+
+	# Core - container lifecycle
 	src/core/config.cpp
-	src/core/container.cpp
+	src/core/container_start.cpp
+	src/core/container_stop.cpp
+	src/core/container_info.cpp
+	src/core/init.cpp
 	src/core/monitor.cpp
-	src/core/daemon.cpp
+	src/core/state.cpp
 	src/core/check.cpp
-	src/utils/string.cpp
-	src/utils/fileio.cpp
-	src/utils/logger.cpp
-	src/utils/workspace.cpp
-	src/utils/process.cpp
+
+	# Core - daemon
+	src/core/daemon_protocol.cpp
+	src/core/daemon_server.cpp
+	src/core/daemon_client.cpp
+
+	# OCI - security & resource control
+	src/oci/caps.cpp
+	src/oci/cgroup.cpp
 	src/oci/jail.cpp
 	src/oci/seccomp.cpp
-	src/oci/cgroup.cpp
-	src/oci/caps.cpp
+
+	# Platform - system interaction
 	src/platform/blockdev.cpp
-	src/platform/devices.cpp
-	src/platform/pty.cpp
 	src/platform/console.cpp
+	src/platform/devices.cpp
 	src/platform/netlink.cpp
+	src/platform/pty.cpp
 	src/platform/virtual.cpp
+
+	# Utils - helpers
+	src/utils/fileio.cpp
+	src/utils/logger.cpp
+	src/utils/process.cpp
+	src/utils/string.cpp
+	src/utils/workspace.cpp
+	src/utils/uuid.cpp
+	src/utils/system.cpp
+	src/utils/firmware.cpp
 )
 target_include_directories(asc PRIVATE 
     "${CMAKE_CURRENT_SOURCE_DIR}/src/include"

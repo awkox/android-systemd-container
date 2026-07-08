@@ -45,7 +45,8 @@ char *resolve_path_arg(const char *path) {
   fs::path abs_path;
 
   // weakly_canonical 会智能将其转为绝对路径，并解析沿途已存在的符号链接
-  // 即使路径末尾的几个层级尚未在磁盘上创建，它也能优雅处理，完美替代原始繁琐的 getcwd/realpath 回退逻辑
+  // 即使路径末尾的几个层级尚未在磁盘上创建，它也能优雅处理
+  // 完美替代原始繁琐的 getcwd/realpath 回退逻辑
   abs_path = fs::weakly_canonical(p, ec);
   if (ec) {
     // 遇到极端无权限访问情况时的回退：纯字面量绝对路径转换
@@ -109,6 +110,59 @@ void resolve_argv_paths(const int argc, char **argv) {
       }
     }
   }
+}
+
+void format_uptime(const long uptime_sec, char *buf, const size_t size) {
+  if (uptime_sec < 0) {
+    safe_strncpy(buf, "未知", size);
+    return;
+  }
+
+  const int days = uptime_sec / 86400;
+  const int hours = uptime_sec % 86400 / 3600;
+  const int mins = uptime_sec % 3600 / 60;
+  const int secs = uptime_sec % 60;
+
+  char tmp[128] = "";
+  int pos = 0;
+
+  if (days > 0)
+    pos += snprintf(tmp + pos, sizeof(tmp) - pos, "%dd ", days);
+  if (hours > 0 || days > 0)
+    pos += snprintf(tmp + pos, sizeof(tmp) - pos, "%dh ", hours);
+  if (mins > 0 || hours > 0 || days > 0)
+    pos += snprintf(tmp + pos, sizeof(tmp) - pos, "%dm ", mins);
+  snprintf(tmp + pos, sizeof(tmp) - pos, "%ds", secs);
+
+  safe_strncpy(buf, tmp, size);
+}
+
+int validate_container_name(const char *name) {
+  if (!name || !name[0])
+    return 0;
+
+  if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+    return 0;
+
+  const size_t len = strlen(name);
+  if (len >= 256)
+    return 0;
+
+  for (size_t i = 0; i < len; i++) {
+    const unsigned char c = static_cast<unsigned char>(name[i]);
+    if (!(isalnum(c) || c == '.' || c == '_' || c == '-' || c == ' '))
+      return 0;
+  }
+
+  return 1;
+}
+
+int reject_container_name(const char *name) {
+  if (!validate_container_name(name)) {
+    log_error("非法的容器名称 '%s'。", name);
+    return -1;
+  }
+  return 0;
 }
 
 void format_size(const long long bytes, char *buf, const size_t sz) {

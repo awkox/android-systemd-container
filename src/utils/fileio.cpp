@@ -133,3 +133,38 @@ int force_unlink(const char *path) {
   }
   return 0;
 }
+
+int safe_openat_proc(const pid_t pid, const char *subpath, const int flags, const mode_t mode) {
+  if (pid <= 0 || !subpath || subpath[0] == '\0')
+    return -1;
+
+  char root[64];
+  snprintf(root, sizeof(root), "/proc/%d/root", pid);
+  auto_close int dirfd = open(root, O_PATH | O_DIRECTORY | O_CLOEXEC);
+  if (dirfd < 0)
+    return -1;
+
+  char tmp[PATH_MAX];
+  safe_strncpy(tmp, subpath, sizeof(tmp));
+
+  char *save = nullptr;
+  const char *comp = strtok_r(tmp, "/", &save);
+  const char *next = strtok_r(nullptr, "/", &save);
+
+  while (comp && next) {
+    const int nextfd =
+        openat(dirfd, comp, O_PATH | O_NOFOLLOW | O_DIRECTORY | O_CLOEXEC);
+    close(dirfd);
+    if (nextfd < 0)
+      return -1;
+    dirfd = nextfd;
+    comp = next;
+    next = strtok_r(nullptr, "/", &save);
+  }
+
+  int fd = -1;
+  if (comp)
+    fd = openat(dirfd, comp, flags | O_NOFOLLOW | O_CLOEXEC, mode);
+
+  return fd;
+}
