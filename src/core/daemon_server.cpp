@@ -307,27 +307,28 @@ static void handle_session(int conn, req_t *r) {
                 if (pty_wbuf_len + rem <= PTY_WBUF_MAX) {
                   if (pty_wbuf_len + rem > pty_wbuf_cap) {
                     size_t ncap = pty_wbuf_cap ? pty_wbuf_cap : IOBUF;
+                    
+                    // 移除 PTY_WBUF_MAX 的硬性阻断，按需分配空间。
+                    // 因为下方的 conn_suspended 背压机制会自动停止接收新数据，
+                    // 这里只需确保最后一帧能被完整塞入，杜绝丢数据。
                     while (ncap < pty_wbuf_len + rem) {
-                      if (ncap > PTY_WBUF_MAX / 2) {
-                        ncap = PTY_WBUF_MAX;
-                        break;
-                      }
                       ncap *= 2;
                     }
-                    if (ncap > PTY_WBUF_MAX)
-                      ncap = PTY_WBUF_MAX;
+                    
                     uint8_t *nb = static_cast<uint8_t *>(realloc(pty_wbuf, ncap));
                     if (nb) {
                       pty_wbuf = nb;
                       pty_wbuf_cap = ncap;
                     }
                   }
+                  
                   if (pty_wbuf_len + rem <= pty_wbuf_cap) {
                     memcpy(pty_wbuf + pty_wbuf_len, buf + written, rem);
                     pty_wbuf_len += rem;
                     ev.events = EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLERR;
                     ev.data.fd = master;
                     epoll_ctl(epfd, EPOLL_CTL_MOD, master, &ev);
+                    
                     if (!conn_suspended && pty_wbuf_len >= PTY_WBUF_HIGH) {
                       ev.events = EPOLLHUP | EPOLLERR;
                       ev.data.fd = conn;
@@ -550,6 +551,14 @@ static void daemonize(const bool foreground) {
 
   umask(0);
   if (chdir("/") < 0) {
+  }
+
+  if (!foreground) {
+    /* 防止在 Shell 中使用 (比如 `asc daemon start 3>&1`) 时导致的描述符泄漏 */
+    const int max_fd = static_cast<int>(sysconf(_SC_OPEN_MAX));
+    for (int i = 3; i < max_fd; i++) {
+      close(i);
+    }
   }
 
   if (!foreground) {

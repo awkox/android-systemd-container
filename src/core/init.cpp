@@ -53,9 +53,13 @@ void internal_boot(cfg_t *cfg) {
     goto boot_fail;
   }
 
-  /* 2. 将所有挂载转为私有模式 (MS_PRIVATE)，防止泄漏到宿主机。 */
-  if (mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) < 0) {
-    log_error("无法将根目录挂载点设为 private: %s", strerror(errno));
+  /* 2. 挂载传播隔离 */
+  unsigned long root_prop = MS_PRIVATE;
+  if (cfg->conf.privileged_mask & PRIV_SHARED) {
+    root_prop = MS_SLAVE;
+  }
+  if (mount(nullptr, "/", nullptr, MS_REC | root_prop, nullptr) < 0) {
+    log_error("无法设置根目录挂载传播模式 (prop=%lu): %s", root_prop, strerror(errno));
     goto boot_fail;
   }
 
@@ -176,16 +180,6 @@ void internal_boot(cfg_t *cfg) {
   if (chdir("/") < 0) {
     log_error("pivot_root 后的 chdir(\"/\") 失败: %s", strerror(errno));
     goto boot_fail;
-  }
-
-  /* 应用延迟的挂载传播设置 */
-  if (cfg->conf.privileged_mask & PRIV_SHARED) {
-    if (mount(nullptr, "/", nullptr, MS_REC | MS_SHARED, nullptr) < 0) {
-      log_warn("[SEC] 应用 MS_SHARED 挂载传播模式失败: %s",
-               strerror(errno));
-    } else {
-      log_info("[SEC] 根目录挂载传播已设置为 SHARED.");
-    }
   }
 
   /* 13. 设置 devpts */
