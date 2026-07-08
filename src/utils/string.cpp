@@ -186,8 +186,8 @@ void format_privileged_mask(const int mask, char *buf, const size_t size) {
     {PRIV_NOMASK, "nomask"},
     {PRIV_NOCAPS, "nocaps"},
     {PRIV_NOSEC,  "noseccomp"},
-    {PRIV_SHARED,"shared"},
-    {PRIV_UNFILT,"unfiltered-dev"},
+    {PRIV_SHARED, "shared"},
+    {PRIV_UNFILT, "unfiltered-dev"},
   };
 
   size_t pos = 0;
