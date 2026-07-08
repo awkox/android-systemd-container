@@ -3,15 +3,6 @@
 static int active_lock_fd = -1;
 static char active_lock_path[PATH_MAX] = "";
 
-static int get_lock_path(const char *name, char *buf, const size_t size) {
-  if (!buf || size == 0)
-    return -1;
-
-  const int r =
-      snprintf(buf, size, "%.2048s/%.256s.lock", get_lock_dir(), name);
-  return r > 0 && (size_t)r < size ? 0 : -1;
-}
-
 std::string get_lock_path(std::string_view name) {
   return std::format("{}/{}.lock", get_lock_dir(), name);
 }
@@ -39,7 +30,7 @@ int acquire_external_lock(const char *name) {
     }
 
     active_lock_fd = fd;
-    safe_strncpy(active_lock_path, lock_path, sizeof(active_lock_path));
+    safe_strncpy(active_lock_path, lock_path.c_str(), sizeof(active_lock_path));
     return 0;
   }
 
@@ -70,7 +61,7 @@ bool is_external_lock_active(const char *name) {
   std::string lock_path = get_lock_path(name);
   if (lock_path.size() >= PATH_MAX) return false;
 
-  auto_close const int fd = open(lock_path, O_RDONLY | O_CLOEXEC);
+  auto_close const int fd = open(lock_path.c_str(), O_RDONLY | O_CLOEXEC);
   return !(fd < 0);
 }
 
@@ -132,8 +123,8 @@ int start_rootfs(cfg_t *cfg) {
   bool booted = false;
 
   if (cfg->rt.container_name[0]) {
-    std::string lock_path = get_lock_path(name);
-    if (lock_path.size() < PATH_MAX && access(lock_path, F_OK) == 0) {
+    std::string lock_path = get_lock_path(cfg->rt.container_name);
+    if (lock_path.size() < PATH_MAX && access(lock_path.c_str(), F_OK) == 0) {
       if (acquire_external_lock(cfg->rt.container_name) == 0) {
         lock_acquired = true;
 
