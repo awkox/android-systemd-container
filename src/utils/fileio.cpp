@@ -154,9 +154,9 @@ int safe_openat_proc(const pid_t pid, const char *subpath, const int flags, cons
   while (comp && next) {
     const int nextfd =
         openat(dirfd, comp, O_PATH | O_NOFOLLOW | O_DIRECTORY | O_CLOEXEC);
-    close(dirfd);
     if (nextfd < 0)
       return -1;
+    close(dirfd);
     dirfd = nextfd;
     comp = next;
     next = strtok_r(nullptr, "/", &save);

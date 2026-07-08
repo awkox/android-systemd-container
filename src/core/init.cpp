@@ -103,7 +103,7 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* 8. 配置 /dev (设备节点，或 devtmpfs) */
-  if (setup_dev(".", cfg->conf.gpu_mode, cfg->conf.privileged_mask) < 0) {
+  if (setup_dev(".", cfg->conf.gpu_mode) < 0) {
     log_error("设置 /dev 环境失败。");
     goto boot_fail;
   }

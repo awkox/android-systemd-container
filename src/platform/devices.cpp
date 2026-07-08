@@ -1,7 +1,6 @@
 #include "asc.h"
 
 static int create_devices(const char *rootfs);
-static bool is_dangerous_node(const char *name);
 static void mirror_gpu_nodes(const char *dev_path);
 
 int setup_dev(const char *rootfs, const bool gpu_mode, const int privileged_mask) {
