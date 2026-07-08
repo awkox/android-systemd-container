@@ -572,7 +572,7 @@ static void daemonize(const bool foreground) {
 
   {
     char log_path[PATH_MAX];
-    snprintf(log_path, sizeof(log_path), "%s/ds-forkd.log", get_logs_dir());
+    snprintf(log_path, sizeof(log_path), "%s/daemon.log", get_logs_dir());
     safe_strncpy(g_daemon_log_path, log_path, sizeof(g_daemon_log_path));
     rotate_log(log_path, 2 * 1024 * 1024);
 
