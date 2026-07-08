@@ -43,35 +43,29 @@ static long long parse_ll_positive(const char *val) {
   return v;
 }
 
-static void parse_privileged(const char *value, asc_conf_t *conf) {
-  if (!value)
-    return;
-
-  /* 在处理前先重置，以便重载配置时移除标志位可以生效 */
+static void parse_privileged(std::string_view value, asc_conf_t *conf) {
   conf->privileged_mask = 0;
+  if (value.empty()) return;
 
-  char copy[1024];
-  safe_strncpy(copy, value, sizeof(copy));
+  size_t start = 0, end = 0;
+  while (end != std::string_view::npos) {
+    end = value.find(',', start);
+    std::string_view token = value.substr(start, end - start);
+    start = end + 1;
 
-  char *saveptr;
-  char *token = strtok_r(copy, ",", &saveptr);
+    // 去除两端空格 (代替原来的 trim_whitespace)
+    token.remove_prefix(std::min(token.find_first_not_of(" \t"), token.size()));
+    if (!token.empty()) {
+        token.remove_suffix(token.size() - token.find_last_not_of(" \t") - 1);
+    }
 
-  while (token) {
-    const char *t = trim_whitespace(token);
-    if (strcasecmp(t, "nomask") == 0)
-      conf->privileged_mask |= PRIV_NOMASK;
-    else if (strcasecmp(t, "nocaps") == 0)
-      conf->privileged_mask |= PRIV_NOCAPS;
-    else if (strcasecmp(t, "noseccomp") == 0)
-      conf->privileged_mask |= PRIV_NOSEC;
-    else if (strcasecmp(t, "shared") == 0)
-      conf->privileged_mask |= PRIV_SHARED;
-    else if (strcasecmp(t, "unfiltered-dev") == 0)
-      conf->privileged_mask |= PRIV_UNFILT;
-    else if (strcasecmp(t, "full") == 0)
-      conf->privileged_mask |= PRIV_FULL;
-
-    token = strtok_r(nullptr, ",", &saveptr);
+    // 无需 strcmp，直接进行 == 对比
+    if (token == "nomask") conf->privileged_mask |= PRIV_NOMASK;
+    else if (token == "nocaps") conf->privileged_mask |= PRIV_NOCAPS;
+    else if (token == "noseccomp") conf->privileged_mask |= PRIV_NOSEC;
+    else if (token == "shared") conf->privileged_mask |= PRIV_SHARED;
+    else if (token == "unfiltered-dev") conf->privileged_mask |= PRIV_UNFILT;
+    else if (token == "full") conf->privileged_mask |= PRIV_FULL;
   }
 }
 
