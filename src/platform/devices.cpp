@@ -25,9 +25,8 @@ static int create_devices(const char *rootfs) {
     fs::remove(path);
 
     if (mknod(path, devices[i].mode, devices[i].dev) < 0) {
-      char host_path[PATH_MAX];
-      snprintf(host_path, sizeof(host_path), "/dev/%s", devices[i].name);
-      bind_mount(host_path, path);
+      fs::path host_path = fs::path("/dev") / devices[i].name;
+      bind_mount(host_path.c_str(), path);
     } else {
       chmod(path, devices[i].mode & 0777);
       if (strcmp(devices[i].name, "console") == 0 ||

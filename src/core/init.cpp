@@ -209,9 +209,8 @@ void internal_boot(cfg_t *cfg) {
   /* 14b 写入容器标识，供 PID 发现 */
   mkdir(FORK_MARKER, 0755);
   if (cfg->conf.uuid[0] != '\0') {
-    char uuid_path[PATH_MAX];
-    snprintf(uuid_path, sizeof(uuid_path), FORK_MARKER "/%s", cfg->conf.uuid);
-    write_file(uuid_path, "");
+    fs::path uuid_path = fs::path("/run/asc") / cfg->conf.uuid;
+    write_file(uuid_path.c_str(), "");
   }
 
   write_file(FORK_MARKER "/name", cfg->rt.container_name);
