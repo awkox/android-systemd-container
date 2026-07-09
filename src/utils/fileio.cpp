@@ -1,17 +1,5 @@
 #include "asc.h"
 
-int mkdir_p(const fs::path& path, mode_t mode) {
-    std::error_code ec;
-    fs::create_directories(path, ec);
-    if (ec && ec.value() != EEXIST) {
-        errno = ec.value();
-        return -1;
-    }
-    fs::permissions(path, static_cast<fs::perms>(mode),
-                    fs::perm_options::replace, ec);
-    return 0;
-}
-
 int write_file(const char *path, const char *content) {
   const int fd =
     open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);

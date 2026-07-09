@@ -410,7 +410,7 @@ int virtualize_init(const cfg_t *cfg) {
   if (has_cpu)
     virtualize_affinity(&cfg->conf);
 
-  if (mkdir_p("/run/asc/vproc", 0755) < 0) {
+  if (!fs::create_directories("/run/asc/vproc")) {
     log_warn("[VIRT] 创建 /run/asc/vproc 失败: %s", strerror(errno));
     return -1;
   }
@@ -446,7 +446,7 @@ int virtualize_init(const cfg_t *cfg) {
   }
 
   if (has_cpu) {
-    if (mkdir_p("/run/asc/vproc/cpu_sysfs", 0755) == 0) {
+    if (fs::create_directories("/run/asc/vproc/cpu_sysfs")) {
       const int n = container_cpus(&cfg->conf);
       for (int i = 0; i < n; i++) {
         fs::path vcpu = fs::path("/run/asc/vproc/cpu_sysfs") / ("cpu" + std::to_string(i));

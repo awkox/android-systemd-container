@@ -124,7 +124,7 @@ int check_volatile_mode(asc_conf_t *conf) {
 int setup_volatile_overlay(cfg_t *cfg) {
     fs::path base = get_runtime_dir() / "volatile" / cfg->rt.container_name;
 
-    if (mkdir_p(base, 0755) < 0) {
+    if (!fs::create_directories(base)) {
         log_error("创建易失模式工作区失败: %s", base.c_str());
         return -1;
     }

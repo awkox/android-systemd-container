@@ -3,7 +3,6 @@
 
 #include "common.h"
 
-int mkdir_p(const fs::path& path, mode_t mode);
 int write_file(const char *path, const char *content);
 ssize_t write_all(const int fd, const void *buf, const size_t count);
 std::optional<std::string> read_file_cpp(const fs::path& path);

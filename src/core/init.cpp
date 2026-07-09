@@ -124,7 +124,7 @@ void internal_boot(cfg_t *cfg) {
     goto boot_fail;
   }
 
-  mkdir_p("sys/fs/cgroup", 0755);
+  fs::create_directories("sys/fs/cgroup");
 
   /* 系统级 sysfs 漏洞屏蔽策略 */
   if (mkdir("sys/devices", 0755) < 0 && errno != EEXIST) {
