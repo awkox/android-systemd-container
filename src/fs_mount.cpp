@@ -124,7 +124,7 @@ int check_volatile_mode(asc_conf_t *conf) {
 int setup_volatile_overlay(cfg_t *cfg) {
     fs::path base = get_runtime_dir() / "volatile" / cfg->rt.container_name;
 
-    if (!fs::create_directories(base)) {
+    if (!create_directories_with_permission(base)) {
         log_error("创建易失模式工作区失败: %s", base.c_str());
         return -1;
     }
@@ -138,10 +138,9 @@ int setup_volatile_overlay(cfg_t *cfg) {
     fs::path work   = base / "work";
     fs::path merged = base / "merged";
 
-    std::error_code ec;
-    fs::create_directory(upper, ec);
-    fs::create_directory(work, ec);
-    fs::create_directory(merged, ec);
+    mkdir(upper,  0755);
+    mkdir(work,   0755);
+    mkdir(merged, 0755);
 
     // C++ 格式化挂载参数，彻底告别超大 char[] 缓冲和截断检查
     std::string opts = std::format("lowerdir={},upperdir={},workdir={},context=\"{}\"",

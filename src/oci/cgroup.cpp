@@ -67,7 +67,7 @@ void cgroup_host_bootstrap(const bool force_cgroupv1) {
   }
 
   if (!fs::exists("/sys/fs/cgroup")) {
-    if (!fs::create_directories("/sys/fs/cgroup")) {
+    if (!create_directories_with_permission("/sys/fs/cgroup")) {
       log_error("[CGROUP] 创建 /sys/fs/cgroup 失败: %s",
                 strerror(errno));
       return;
@@ -134,7 +134,7 @@ int setup_cgroups(const bool force_cgroupv1) {
   cgroup_host_bootstrap(force_cgroupv1);
 
   if (!fs::exists("sys/fs/cgroup")) {
-    if (!fs::create_directories("sys/fs/cgroup"))
+    if (!create_directories_with_permission("sys/fs/cgroup"))
       return -1;
   }
 

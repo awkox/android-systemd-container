@@ -13,9 +13,9 @@ const fs::path get_logs_dir() {
 }
 
 int ensure_runtime(void) {
-  fs::create_directories(get_runtime_dir());
-  fs::create_directories(get_lock_dir());
-  fs::create_directories(get_logs_dir());
+  create_directories_with_permission(get_runtime_dir());
+  create_directories_with_permission(get_lock_dir());
+  create_directories_with_permission(get_logs_dir());
 
   return 0;
 }

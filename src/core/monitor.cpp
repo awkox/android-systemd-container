@@ -62,7 +62,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
         if (eoff > 0) {
           if (write_file("/sys/fs/cgroup/cgroup.subtree_control", enable) < 0)
             log_warn("[CGROUP] subtree_control (root): %s", strerror(errno));
-          fs::create_directories("/sys/fs/cgroup/asc");
+          create_directories_with_permission("/sys/fs/cgroup/asc");
           if (write_file("/sys/fs/cgroup/" PROJECT_NAME
                          "/cgroup.subtree_control",
                          enable) < 0)
@@ -72,7 +72,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
       }
 
       fs::path cg_path = fs::path("/sys/fs/cgroup/asc") / cfg->rt.container_name;
-      fs::create_directories(cg_path);
+      create_directories_with_permission(cg_path);
     }
   }
 

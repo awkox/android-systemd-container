@@ -1,5 +1,34 @@
 #include "asc.h"
 
+bool create_directories_with_permission(const fs::path& target, mode_t mode = 0755) {
+  // 规范化路径（解析掉多余的 / 以及 . 或 ..）
+  fs::path normalized_target = target.lexically_normal();
+  fs::path current;
+
+  for (const auto& component : normalized_target) {
+    current /= component;
+
+    std::error_code ec;
+    // 如果当前层级路径不存在，则尝试创建
+    if (!fs::exists(current, ec)) {
+      // 调用底层 mkdir。注意：此时生成的实际权限是 (mode & ~umask)
+      if (::mkdir(current.c_str(), mode) != 0) {
+        // 处理并发场景：如果另一个线程/进程刚刚创建了它，报 EEXIST 是正常的
+        if (errno != EEXIST) {
+          return false;
+        }
+      }
+    } else {
+      // 如果路径已存在，检查它是否真的是一个目录，防止被同名文件占位
+      if (!fs::is_directory(current, ec)) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
 int write_file(const char *path, const char *content) {
   const int fd =
     open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);

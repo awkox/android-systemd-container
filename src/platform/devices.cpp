@@ -89,13 +89,12 @@ int setup_dev() {
 
 int setup_devpts() {
   const fs::path pts_path = "/dev/pts";
-  const fs::path ptmx_path = "/dev/ptmx";
   const fs::path pts_ptmx = "/dev/pts/ptmx";
+  const fs::path ptmx_path = "/dev/ptmx";
 
   umount2(pts_path.c_str(), MNT_DETACH);
   
-  std::error_code ec;
-  fs::create_directories(pts_path, ec);
+  create_directories_with_permission(pts_path);
 
   std::string gid_opt = "gid=" + std::to_string(DEFAULT_TTY_GID);
   std::array<std::string, 5> mount_opts = {

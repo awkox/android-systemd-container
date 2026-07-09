@@ -124,10 +124,10 @@ void internal_boot(cfg_t *cfg) {
     goto boot_fail;
   }
 
-  fs::create_directories("sys/fs/cgroup");
+  create_directories_with_permission("sys/fs/cgroup");
 
   /* 系统级 sysfs 漏洞屏蔽策略 */
-  fs::create_directories("sys/devices/virtual/net");
+  create_directories_with_permission("sys/devices/virtual/net");
   if (mount("sys/devices/virtual/net", "sys/devices/virtual/net", nullptr,
             MS_BIND | MS_REC, nullptr) < 0) {
     log_warn("无法绑定挂载网络设备路径 (网络功能可能受限)");
