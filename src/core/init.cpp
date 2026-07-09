@@ -87,7 +87,8 @@ void internal_boot(cfg_t *cfg) {
 
   /* 6. 从 /run/.boot-uuid 读取 UUID */
   if (cfg->conf.uuid[0] == '\0') {
-    read_file("run/.boot-uuid", cfg->conf.uuid, sizeof(cfg->conf.uuid));
+    if(auto content = read_file_cpp("/run/.boot-uuid"))
+      snprintf(cfg->conf.uuid, sizeof(cfg->conf.uuid), "%s", content->c_str());
   }
   unlink("run/.boot-uuid");
 

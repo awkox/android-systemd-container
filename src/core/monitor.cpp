@@ -39,10 +39,8 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
     if (access("/sys/fs/cgroup/cgroup.procs", F_OK) == 0) {
       if (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit) {
         char enable[64] = "";
-        char buf[256];
         int eoff = 0;
-        if (read_file("/sys/fs/cgroup/cgroup.controllers", buf, sizeof(buf)) >
-            0) {
+        if (auto content = read_file_cpp("/sys/fs/cgroup/cgroup.controllers")) {
           const struct {
             long long limit;
             const char *controller;
@@ -52,7 +50,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
             {cfg->conf.pids_limit,   "pids"},
           };
           for (const auto &c : ctrl_map) {
-            if (c.limit && cg_word_in_list(buf, c.controller)) {
+            if (c.limit && cg_word_in_list(content->c_str(), c.controller)) {
               const int n = snprintf(enable + eoff,
                                      sizeof(enable) - static_cast<size_t>(eoff),
                                      "%s+%s", eoff ? " " : "", c.controller);

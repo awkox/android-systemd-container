@@ -41,34 +41,6 @@ ssize_t write_all(const int fd, const void *buf, const size_t count) {
   return static_cast<ssize_t>(count);
 }
 
-int read_file(const char *path, char *buf, const size_t size) {
-  if (size == 0)
-    return -1;
-
-  auto_close const int fd = open(path, O_RDONLY | O_CLOEXEC);
-  if (fd < 0)
-    return -1;
-
-  ssize_t total_read = 0;
-  ssize_t r = 1;
-  while (static_cast<size_t>(total_read) < size - 1 &&
-         (r = read(fd, buf + total_read, size - 1 - static_cast<size_t>(total_read))) > 0) {
-    total_read += r;
-  }
-
-  if (r < 0)
-    return -1;
-
-  buf[total_read] = '\0';
-
-  while (total_read > 0 &&
-         (buf[total_read - 1] == '\n' || buf[total_read - 1] == '\r')) {
-    buf[--total_read] = '\0';
-  }
-
-  return static_cast<int>(total_read);
-}
-
 std::optional<std::string> read_file_cpp(const std::filesystem::path& path) {
     std::ifstream file(path, std::ios::in | std::ios::binary);
     if (!file) return std::nullopt;
