@@ -39,9 +39,7 @@ static int container_cpus(const asc_conf_t *conf) {
 }
 
 static long long read_cg_ll(const char *container_name, const char *file) {
-  char path[PATH_MAX];
-  snprintf(path, sizeof(path), "/sys/fs/cgroup/" PROJECT_NAME "/%s/%s",
-           container_name, file);
+  fs::path path = fs::path("/sys/fs/cgroup/asc") / container_name / file;
   auto content = read_file_cpp(path);
   if (!content)
     return -1;
@@ -76,9 +74,7 @@ static char *gen_meminfo(const cfg_t *cfg, size_t *out_len) {
 
   long long cg_anon = -1, cg_file = -1, cg_slab = -1;
   {
-    char path[PATH_MAX];
-    snprintf(path, sizeof(path),
-             "/sys/fs/cgroup/" PROJECT_NAME "/%s/memory.stat", cfg->rt.container_name);
+    fs::path path = fs::path("/sys/fs/cgroup/asc") / cfg->rt.container_name / fs::path("memory.stat");
     if (auto content = read_file_cpp(path)) {
       const char *p;
       if ((p = strstr(content->c_str(), "anon ")))
@@ -259,9 +255,7 @@ static char *gen_stat(const cfg_t *cfg, size_t *out_len) {
 }
 
 static double cg_cpu_busy_secs(const char *container_name) {
-  char path[PATH_MAX];
-  snprintf(path, sizeof(path), "/sys/fs/cgroup/" PROJECT_NAME "/%s/cpu.stat",
-           container_name);
+  fs::path path = fs::path("/sys/fs/cgroup/asc") / container_name / fs::path("cpu.stat");
   auto content = read_file_cpp(path);
   if (!content)
     return -1.0;
@@ -417,11 +411,11 @@ int virtualize_init(const cfg_t *cfg) {
   if (has_cpu)
     virtualize_affinity(&cfg->conf);
 
-  if (mkdir_p(VPROC_PATH, 0755) < 0) {
+  if (mkdir_p("/run/asc/vproc", 0755) < 0) {
     log_warn("[VIRT] mkdir_p %s 失败: %s", VPROC_PATH, strerror(errno));
     return -1;
   }
-  if (domount("none", VPROC_PATH, "tmpfs", MS_NOSUID | MS_NODEV,
+  if (domount("none", "/run/asc/vproc", "tmpfs", MS_NOSUID | MS_NODEV,
               "mode=755,size=1M") < 0) {
     log_warn("[VIRT] tmpfs 挂载失败: %s", strerror(errno));
     return -1;
@@ -439,7 +433,7 @@ int virtualize_init(const cfg_t *cfg) {
     {"loadavg", gen_loadavg, true},
   };
 
-  for (size_t i = 0; i < ARRAY_SIZE(proc_files); i++) {
+  for (size_t i = 0; i < std::size(proc_files); i++) {
     if (!proc_files[i].enabled)
       continue;
     size_t len = 0;
@@ -447,41 +441,36 @@ int virtualize_init(const cfg_t *cfg) {
     if (!buf)
       continue;
 
-    char vpath[PATH_MAX], target[PATH_MAX];
-    snprintf(vpath, sizeof(vpath), VPROC_PATH "/%s", proc_files[i].name);
-    snprintf(target, sizeof(target), "/proc/%s", proc_files[i].name);
-    bind_vfile(vpath, target, buf);
+    fs::path vpath = fs::path("/run/asc/vproc") / proc_files[i].name;
+    fs::path target = fs::path("/proc") / proc_files[i].name;
+    bind_vfile(vpath.c_str(), target.c_str(), buf);
   }
 
   if (has_cpu) {
-    char sysfs_base[PATH_MAX];
-    snprintf(sysfs_base, sizeof(sysfs_base), VPROC_PATH "/cpu_sysfs");
-    if (mkdir_p(sysfs_base, 0755) == 0) {
+    if (mkdir_p("/run/asc/vproc/cpu_sysfs", 0755) == 0) {
       const int n = container_cpus(&cfg->conf);
       for (int i = 0; i < n; i++) {
-        char vcpu[PATH_MAX + 32], realcpu[PATH_MAX];
-        snprintf(vcpu, sizeof(vcpu), "%s/cpu%d", sysfs_base, i);
-        snprintf(realcpu, sizeof(realcpu), "/sys/devices/system/cpu/cpu%d", i);
-        if (access(realcpu, F_OK) == 0) {
-          if (mkdir(vcpu, 0755) == 0) {
-            if (bind_mount(realcpu, vcpu) < 0)
-              log_warn("[VIRT] bind_mount %s -> %s 失败", realcpu, vcpu);
+        fs::path vcpu = fs::path("/run/asc/vproc/cpu_sysfs") / ("cpu" + std::to_string(i));
+        fs::path realcpu = fs::path("/sys/devices/system/cpu") / ("cpu" + std::to_string(i));
+        if (access(realcpu.c_str(), F_OK) == 0) {
+          if (mkdir(vcpu.c_str(), 0755) == 0) {
+            if (bind_mount(realcpu.c_str(), vcpu.c_str()) < 0)
+              log_warn("[VIRT] bind_mount %s -> %s 失败", realcpu.c_str(), vcpu.c_str());
           }
         }
       }
 
       const char *sysfs_names[] = {"online", "possible", "present"};
-      for (size_t i = 0; i < ARRAY_SIZE(sysfs_names); i++) {
+      for (size_t i = 0; i < std::size(sysfs_names); i++) {
         size_t len = 0;
         auto_free char *buf = gen_cpu_sysfs(cfg, &len);
         if (!buf)
           continue;
-        char vpath[PATH_MAX + 32];
-        snprintf(vpath, sizeof(vpath), "%s/%s", sysfs_base, sysfs_names[i]);
-        write_file(vpath, buf);
+        fs::path vpath = fs::path("/run/asc/vproc/cpu_sysfs") / sysfs_names[i];
+        write_file(vpath.c_str(), buf);
       }
 
-      if (bind_mount(sysfs_base, "/sys/devices/system/cpu") < 0)
+      if (bind_mount("/run/asc/vproc/cpu_sysfs", "/sys/devices/system/cpu") < 0)
         log_warn("[VIRT] 屏蔽 /sys/devices/system/cpu 失败 (htop 可能会显示宿主机核心)");
     }
   }
@@ -507,7 +496,7 @@ void virtualize_update(const cfg_t *cfg) {
   }
 
   char vproc_dir[PATH_MAX];
-  build_proc_root_path(cfg->rt.container_pid, VPROC_PATH, vproc_dir, sizeof(vproc_dir));
+  build_proc_root_path(cfg->rt.container_pid, "/run/asc/vproc", vproc_dir, sizeof(vproc_dir));
   struct stat st_dir;
   if (stat(vproc_dir, &st_dir) != 0 || !S_ISDIR(st_dir.st_mode)) {
     return;
@@ -527,7 +516,7 @@ void virtualize_update(const cfg_t *cfg) {
     {"loadavg", gen_loadavg, true},
   };
 
-  for (size_t i = 0; i < ARRAY_SIZE(dyn); i++) {
+  for (size_t i = 0; i < std::size(dyn); i++) {
     if (!dyn[i].enabled)
       continue;
     size_t len = 0;
@@ -538,12 +527,11 @@ void virtualize_update(const cfg_t *cfg) {
       continue;
     }
 
-    char subpath[PATH_MAX];
-    snprintf(subpath, sizeof(subpath), VPROC_PATH "/%s", dyn[i].name);
+    fs::path subpath = fs::path("/run/asc/vproc") / dyn[i].name;
 
     struct stat st;
     char path[PATH_MAX];
-    build_proc_root_path(cfg->rt.container_pid, subpath, path, sizeof(path));
+    build_proc_root_path(cfg->rt.container_pid, subpath.c_str(), path, sizeof(path));
     if (stat(path, &st) != 0) {
       write_monitor_debug_log(cfg->rt.container_name,
                               "[VIRT] 虚拟文件丢失: %s (%s)", path,
@@ -551,7 +539,7 @@ void virtualize_update(const cfg_t *cfg) {
       continue;
     }
 
-    if (write_inplace(cfg->rt.container_pid, subpath, buf, len) < 0)
+    if (write_inplace(cfg->rt.container_pid, subpath.c_str(), buf, len) < 0)
       write_monitor_debug_log(cfg->rt.container_name,
                               "[VIRT] 就地覆盖写入 write_inplace 失败: %s (%s)", path,
                               strerror(errno));

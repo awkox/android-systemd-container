@@ -93,7 +93,7 @@ void internal_boot(cfg_t *cfg) {
   unlink("run/.boot-uuid");
 
   /* 7. 预创建标准的系统目录结构 */
-  for (size_t i = 0; i < ARRAY_SIZE(dirs_to_create); i++) {
+  for (size_t i = 0; i < std::size(dirs_to_create); i++) {
     if (mkdir(dirs_to_create[i], 0755) < 0 && errno != EEXIST) {
       log_error("无法创建目录 '%s': %s", dirs_to_create[i],
                 strerror(errno));

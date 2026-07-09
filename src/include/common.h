@@ -159,6 +159,4 @@ typedef struct {
   asc_rt_t rt;
 } cfg_t;
 
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-
 #endif

@@ -7,26 +7,6 @@ static const char *get_architecture(void) {
   return uts.machine;
 }
 
-static void parse_pretty_name(FILE *fp, char *buf, const size_t size) {
-  char line[512];
-  while (fgets(line, sizeof(line), fp)) {
-    if (strncmp(line, "PRETTY_NAME=", 12) == 0) {
-      char *val = line + 12;
-      size_t len = strlen(val);
-      while (len > 0 && (val[len - 1] == '\n' || val[len - 1] == '"'))
-        val[--len] = '\0';
-      if (val[0] == '"') {
-        val++;
-        len--;
-      }
-      if (len >= size)
-        len = size - 1;
-      snprintf(buf, size, "%.*s", (int)len, val);
-      return;
-    }
-  }
-}
-
 int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
   if (cfg->rt.container_name[0] == '\0') {
     log_error("未指定容器名称。");

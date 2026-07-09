@@ -113,18 +113,17 @@ static void mount_v1_controllers(void) {
     if (!enabled)
       continue;
 
-    char mp[PATH_MAX];
-    snprintf(mp, sizeof(mp), "sys/fs/cgroup/%s", name);
-    if (access(mp, F_OK) == 0)
+    fs::path mp = fs::path("sys/fs/cgroup") / name;
+    if (access(mp.c_str(), F_OK) == 0)
       continue;
 
-    if (mkdir(mp, 0755) < 0 && errno != EEXIST)
+    if (mkdir(mp.c_str(), 0755) < 0 && errno != EEXIST)
       continue;
 
-    if (mount("cgroup", mp, "cgroup", flags, name) != 0) {
+    if (mount("cgroup", mp.c_str(), "cgroup", flags, name) != 0) {
       log_info("[CGROUP] v1 控制器 '%s' 不可用: %s", name,
                strerror(errno));
-      rmdir(mp);
+      rmdir(mp.c_str());
     } else {
       log_info("[CGROUP] 成功挂载 v1 控制器: %s", name);
     }
@@ -175,13 +174,13 @@ int setup_cgroups(const bool force_cgroupv1) {
   return 0;
 }
 
-static void rmdir_cgroup_tree(const std::filesystem::path& path) {
+static void rmdir_cgroup_tree(const fs::path& path) {
   std::error_code ec;
   if (!std::filesystem::exists(path, ec)) return;
 
   // 使用 vector 自动管理内存，彻底消灭 malloc/realloc/free
-  std::vector<std::filesystem::path> subdirs;
-  for (const auto& entry : std::filesystem::directory_iterator(path, ec)) {
+  std::vector<fs::path> subdirs;
+  for (const auto& entry : fs::directory_iterator(path, ec)) {
     if (entry.is_directory(ec)) {
       subdirs.push_back(entry.path());
     }
@@ -192,22 +191,17 @@ static void rmdir_cgroup_tree(const std::filesystem::path& path) {
     rmdir_cgroup_tree(sub);
   }
 
-  char kill_path[PATH_MAX];
-  safe_strncpy(kill_path, path.string().c_str(), sizeof(kill_path));
-  strncat(kill_path, "/cgroup.kill", sizeof(kill_path) - strlen(kill_path) - 1);
-  if (access(kill_path, W_OK) == 0) {
-    auto_close const int kfd = open(kill_path, O_WRONLY | O_CLOEXEC);
+  fs::path kill_path = path / "cgroup.kill";
+  if (access(kill_path.c_str(), W_OK) == 0) {
+    auto_close const int kfd = open(kill_path.c_str(), O_WRONLY | O_CLOEXEC);
     if (kfd >= 0) {
       if (write(kfd, "1", 1) < 0) {}
     }
   }
 
-  char events_path[PATH_MAX];
-  safe_strncpy(events_path, path.string().c_str(), sizeof(events_path));
-  strncat(events_path, "/cgroup.events",
-          sizeof(events_path) - strlen(events_path) - 1);
+  fs::path events_path = path / "cgroup.events";
   for (int i = 0; i < 50; i++) {
-    if (auto content = read_file_cpp(events_path)) {
+    if (auto content = read_file_cpp(events_path.c_str())) {
       if (strstr(content->c_str(), "populated 0"))
         break;
     }
@@ -233,11 +227,11 @@ void cgroup_cleanup_container(const char *container_name) {
       continue;
 
     char cg_path[PATH_MAX];
-    snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/%s/" PROJECT_NAME "/%s",
+    snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/%s/asc/%s",
              de->d_name, container_name);
 
     if (strcmp(de->d_name, "cgroup.procs") == 0)
-      snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/" PROJECT_NAME "/%s",
+      snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/asc/%s",
                container_name);
 
     if (access(cg_path, F_OK) != 0)
@@ -389,12 +383,10 @@ int cgroup_get_usage(const char *container_name, long long *mem,
   if (pids)
     *pids = -1;
 
-  const bool v2 = cgroup_host_is_v2();
-  char cg[PATH_MAX - 64];
-  char path[PATH_MAX + 64];
-
-  if (v2) {
-    snprintf(cg, sizeof(cg), "/sys/fs/cgroup/" PROJECT_NAME "/%s", container_name);
+  if (cgroup_host_is_v2()) {
+    char cg[PATH_MAX - 64];
+    char path[PATH_MAX + 64];
+    snprintf(cg, sizeof(cg), "/sys/fs/cgroup/asc/%s", container_name);
     if (access(cg, F_OK) != 0)
       return -1;
     if (mem) {
