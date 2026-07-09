@@ -321,7 +321,7 @@ void unmount_rootfs_img(const char *mount_point, const bool silent) {
 
   /* 3. 目录清理和日志记录 */
   const bool still_mounted = is_mountpoint(mount_point);
-  if (rmdir(mount_point) == 0 || !still_mounted) {
+  if (fs::remove(mount_point) || !still_mounted) {
     if (!silent)
       log_info("已成功卸载 rootfs 镜像 %s。", mount_point);
   } else if (errno != ENOENT) {

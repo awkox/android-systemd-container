@@ -48,7 +48,7 @@ int acquire_external_lock(const char *name) {
 void release_external_lock(void) {
   if (active_lock_fd >= 0) {
     if (active_lock_path[0]) {
-      unlink(active_lock_path);
+      fs::remove(active_lock_path);
     }
 
     close(active_lock_fd);
@@ -90,7 +90,7 @@ void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
   if (mount_point[0]) {
     if (force_cleanup) {
       umount2(mount_point, MNT_DETACH | MNT_FORCE);
-      rmdir(mount_point);
+      fs::remove(mount_point);
     } else {
       unmount_rootfs_img(mount_point, cfg->rt.foreground);
     }

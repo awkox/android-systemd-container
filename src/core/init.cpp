@@ -90,7 +90,7 @@ void internal_boot(cfg_t *cfg) {
     if(auto content = read_file_cpp("/run/.boot-uuid"))
       snprintf(cfg->conf.uuid, sizeof(cfg->conf.uuid), "%s", content->c_str());
   }
-  unlink("run/.boot-uuid");
+  fs::remove("run/.boot-uuid");
 
   /* 7. 预创建标准的系统目录结构 */
   for (size_t i = 0; i < std::size(dirs_to_create); i++) {
@@ -232,9 +232,9 @@ void internal_boot(cfg_t *cfg) {
     if (umount2("/.old_root", MNT_DETACH) < 0)
       log_warn("卸载 /.old_root 失败: %s", strerror(errno));
     else
-      rmdir("/.old_root");
+      fs::remove("/.old_root");
   } else {
-    rmdir("/.old_root");
+    fs::remove("/.old_root");
   }
 
   /* 16. 清除环境变量并设置默认值 */

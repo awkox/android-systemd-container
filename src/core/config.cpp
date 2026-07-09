@@ -211,7 +211,7 @@ int config_save(const char *config_path, cfg_t *cfg) {
 
   /* 步骤 2: 通过原子重命名提交修改 */
   if (rename(temp_path.c_str(), config_path) < 0) {
-    unlink(temp_path.c_str());
+    fs::remove(temp_path);
     return -1;
   }
 

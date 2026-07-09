@@ -123,7 +123,7 @@ static void mount_v1_controllers(void) {
     if (mount("cgroup", mp.c_str(), "cgroup", flags, name) != 0) {
       log_info("[CGROUP] v1 控制器 '%s' 不可用: %s", name,
                strerror(errno));
-      rmdir(mp.c_str());
+      fs::remove(mp);
     } else {
       log_info("[CGROUP] 成功挂载 v1 控制器: %s", name);
     }

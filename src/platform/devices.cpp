@@ -114,7 +114,7 @@ int setup_devpts() {
       const char *ptmx_path = "/dev/ptmx";
       const char *pts_ptmx = "/dev/pts/ptmx";
 
-      unlink(ptmx_path);
+      fs::remove(ptmx_path);
 
       if (write_file(ptmx_path, "") == 0) {
         if (mount(pts_ptmx, ptmx_path, nullptr, MS_BIND, nullptr) == 0) {
@@ -122,11 +122,11 @@ int setup_devpts() {
         }
       }
 
-      unlink(ptmx_path);
+      fs::remove(ptmx_path);
       if (symlink("pts/ptmx", ptmx_path) == 0 && fs::exists(pts_ptmx))
         return 0;
 
-      unlink(ptmx_path);
+      fs::remove(ptmx_path);
       if (mknod(ptmx_path, S_IFCHR | 0666, makedev(5, 2)) == 0) {
         chmod(ptmx_path, 0666);
         return 0;

@@ -83,7 +83,7 @@ static void block_read_path(const char *path) {
   snprintf(fifo_path, sizeof(fifo_path), "/tmp/." PROJECT_NAME "-kmsg-fifo-%d",
            getpid());
 
-  unlink(fifo_path);
+  fs::remove(fifo_path);
   if (mkfifo(fifo_path, 0600) < 0)
     return;
 
@@ -100,7 +100,7 @@ static void block_read_path(const char *path) {
   if (child > 0)
     mount(fifo_path, path, nullptr, MS_BIND, nullptr);
 
-  unlink(fifo_path);
+  fs::remove(fifo_path);
 }
 
 /*
