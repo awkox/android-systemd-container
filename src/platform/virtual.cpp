@@ -494,10 +494,9 @@ void virtualize_update(const cfg_t *cfg) {
     }
   }
 
-  char vproc_dir[PATH_MAX];
-  build_proc_root_path(cfg->rt.container_pid, "/run/asc/vproc", vproc_dir, sizeof(vproc_dir));
+  fs::path vproc_dir = fs::path("/proc") / std::to_string(cfg->rt.container_pid) / "root" / "run/asc/vproc";
   struct stat st_dir;
-  if (stat(vproc_dir, &st_dir) != 0 || !S_ISDIR(st_dir.st_mode)) {
+  if (stat(vproc_dir.c_str(), &st_dir) != 0 || !S_ISDIR(st_dir.st_mode)) {
     return;
   }
 
@@ -526,21 +525,19 @@ void virtualize_update(const cfg_t *cfg) {
       continue;
     }
 
-    fs::path subpath = fs::path("/run/asc/vproc") / dyn[i].name;
-
     struct stat st;
-    char path[PATH_MAX];
-    build_proc_root_path(cfg->rt.container_pid, subpath.c_str(), path, sizeof(path));
-    if (stat(path, &st) != 0) {
+    fs::path path = fs::path("/proc") / std::to_string(cfg->rt.container_pid) / "root" /
+                    "run/asc/vproc" / dyn[i].name;
+    if (stat(path.c_str(), &st) != 0) {
       write_monitor_debug_log(cfg->rt.container_name,
-                              "[VIRT] 虚拟文件丢失: %s (%s)", path,
+                              "[VIRT] 虚拟文件丢失: %s (%s)", path.c_str(),
                               strerror(errno));
       continue;
     }
 
     if (write_inplace(cfg->rt.container_pid, subpath.c_str(), buf, len) < 0)
       write_monitor_debug_log(cfg->rt.container_name,
-                              "[VIRT] 就地覆盖写入 write_inplace 失败: %s (%s)", path,
+                              "[VIRT] 就地覆盖写入 write_inplace 失败: %s (%s)", path.c_str(),
                               strerror(errno));
   }
 }

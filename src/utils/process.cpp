@@ -3,10 +3,46 @@
 std::optional<std::vector<pid_t>> collect_pids() {
     std::vector<pid_t> pids;
     std::error_code ec;
+
+    // 当宿主机使用 Cgroup V2 时，直接遍历 cgroup.procs 收集进程 PID，
+    // 大幅减少对庞大 /proc 目录的低效全量扫描。
+    if (cgroup_host_is_v2()) {
+        fs::path cg_base = fs::path("/sys/fs/cgroup/asc");
+        if (fs::exists(cg_base, ec)) {
+            auto it = fs::recursive_directory_iterator(cg_base, fs::directory_options::skip_permission_denied, ec);
+            auto end = fs::recursive_directory_iterator();
+            while (it != end && !ec) {
+                if (it->is_regular_file(ec) && it->path().filename() == "cgroup.procs") {
+                    if (auto content = read_file_cpp(it->path())) {
+                        size_t pos = 0;
+                        while (pos < content->length()) {
+                            size_t end_pos = content->find('\n', pos);
+                            if (end_pos == std::string::npos) end_pos = content->length();
+                            if (end_pos > pos) {
+                                try {
+                                    long val = std::stol(content->substr(pos, end_pos - pos));
+                                    if (val > 0) pids.push_back(static_cast<pid_t>(val));
+                                } catch (...) {}
+                            }
+                            pos = end_pos + 1;
+                        }
+                    }
+                }
+                it.increment(ec);
+            }
+            if (!ec) {
+                return pids;
+            }
+            pids.clear();
+            ec.clear();
+        } else {
+            return pids; // 如果目录不存在，说明目前没有任何运行在 Cgroup v2 下的容器
+        }
+    }
     
-    // 使用 C++17 filesystem 遍历目录，更安全简洁
+    // 退路与 Cgroup V1 模式：使用 C++17 filesystem 遍历 /proc 目录
     for (const auto& entry : fs::directory_iterator("/proc", ec)) {
-        if (!entry.is_directory()) continue;
+        if (!entry.is_directory(ec)) continue;
         
         std::string filename = entry.path().filename().string();
         try {
@@ -25,20 +61,9 @@ std::optional<std::vector<pid_t>> collect_pids() {
     return pids;
 }
 
-int build_proc_root_path(const pid_t pid, const char *suffix, char *buf,
-                         const size_t size) {
-  int r;
-  if (suffix && suffix[0])
-    r = snprintf(buf, size, PROC_ROOT_FMT "%s", pid, suffix);
-  else
-    r = snprintf(buf, size, PROC_ROOT_FMT, pid);
-  return r > 0 && static_cast<size_t>(r) < size ? 0 : -1;
-}
-
 bool is_container_init(const pid_t pid) {
-  char path[PATH_MAX];
-  snprintf(path, sizeof(path), "/proc/%d/status", pid);
-  auto_fclose FILE *f = fopen(path, "re");
+  fs::path path = fs::path("proc") / std::to_string(pid) / "status";
+  auto_fclose FILE *f = fopen(path.c_str(), "re");
   if (!f)
     return false;
 
@@ -67,10 +92,9 @@ bool is_container_init(const pid_t pid) {
     return is_init;
 
   struct stat st_pid, st_host;
-  char ns_path[PATH_MAX];
 
-  snprintf(ns_path, sizeof(ns_path), "/proc/%d/ns/pid", pid);
-  if (stat(ns_path, &st_pid) < 0)
+  fs::path ns_path = fs::path("/proc") / std::to_string(pid) / "ns/pid";
+  if (stat(ns_path.c_str(), &st_pid) < 0)
     return false;
 
   if (stat("/proc/1/ns/pid", &st_host) < 0)
@@ -87,9 +111,7 @@ long get_container_uptime(const pid_t pid) {
   if (clk_tck <= 0)
     clk_tck = 100;
 
-  char stat_path[PATH_MAX];
-  snprintf(stat_path, sizeof(stat_path), "/proc/%d/stat", static_cast<int>(pid));
-
+  fs::path stat_path = fs::path("/proc") / std::to_string(pid) / "stat";
   unsigned long long start_ticks = 0;
   {
     if (auto content = read_file_cpp(stat_path)) {
@@ -118,25 +140,16 @@ pid_t find_container_init_pid(const char *uuid) {
   if (!uuid || uuid[0] == '\0')
     return 0;
 
-  char marker[PATH_MAX];
-  snprintf(marker, sizeof(marker), FORK_MARKER "/%s", uuid);
-
-  char path[PATH_MAX];
-
   auto pids_opt = collect_pids();
 
   if (!pids_opt) return 0;
 
   for (pid_t pid : *pids_opt) {
-    if (build_proc_root_path(pid, FORK_MARKER, path, sizeof(path)) < 0)
-      continue;
+    fs::path path = fs::path("/proc") / std::to_string(pid) / "root" / "run/asc" / uuid;
 
     if (fs::exists(path)) {
-      build_proc_root_path(pid, marker, path, sizeof(path));
-      if (fs::exists(path)) {
-        if (is_valid_container_pid(pid)) {
-          return pid;
-        }
+      if (is_valid_container_pid(pid)) {
+        return pid;
       }
     }
   }

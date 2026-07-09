@@ -13,11 +13,6 @@ void rotate_log(const char *path, const size_t max_size) {
   }
 }
 
-static void make_container_log_dir(const char *name, char *dir, const size_t size) {
-  snprintf(dir, size, "%.2048s/" RUNTIME_LOGS_SUBDIR "/%.256s",
-           get_runtime_dir(), name);
-}
-
 static void write_to_log_file(const char *name, const char *component,
                               const char *raw_msg, const int pre_opened_fd) {
   if (!name || !name[0])
@@ -41,16 +36,13 @@ static void write_to_log_file(const char *name, const char *component,
     return;
   }
 
-  char log_dir[PATH_MAX];
-  make_container_log_dir(name, log_dir, sizeof(log_dir));
-  mkdir_p(log_dir, 0755);
+  fs::path log_dir = get_runtime_dir() / fs::path("logs") / name;
+  mkdir_p(log_dir.c_str(), 0755);
 
-  char log_path[PATH_MAX];
-  snprintf(log_path, sizeof(log_path), "%.4090s/log", log_dir);
+  fs::path log_path = log_dir / "log";
+  rotate_log(log_path.c_str(), 2 * 1024 * 1024);
 
-  rotate_log(log_path, 2 * 1024 * 1024);
-
-  auto_fclose FILE *f = fopen(log_path, "ae");
+  auto_fclose FILE *f = fopen(log_path.c_str(), "ae");
   if (!f)
     return;
 
@@ -131,16 +123,14 @@ void print_privileged_warning(const int privileged_mask) {
 }
 
 void open_container_log(const char *container_name) {
-  char log_dir[PATH_MAX];
-  make_container_log_dir(container_name, log_dir, sizeof(log_dir));
-  mkdir_p(log_dir, 0755);
+  fs::path log_dir = get_runtime_dir() / fs::path("logs") / container_name;
+  mkdir_p(log_dir.c_str(), 0755);
 
-  char log_path[PATH_MAX];
-  snprintf(log_path, sizeof(log_path), "%.4090s/log", log_dir);
+  fs::path log_path = log_dir / "log";
 
-  rotate_log(log_path, 2 * 1024 * 1024);
+  rotate_log(log_path.c_str(), 2 * 1024 * 1024);
 
-  const int fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+  const int fd = open(log_path.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
   if (fd >= 0)
     log_container_fd = fd;
 }

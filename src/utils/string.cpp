@@ -46,23 +46,18 @@ void format_uptime(const long uptime_sec, char *buf, const size_t size) {
     return;
   }
 
-  const int days = uptime_sec / 86400;
-  const int hours = uptime_sec % 86400 / 3600;
-  const int mins = uptime_sec % 3600 / 60;
-  const int secs = uptime_sec % 60;
+  const long d = uptime_sec / 86400;
+  const long h = (uptime_sec % 86400) / 3600;
+  const long m = (uptime_sec % 3600) / 60;
+  const long s = uptime_sec % 60;
 
-  char tmp[128] = "";
-  int pos = 0;
+  std::string res;
+  if (d > 0) res += std::to_string(d) + "d ";
+  if (h > 0 || d > 0) res += std::to_string(h) + "h ";
+  if (m > 0 || h > 0 || d > 0) res += std::to_string(m) + "m ";
+  res += std::to_string(s) + "s";
 
-  if (days > 0)
-    pos += snprintf(tmp + pos, sizeof(tmp) - pos, "%dd ", days);
-  if (hours > 0 || days > 0)
-    pos += snprintf(tmp + pos, sizeof(tmp) - pos, "%dh ", hours);
-  if (mins > 0 || hours > 0 || days > 0)
-    pos += snprintf(tmp + pos, sizeof(tmp) - pos, "%dm ", mins);
-  snprintf(tmp + pos, sizeof(tmp) - pos, "%ds", secs);
-
-  safe_strncpy(buf, tmp, size);
+  safe_strncpy(buf, res.c_str(), size);
 }
 
 static bool validate_container_name(std::string_view name, size_t max_len = 256) {

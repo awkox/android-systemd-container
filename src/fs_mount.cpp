@@ -126,7 +126,7 @@ int setup_volatile_overlay(cfg_t *cfg) {
     // 使用 std::format 动态拼接字符串，绝对不会发生缓冲区溢出
     fs::path base = std::format("{}/{}/{}", 
                                 get_runtime_dir(), 
-                                RUNTIME_VOLATILE_SUBDIR, 
+                                "volatile",
                                 cfg->rt.container_name);
 
     if (mkdir_p(base, 0755) < 0) {

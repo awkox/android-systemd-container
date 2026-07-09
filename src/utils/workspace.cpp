@@ -1,20 +1,20 @@
 #include "asc.h"
 
 const char *get_runtime_dir(void) {
-  return RUNTIME_DIR;
+  return "/tmp/asc";
 }
 
 const char *get_lock_dir(void) {
   static char lock_path[PATH_MAX];
   snprintf(lock_path, sizeof(lock_path), "%s/%s", get_runtime_dir(),
-           RUNTIME_LOCK_SUBDIR);
+           "lock");
   return lock_path;
 }
 
 const char *get_logs_dir(void) {
   static char logs_path[PATH_MAX];
   snprintf(logs_path, sizeof(logs_path), "%s/%s", get_runtime_dir(),
-           RUNTIME_LOGS_SUBDIR);
+           "logs");
   return logs_path;
 }
 

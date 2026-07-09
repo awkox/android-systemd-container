@@ -228,10 +228,8 @@ int config_load_by_name(const char *name, cfg_t *cfg) {
 
 int config_save_by_name(const char *name, cfg_t *cfg) {
   fs::path container_dir = get_runtime_dir() / fs::path("config") / name;
-
-  mkdir_p(container_dir.c_str(), 0755);
-
-  fs::path config_path = container_dir / fs::path("container.config");
+  fs::create_directories(container_dir);
+  fs::path config_path = container_dir / "container.config";
 
   return config_save(config_path.c_str(), cfg);
 }

@@ -100,10 +100,7 @@ void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
 }
 
 bool is_valid_container_pid(const pid_t pid) {
-  char path[PATH_MAX];
-
-  if (build_proc_root_path(pid, FORK_MARKER, path, sizeof(path)) < 0)
-    return false;
+  fs::path path = fs::path("/proc") / std::to_string(pid) / "root";
   if (!fs::exists(path))
     return false;
 
@@ -243,7 +240,7 @@ int start_rootfs(cfg_t *cfg) {
 
   if (cfg->conf.volatile_mode) {
     snprintf(cfg->rt.volatile_dir, sizeof(cfg->rt.volatile_dir),
-             "%s/" RUNTIME_VOLATILE_SUBDIR "/%s", get_runtime_dir(),
+             "%s/" "volatile" "/%s", get_runtime_dir(),
              cfg->rt.container_name);
   }
 

@@ -85,19 +85,9 @@ constexpr int NL_BUFSIZE = 8192;
 constexpr int DEFAULT_TTY_GID = 5;
 
 // 运行时路径
-#define RUNTIME_DIR "/tmp/asc"
-#define RUNTIME_LOCK_SUBDIR "lock"
-#define RUNTIME_CONFIG_SUBDIR "config"
-#define RUNTIME_LOGS_SUBDIR "logs"
-#define RUNTIME_VOLATILE_SUBDIR "volatile"
 #define IMG_MOUNT_ROOT "/mnt/asc"
 #define DEFAULT_INIT "/sbin/init"
 #define ANDROID_TMPFS_CONTEXT "u:object_r:tmpfs:s0"
-
-// 通用路径与模式
-#define PROC_ROOT_FMT "/proc/%d/root"
-#define FORK_MARKER "/run/asc"
-#define VPROC_PATH "/run/asc/vproc"
 
 // 特权掩码定义
 constexpr int PRIV_NOMASK = 1 << 0;
