@@ -210,12 +210,9 @@ void internal_boot(cfg_t *cfg) {
     write_file(uuid_path.c_str(), "");
   }
 
-  write_file("/run/asc" "/name", cfg->rt.container_name);
-
   if (cfg->conf.img_mount_point[0])
     write_file("/run/asc" "/mount", cfg->conf.img_mount_point);
 
-  write_file("/run/asc" "/version", PROJECT_VERSION);
   if (cfg->rt.foreground) {
     printf("\r\n(按下 CTRL+ALT+Q 以脱离前台并退出)\r\n");
     fflush(stdout);
