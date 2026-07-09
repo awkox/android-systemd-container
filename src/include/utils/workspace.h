@@ -3,9 +3,9 @@
 
 #include "common.h"
 
-const char *get_runtime_dir(void);
-const char *get_lock_dir(void);
-const char *get_logs_dir(void);
+const fs::path get_runtime_dir();
+const fs::path get_lock_dir();
+const fs::path get_logs_dir();
 int ensure_runtime(void);
 
 #endif

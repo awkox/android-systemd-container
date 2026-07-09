@@ -571,7 +571,7 @@ static void daemonize(const bool foreground) {
   }
 
   {
-    fs::path log_path = fs::path(get_logs_dir()) / "daemon.log";
+    fs::path log_path = get_logs_dir() / "daemon.log";
     g_daemon_log_path = log_path;
     rotate_log(log_path.c_str(), 2 * 1024 * 1024);
 

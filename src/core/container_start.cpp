@@ -1,18 +1,13 @@
 #include "asc.h"
 
 static int active_lock_fd = -1;
-static char active_lock_path[PATH_MAX] = "";
-
-std::string get_lock_path(std::string_view name) {
-  return std::format("{}/{}.lock", get_lock_dir(), name);
-}
+static fs::path active_lock_path = "";
 
 int acquire_external_lock(const char *name) {
   if (active_lock_fd >= 0)
     return 0;
 
-  std::string lock_path = get_lock_path(name);
-  if (lock_path.size() >= PATH_MAX) return -1;
+  fs::path lock_path = get_lock_dir() / name;
 
   const int fd = open(lock_path.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644);
   if (fd < 0)
@@ -23,14 +18,13 @@ int acquire_external_lock(const char *name) {
   fl.l_whence = SEEK_SET;
 
   if (fcntl(fd, F_SETLK, &fl) == 0) {
-    char pid_str[32];
-    snprintf(pid_str, sizeof(pid_str), "%d\n", getpid());
+    std::string pid_str = std::format("{}\n", getpid());
     if (ftruncate(fd, 0) == 0) {
-      write_all(fd, pid_str, strlen(pid_str));
+      write_all(fd, pid_str.c_str(), strlen(pid_str.c_str()));
     }
 
     active_lock_fd = fd;
-    safe_strncpy(active_lock_path, lock_path.c_str(), sizeof(active_lock_path));
+    active_lock_path = lock_path;
     return 0;
   }
 
@@ -47,19 +41,18 @@ int acquire_external_lock(const char *name) {
 
 void release_external_lock(void) {
   if (active_lock_fd >= 0) {
-    if (active_lock_path[0]) {
+    if (!active_lock_path.empty()) {
       fs::remove(active_lock_path);
     }
 
     close(active_lock_fd);
     active_lock_fd = -1;
-    active_lock_path[0] = '\0';
+    active_lock_path = "";
   }
 }
 
 bool is_external_lock_active(const char *name) {
-  std::string lock_path = get_lock_path(name);
-  if (lock_path.size() >= PATH_MAX) return false;
+  fs::path lock_path = get_lock_dir() / name;
 
   auto_close const int fd = open(lock_path.c_str(), O_RDONLY | O_CLOEXEC);
   return !(fd < 0);
@@ -71,9 +64,8 @@ void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
 
   if (cfg->conf.volatile_mode) {
     if (force_cleanup) {
-      char merged[PATH_MAX + 32];
-      snprintf(merged, sizeof(merged), "%s/merged", cfg->rt.volatile_dir);
-      umount2(merged, MNT_DETACH | MNT_FORCE);
+      fs::path merged = fs::path(cfg->rt.volatile_dir) / "merged";
+      umount2(merged.c_str(), MNT_DETACH | MNT_FORCE);
       umount2(cfg->rt.volatile_dir, MNT_DETACH | MNT_FORCE);
       remove_recursive(cfg->rt.volatile_dir);
       cfg->rt.volatile_dir[0] = '\0';
@@ -116,12 +108,11 @@ int start_rootfs(cfg_t *cfg) {
   pid_t existing_pid = 0;
   int sync_pipe[2] = {-1, -1};
   pid_t monitor_pid = -1;
-  char marker[PATH_MAX];
   bool booted = false;
 
   if (cfg->rt.container_name[0]) {
-    std::string lock_path = get_lock_path(cfg->rt.container_name);
-    if (lock_path.size() < PATH_MAX && fs::exists(lock_path)) {
+    fs::path lock_path = get_lock_dir() / cfg->rt.container_name;
+    if (fs::exists(lock_path)) {
       if (acquire_external_lock(cfg->rt.container_name) == 0) {
         lock_acquired = true;
 
@@ -171,33 +162,27 @@ int start_rootfs(cfg_t *cfg) {
   }
 
   {
-    char init_path[PATH_MAX * 2];
-    char rootfs_norm[PATH_MAX];
+    fs::path rootfs_mp;
     if (cfg->conf.img_mount_point[0])
-      safe_strncpy(rootfs_norm, cfg->conf.img_mount_point, sizeof(rootfs_norm));
+      rootfs_mp = fs::path(cfg->conf.img_mount_point);
     else {
       log_error("未获取到 Rootfs 镜像挂载点。");
       return -1;
     }
-    size_t rlen = strlen(rootfs_norm);
-    if (rlen > 0 && rootfs_norm[rlen - 1] == '/')
-      rootfs_norm[rlen - 1] = '\0';
 
-    const char *init_bin =
-        cfg->conf.custom_init[0] ? cfg->conf.custom_init : DEFAULT_INIT;
-    snprintf(init_path, sizeof(init_path), "%.*s%s",
-             (int)(sizeof(init_path) - strlen(init_bin) - 1), rootfs_norm,
-             init_bin);
+    fs::path init_bin = cfg->conf.custom_init[0] ? 
+             fs::path(cfg->conf.custom_init) : fs::path(DEFAULT_INIT);
+    fs::path init_path = rootfs_mp / init_bin;
     struct stat st;
-    if (lstat(init_path, &st) != 0) {
-      log_error("未找到 Init 文件: %s", init_path);
+    if (lstat(init_path.c_str(), &st) != 0) {
+      log_error("未找到 Init 文件: %s", init_path.c_str());
       log_error("请确保 rootfs 路径正确且包含了 %s 可执行文件。",
-                init_bin);
+                init_bin.c_str());
       unmount_rootfs_img(cfg->conf.img_mount_point, cfg->rt.foreground);
       return -1;
     }
-    if (!S_ISLNK(st.st_mode) && access(init_path, X_OK) != 0) {
-      log_error("Init 文件没有可执行权限: %s", init_path);
+    if (!S_ISLNK(st.st_mode) && access(init_path.c_str(), X_OK) != 0) {
+      log_error("Init 文件没有可执行权限: %s", init_path.c_str());
       log_error("请确保为其赋予可执行权限 (chmod +x)。");
       unmount_rootfs_img(cfg->conf.img_mount_point, cfg->rt.foreground);
       return -1;
@@ -239,9 +224,8 @@ int start_rootfs(cfg_t *cfg) {
   }
 
   if (cfg->conf.volatile_mode) {
-    snprintf(cfg->rt.volatile_dir, sizeof(cfg->rt.volatile_dir),
-             "%s/" "volatile" "/%s", get_runtime_dir(),
-             cfg->rt.container_name);
+    fs::path volatile_dir = get_runtime_dir() / "volatile" / cfg->rt.container_name;
+    snprintf(cfg->rt.volatile_dir, sizeof(cfg->rt.volatile_dir), volatile_dir.c_str());
   }
 
   fix_host_ptys();
@@ -308,8 +292,7 @@ int start_rootfs(cfg_t *cfg) {
     int ret = console_monitor_loop(cfg->rt.console.master, monitor_pid, cfg);
     return ret;
   } else {
-    snprintf(marker, sizeof(marker), "/proc/%d/root/run/" PROJECT_NAME,
-             cfg->rt.container_pid);
+    fs::path marker = fs::path("/proc") / std::to_string(cfg->rt.container_pid) / "root/run/asc";
     for (int i = 0; i < 50; i++) {
       if (fs::exists(marker)) {
         booted = true;
