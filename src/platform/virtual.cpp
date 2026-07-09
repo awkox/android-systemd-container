@@ -367,7 +367,7 @@ static void bind_vfile(const char *vpath, const char *target,
                        const char *content) {
   if (write_file(vpath, content) < 0)
     return;
-  if (access(target, F_OK) != 0) {
+  if (!fs::exists(target)) {
     const int fd = open(target, O_WRONLY | O_CREAT | O_CLOEXEC, 0444);
     if (fd >= 0)
       close(fd);
@@ -452,7 +452,7 @@ int virtualize_init(const cfg_t *cfg) {
       for (int i = 0; i < n; i++) {
         fs::path vcpu = fs::path("/run/asc/vproc/cpu_sysfs") / ("cpu" + std::to_string(i));
         fs::path realcpu = fs::path("/sys/devices/system/cpu") / ("cpu" + std::to_string(i));
-        if (access(realcpu.c_str(), F_OK) == 0) {
+        if (fs::exists(realcpu)) {
           if (mkdir(vcpu.c_str(), 0755) == 0) {
             if (bind_mount(realcpu.c_str(), vcpu.c_str()) < 0)
               log_warn("[VIRT] bind_mount %s -> %s 失败", realcpu.c_str(), vcpu.c_str());

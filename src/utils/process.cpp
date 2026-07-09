@@ -131,9 +131,9 @@ pid_t find_container_init_pid(const char *uuid) {
     if (build_proc_root_path(pid, FORK_MARKER, path, sizeof(path)) < 0)
       continue;
 
-    if (access(path, F_OK) == 0) {
+    if (fs::exists(path)) {
       build_proc_root_path(pid, marker, path, sizeof(path));
-      if (access(path, F_OK) == 0) {
+      if (fs::exists(path)) {
         if (is_valid_container_pid(pid)) {
           return pid;
         }

@@ -121,9 +121,9 @@ struct tty_info {
 
 typedef struct {
   char rootfs_img_path[PATH_MAX];
-  char uuid[UUID_LEN + 1];
   char img_mount_point[PATH_MAX];
   char custom_init[PATH_MAX];
+  char uuid[UUID_LEN + 1];
 
   bool volatile_mode;
   bool force_cgroupv1;

@@ -104,7 +104,7 @@ bool is_valid_container_pid(const pid_t pid) {
 
   if (build_proc_root_path(pid, FORK_MARKER, path, sizeof(path)) < 0)
     return false;
-  if (access(path, F_OK) != 0)
+  if (!fs::exists(path))
     return false;
 
   if (!is_container_init(pid))
@@ -124,7 +124,7 @@ int start_rootfs(cfg_t *cfg) {
 
   if (cfg->rt.container_name[0]) {
     std::string lock_path = get_lock_path(cfg->rt.container_name);
-    if (lock_path.size() < PATH_MAX && access(lock_path.c_str(), F_OK) == 0) {
+    if (lock_path.size() < PATH_MAX && fs::exists(lock_path)) {
       if (acquire_external_lock(cfg->rt.container_name) == 0) {
         lock_acquired = true;
 
@@ -149,7 +149,7 @@ int start_rootfs(cfg_t *cfg) {
 
   if (cfg->conf.rootfs_img_path[0]) {
     std::string abs_path = resolve_path_arg(cfg->conf.rootfs_img_path);
-    if (abs_path.empty() || access(abs_path.c_str(), F_OK) != 0) {
+    if (abs_path.empty() || !fs::exists(abs_path)) {
       log_error("无法解析 rootfs 镜像路径 '%s': %s",
                 abs_path.empty() ? cfg->conf.rootfs_img_path : abs_path.c_str(), strerror(errno));
       goto cleanup;
@@ -314,7 +314,7 @@ int start_rootfs(cfg_t *cfg) {
     snprintf(marker, sizeof(marker), "/proc/%d/root/run/" PROJECT_NAME,
              cfg->rt.container_pid);
     for (int i = 0; i < 50; i++) {
-      if (access(marker, F_OK) == 0) {
+      if (fs::exists(marker)) {
         booted = true;
         break;
       }

@@ -66,7 +66,7 @@ void cgroup_host_bootstrap(const bool force_cgroupv1) {
     return;
   }
 
-  if (access("/sys/fs/cgroup", F_OK) != 0) {
+  if (!fs::exists("/sys/fs/cgroup")) {
     if (mkdir_p("/sys/fs/cgroup", 0755) != 0) {
       log_error("[CGROUP] 创建 /sys/fs/cgroup 失败: %s",
                 strerror(errno));
@@ -114,7 +114,7 @@ static void mount_v1_controllers(void) {
       continue;
 
     fs::path mp = fs::path("sys/fs/cgroup") / name;
-    if (access(mp.c_str(), F_OK) == 0)
+    if (fs::exists(mp))
       continue;
 
     if (mkdir(mp.c_str(), 0755) < 0 && errno != EEXIST)
@@ -133,7 +133,7 @@ static void mount_v1_controllers(void) {
 int setup_cgroups(const bool force_cgroupv1) {
   cgroup_host_bootstrap(force_cgroupv1);
 
-  if (access("sys/fs/cgroup", F_OK) != 0) {
+  if (!fs::exists("sys/fs/cgroup")) {
     if (mkdir_p("sys/fs/cgroup", 0755) < 0)
       return -1;
   }
@@ -155,7 +155,7 @@ int setup_cgroups(const bool force_cgroupv1) {
   } else {
     mount_v1_controllers();
 
-    if (access("sys/fs/cgroup/systemd", F_OK) != 0) {
+    if (!fs::exists("sys/fs/cgroup/systemd")) {
       mkdir("sys/fs/cgroup/systemd", 0755);
       if (mount("cgroup", "sys/fs/cgroup/systemd", "cgroup",
                 MS_NOSUID | MS_NODEV | MS_NOEXEC, "none,name=systemd") < 0) {
@@ -234,7 +234,7 @@ void cgroup_cleanup_container(const char *container_name) {
       snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/asc/%s",
                container_name);
 
-    if (access(cg_path, F_OK) != 0)
+    if (!fs::exists(cg_path))
       continue;
     rmdir_cgroup_tree(cg_path);
     if (strcmp(de->d_name, "cgroup.procs") == 0)
@@ -323,7 +323,7 @@ int cgroup_apply_limits(cfg_t *cfg) {
   int err = 0;
 
   snprintf(cg, sizeof(cg), "/sys/fs/cgroup/" PROJECT_NAME "/%s", cfg->rt.container_name);
-  if (access(cg, F_OK) != 0) {
+  if (!fs::exists(cg)) {
     log_warn("[CGROUP] 未找到容器的专属子组，跳过资源限制应用。");
     return -1;
   }
@@ -387,7 +387,7 @@ int cgroup_get_usage(const char *container_name, long long *mem,
     char cg[PATH_MAX - 64];
     char path[PATH_MAX + 64];
     snprintf(cg, sizeof(cg), "/sys/fs/cgroup/asc/%s", container_name);
-    if (access(cg, F_OK) != 0)
+    if (!fs::exists(cg))
       return -1;
     if (mem) {
       snprintf(path, sizeof(path), "%s/memory.current", cg);

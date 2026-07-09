@@ -89,19 +89,6 @@ bool path_has_symlink(const fs::path& path) {
     return false;
 }
 
-int force_unlink(const char *path) {
-  if (unlink(path) < 0) {
-    if (errno == EISDIR) {
-      return rmdir(path);
-    }
-    if (errno == ENOENT) {
-      return 0;
-    }
-    return -1;
-  }
-  return 0;
-}
-
 int safe_openat_proc(const pid_t pid, const char *subpath, const int flags, const mode_t mode) {
   if (pid <= 0 || !subpath || subpath[0] == '\0')
     return -1;

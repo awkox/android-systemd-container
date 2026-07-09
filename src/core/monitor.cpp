@@ -33,10 +33,10 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
 
   /* 自适应 Cgroup 命名空间支持
    * 只有在 v2 处于活动状态并且未强制使用 v1 时才启用。 */
-  bool allow_cgroup_ns = access("/proc/self/ns/cgroup", F_OK) == 0 &&
+  bool allow_cgroup_ns = fs::exists("/proc/self/ns/cgroup") &&
                  cgroup_host_is_v2() && !cfg->conf.force_cgroupv1;
   if (allow_cgroup_ns) {
-    if (access("/sys/fs/cgroup/cgroup.procs", F_OK) == 0) {
+    if (fs::exists("/sys/fs/cgroup/cgroup.procs")) {
       if (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit) {
         char enable[64] = "";
         int eoff = 0;

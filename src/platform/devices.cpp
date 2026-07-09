@@ -22,7 +22,7 @@ static int create_devices(const char *rootfs) {
   for (int i = 0; devices[i].name; i++) {
     snprintf(path, sizeof(path), "%s/dev/%s", rootfs, devices[i].name);
 
-    force_unlink(path);
+    fs::remove(path);
 
     if (mknod(path, devices[i].mode, devices[i].dev) < 0) {
       char host_path[PATH_MAX];
@@ -40,14 +40,14 @@ static int create_devices(const char *rootfs) {
   snprintf(path, sizeof(path), "%s/dev/net", rootfs);
   mkdir(path, 0755);
   snprintf(path, sizeof(path), "%s/dev/net/tun", rootfs);
-  force_unlink(path);
+  fs::remove(path);
   if (mknod(path, S_IFCHR | 0666, makedev(10, 200)) < 0)
     bind_mount("/dev/net/tun", path);
   else
     chmod(path, 0666);
 
   snprintf(path, sizeof(path), "%s/dev/fuse", rootfs);
-  force_unlink(path);
+  fs::remove(path);
   if (mknod(path, S_IFCHR | 0666, makedev(10, 229)) < 0)
     bind_mount("/dev/fuse", path);
   else
@@ -123,7 +123,7 @@ int setup_devpts() {
       }
 
       unlink(ptmx_path);
-      if (symlink("pts/ptmx", ptmx_path) == 0 && access(pts_ptmx, F_OK) == 0)
+      if (symlink("pts/ptmx", ptmx_path) == 0 && fs::exists(pts_ptmx))
         return 0;
 
       unlink(ptmx_path);

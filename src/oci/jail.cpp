@@ -54,7 +54,7 @@ static const char *rw_holes[] = {
  * 例如 "proc on /proc/kcore type proc (ro)" - 与 LXC 的做法一致。 
  */
 static void mask_path(const char *path) {
-  if (access(path, F_OK) != 0)
+  if (!fs::exists(path))
     return;
   mount(path, path, nullptr, MS_BIND, nullptr);
   mount(path, path, nullptr, MS_BIND | MS_REMOUNT | MS_RDONLY, nullptr);
@@ -65,9 +65,9 @@ static void mask_path(const char *path) {
  * 仅用于屏蔽内核日志等单纯阻塞写入不够的地方。
  */
 static void nullify_path(const char *path) {
-  if (access(path, F_OK) != 0)
+  if (!fs::exists(path))
     return;
-  if (access("/dev/null", F_OK) != 0)
+  if (!fs::exists("/dev/null"))
     return;
   mount("/dev/null", path, nullptr, MS_BIND, nullptr);
 }
@@ -76,7 +76,7 @@ static void nullify_path(const char *path) {
  * 使用持久的 FIFO 写入者来阻塞读取请求。
  */
 static void block_read_path(const char *path) {
-  if (access(path, F_OK) != 0)
+  if (!fs::exists(path))
     return;
 
   char fifo_path[64];
@@ -151,7 +151,7 @@ void apply_jail_mask(const int privileged_mask) {
    * 大规模 /proc/sys 锁定 - 无论是在标准模式还是硬件模式均适用。
    */
   {
-    if (access("/proc/sys", F_OK) == 0) {
+    if (fs::exists("/proc/sys")) {
       mount("/proc/sys", "/proc/sys", nullptr, MS_BIND, nullptr);
       mount("/proc/sys", "/proc/sys", nullptr, MS_BIND | MS_REMOUNT | MS_RDONLY,
             nullptr);
@@ -159,7 +159,7 @@ void apply_jail_mask(const int privileged_mask) {
     }
 
     for (int i = 0; rw_holes[i]; i++) {
-      if (access(rw_holes[i], F_OK) != 0)
+      if (!fs::exists(rw_holes[i]))
         continue;
       if (mount(rw_holes[i], rw_holes[i], nullptr, MS_BIND, nullptr) < 0) {
         log_warn("[SEC] 无法将安全挂载洞 %s 绑定: %s", rw_holes[i],

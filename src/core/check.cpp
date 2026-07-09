@@ -4,7 +4,7 @@ static bool check_ns(const int flag, const char *name) {
   /* 1. 通过 /proc 快速检查内核支持 */
   char path[PATH_MAX];
   snprintf(path, sizeof(path), "/proc/self/ns/%s", name);
-  if (access(path, F_OK) != 0)
+  if (!fs::exists(path))
     return false;
 
   /* 2. 功能性检查：尝试实际执行 unshare。

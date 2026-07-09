@@ -198,11 +198,10 @@ static void config_serialize_known(FILE *f, asc_conf_t *conf) {
 }
 
 int config_save(const char *config_path, cfg_t *cfg) {
-  char temp_path[PATH_MAX];
-  snprintf(temp_path, sizeof(temp_path), "%s.tmp", config_path);
+  fs::path temp_path = std::string(config_path) + ".tmp";
 
   /* 步骤 1: 将所有配置写入临时文件 */
-  FILE *f_out = fopen(temp_path, "we");
+  FILE *f_out = fopen(temp_path.c_str(), "we");
   if (!f_out)
     return -1;
 
@@ -211,8 +210,8 @@ int config_save(const char *config_path, cfg_t *cfg) {
   fclose(f_out);
 
   /* 步骤 2: 通过原子重命名提交修改 */
-  if (rename(temp_path, config_path) < 0) {
-    unlink(temp_path);
+  if (rename(temp_path.c_str(), config_path) < 0) {
+    unlink(temp_path.c_str());
     return -1;
   }
 
@@ -223,25 +222,16 @@ int config_save(const char *config_path, cfg_t *cfg) {
 }
 
 int config_load_by_name(const char *name, cfg_t *cfg) {
-  char config_path[PATH_MAX];
-  snprintf(config_path, sizeof(config_path),
-           "%s/" RUNTIME_CONFIG_SUBDIR "/%s/container.config",
-           get_runtime_dir(), name);
-
-  return config_load(config_path, cfg);
+  fs::path config_path = get_runtime_dir() / fs::path("config") / name / fs::path("container.config");
+  return config_load(config_path.c_str(), cfg);
 }
 
 int config_save_by_name(const char *name, cfg_t *cfg) {
-  char container_dir[PATH_MAX];
-  snprintf(container_dir, sizeof(container_dir),
-           "%s/" RUNTIME_CONFIG_SUBDIR "/%s",
-           get_runtime_dir(), name);
+  fs::path container_dir = get_runtime_dir() / fs::path("config") / name;
 
-  mkdir_p(container_dir, 0755);
+  mkdir_p(container_dir.c_str(), 0755);
 
-  char config_path[PATH_MAX];
-  snprintf(config_path, sizeof(config_path), "%.3800s/container.config",
-           container_dir);
+  fs::path config_path = container_dir / fs::path("container.config");
 
-  return config_save(config_path, cfg);
+  return config_save(config_path.c_str(), cfg);
 }
