@@ -69,6 +69,21 @@ int read_file(const char *path, char *buf, const size_t size) {
   return static_cast<int>(total_read);
 }
 
+std::optional<std::string> read_file_cpp(const std::filesystem::path& path) {
+    std::ifstream file(path, std::ios::in | std::ios::binary);
+    if (!file) return std::nullopt;
+
+    // 利用迭代器一次性读取整个文件
+    std::string content((std::istreambuf_iterator<char>(file)), 
+                         std::istreambuf_iterator<char>());
+    
+    // 清理尾部换行符
+    while (!content.empty() && (content.back() == '\n' || content.back() == '\r')) {
+        content.pop_back();
+    }
+    return content;
+}
+
 int remove_recursive(const fs::path& path) {
     std::error_code ec;
     fs::remove_all(path, ec);

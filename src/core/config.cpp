@@ -161,8 +161,8 @@ static void config_serialize_known(FILE *f, asc_conf_t *conf) {
 
   /* 写入被管理的键 */
   if (conf->rootfs_img_path[0]) {
-    auto_free char *abs_path = resolve_path_arg(conf->rootfs_img_path);
-    fprintf(f, "rootfs_path=%s\n", abs_path ? abs_path : conf->rootfs_img_path);
+    std::string abs_path = resolve_path_arg(conf->rootfs_img_path);
+    fprintf(f, "rootfs_path=%s\n", abs_path.empty() ? conf->rootfs_img_path : abs_path.c_str());
   }
 
   if (conf->img_mount_point[0])
@@ -192,8 +192,8 @@ static void config_serialize_known(FILE *f, asc_conf_t *conf) {
     fprintf(f, "uuid=%s\n", conf->uuid);
 
   if (conf->custom_init[0]) {
-    auto_free char *abs_path = resolve_path_arg(conf->custom_init);
-    fprintf(f, "custom_init=%s\n", abs_path ? abs_path : conf->custom_init);
+    std::string abs_path = resolve_path_arg(conf->custom_init);
+    fprintf(f, "custom_init=%s\n", abs_path.empty() ? conf->custom_init : abs_path.c_str());
   }
 }
 

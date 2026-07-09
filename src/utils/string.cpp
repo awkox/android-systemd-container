@@ -15,46 +15,29 @@ void safe_strncpy(char *dst, const char *src, const size_t size) {
   snprintf(dst, size, "%s", src);
 }
 
-char *resolve_path_arg(const char *path) {
-  // 拦截空路径
-  if (!path || !*path)
-    return strdup("");
+std::string resolve_path_arg(const std::string& path) {
+    if (path.empty()) return "";
 
-  std::string expanded_path = path;
-
-  // 1. 使用 wordexp 进行安全的 Shell 路径展开（支持 ~ 和 环境变量）
-  wordexp_t we;
-  // 【安全关键】必须使用 WRDE_NOCMD 标志，禁止命令执行替换，防止命令注入风险
-  if (wordexp(path, &we, WRDE_NOCMD) == 0) {
-    if (we.we_wordc > 0 && we.we_wordv[0]) {
-      expanded_path = we.we_wordv[0];
+    std::string expanded_path = path;
+    wordexp_t we;
+    if (wordexp(path.c_str(), &we, WRDE_NOCMD) == 0) {
+        if (we.we_wordc > 0 && we.we_wordv[0]) {
+            expanded_path = we.we_wordv[0];
+        }
+        wordfree(&we);
     }
-    wordfree(&we);
-  }
 
-  // 2. 现代化路径规范处理
-  std::error_code ec;
-  fs::path p(expanded_path);
-  fs::path abs_path;
+    std::error_code ec;
+    std::filesystem::path abs_path = std::filesystem::weakly_canonical(expanded_path, ec);
+    if (ec) {
+        abs_path = std::filesystem::absolute(expanded_path, ec);
+    }
 
-  // weakly_canonical 会智能将其转为绝对路径，并解析沿途已存在的符号链接
-  // 即使路径末尾的几个层级尚未在磁盘上创建，它也能优雅处理
-  // 完美替代原始繁琐的 getcwd/realpath 回退逻辑
-  abs_path = fs::weakly_canonical(p, ec);
-  if (ec) {
-    // 遇到极端无权限访问情况时的回退：纯字面量绝对路径转换
-    abs_path = fs::absolute(p, ec);
-  }
-
-  std::string result = abs_path.string();
-
-  // 3. 剥离末尾冗余斜杠，统一规范 (保持根目录 "/" 独立)
-  while (result.length() > 1 && result.back() == '/') {
-    result.pop_back();
-  }
-
-  // 4. 返回兼容老代码架构的 C-style 分配器堆字符串
-  return strdup(result.c_str());
+    std::string result = abs_path.string();
+    while (result.length() > 1 && result.back() == '/') {
+        result.pop_back();
+    }
+    return result;
 }
 
 void format_uptime(const long uptime_sec, char *buf, const size_t size) {

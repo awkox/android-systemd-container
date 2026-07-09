@@ -207,9 +207,8 @@ static void rmdir_cgroup_tree(const std::filesystem::path& path) {
   strncat(events_path, "/cgroup.events",
           sizeof(events_path) - strlen(events_path) - 1);
   for (int i = 0; i < 50; i++) {
-    char buf[256] = "";
-    if (read_file(events_path, buf, sizeof(buf)) > 0) {
-      if (strstr(buf, "populated 0"))
+    if (auto content = read_file_cpp(events_path)) {
+      if (strstr(content->c_str(), "populated 0"))
         break;
     }
     usleep(10000); 
@@ -295,12 +294,12 @@ bool cg_word_in_list(const char *list, const char *name) {
 static bool ctrl_supported_v2(const char *cg_path, const char *name) {
   if (strlen(cg_path) > PATH_MAX - 32)
     return false;
-  char buf[256];
   char path[PATH_MAX + 64];
   snprintf(path, sizeof(path), "%s/cgroup.controllers", cg_path);
-  if (read_file(path, buf, sizeof(buf)) <= 0)
+  auto content = read_file_cpp(path);
+  if (!content)
     return false;
-  return ctrl_in_list(buf, name);
+  return ctrl_in_list(content->c_str(), name);
 }
 
 static long long parse_cgroup_ll(const char *buf) {
@@ -392,7 +391,7 @@ int cgroup_get_usage(const char *container_name, long long *mem,
 
   const bool v2 = cgroup_host_is_v2();
   char cg[PATH_MAX - 64];
-  char path[PATH_MAX + 64], buf[256];
+  char path[PATH_MAX + 64];
 
   if (v2) {
     snprintf(cg, sizeof(cg), "/sys/fs/cgroup/" PROJECT_NAME "/%s", container_name);
@@ -400,21 +399,21 @@ int cgroup_get_usage(const char *container_name, long long *mem,
       return -1;
     if (mem) {
       snprintf(path, sizeof(path), "%s/memory.current", cg);
-      if (read_file(path, buf, sizeof(buf)) > 0)
-        *mem = parse_cgroup_ll(buf);
+      if (auto content = read_file_cpp(path))
+        *mem = parse_cgroup_ll(content->c_str());
     }
     if (cpu_us) {
       snprintf(path, sizeof(path), "%s/cpu.stat", cg);
-      if (read_file(path, buf, sizeof(buf)) > 0) {
-        const char *p = strstr(buf, "usage_usec ");
+      if (auto content = read_file_cpp(path)) {
+        const char *p = strstr(content->c_str(), "usage_usec ");
         if (p)
           *cpu_us = parse_cgroup_ll(p + 11);
       }
     }
     if (pids) {
       snprintf(path, sizeof(path), "%s/pids.current", cg);
-      if (read_file(path, buf, sizeof(buf)) > 0)
-        *pids = parse_cgroup_ll(buf);
+      if (auto content = read_file_cpp(path))
+        *pids = parse_cgroup_ll(content->c_str());
     }
   }
   return 0;

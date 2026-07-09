@@ -40,16 +40,16 @@ static int container_cpus(const asc_conf_t *conf) {
 
 static long long read_cg_ll(const char *container_name, const char *file) {
   char path[PATH_MAX];
-  char buf[64];
   snprintf(path, sizeof(path), "/sys/fs/cgroup/" PROJECT_NAME "/%s/%s",
            container_name, file);
-  if (read_file(path, buf, sizeof(buf)) <= 0)
+  auto content = read_file_cpp(path);
+  if (!content)
     return -1;
-  if (strncmp(buf, "max", 3) == 0)
+  if (strncmp(content->c_str(), "max", 3) == 0)
     return -1; 
   char *end;
-  const long long v = strtoll(buf, &end, 10);
-  return end == buf ? -1 : v;
+  const long long v = strtoll(content->c_str(), &end, 10);
+  return end == content->c_str() ? -1 : v;
 }
 
 static char *gen_meminfo(const cfg_t *cfg, size_t *out_len) {
@@ -76,16 +76,16 @@ static char *gen_meminfo(const cfg_t *cfg, size_t *out_len) {
 
   long long cg_anon = -1, cg_file = -1, cg_slab = -1;
   {
-    char path[PATH_MAX], sbuf[4096];
+    char path[PATH_MAX];
     snprintf(path, sizeof(path),
              "/sys/fs/cgroup/" PROJECT_NAME "/%s/memory.stat", cfg->rt.container_name);
-    if (read_file(path, sbuf, sizeof(sbuf)) > 0) {
-      char *p;
-      if ((p = strstr(sbuf, "anon ")))
+    if (auto content = read_file_cpp(path)) {
+      const char *p;
+      if ((p = strstr(content->c_str(), "anon ")))
         sscanf(p + 5, "%lld", &cg_anon);
-      if ((p = strstr(sbuf, "file ")))
+      if ((p = strstr(content->c_str(), "file ")))
         sscanf(p + 5, "%lld", &cg_file);
-      if ((p = strstr(sbuf, "slab ")))
+      if ((p = strstr(content->c_str(), "slab ")))
         sscanf(p + 5, "%lld", &cg_slab);
     }
   }
@@ -259,12 +259,13 @@ static char *gen_stat(const cfg_t *cfg, size_t *out_len) {
 }
 
 static double cg_cpu_busy_secs(const char *container_name) {
-  char path[PATH_MAX], buf[128];
+  char path[PATH_MAX];
   snprintf(path, sizeof(path), "/sys/fs/cgroup/" PROJECT_NAME "/%s/cpu.stat",
            container_name);
-  if (read_file(path, buf, sizeof(buf)) <= 0)
+  auto content = read_file_cpp(path);
+  if (!content)
     return -1.0;
-  char *p = strstr(buf, "usage_usec ");
+  const char *p = strstr(content->c_str(), "usage_usec ");
   if (!p)
     return -1.0;
   char *end;

@@ -92,9 +92,8 @@ long get_container_uptime(const pid_t pid) {
 
   unsigned long long start_ticks = 0;
   {
-    char buf[1024];
-    if (read_file(stat_path, buf, sizeof(buf)) > 0) {
-      char *p = strrchr(buf, ')');
+    if (auto content = read_file_cpp(stat_path)) {
+      const char *p = strrchr(content->c_str(), ')');
       if (p) {
         sscanf(p + 1, " %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %*u %*u %*d %*d %*d %*d %*d %*d %llu", &start_ticks);
       }

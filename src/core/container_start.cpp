@@ -148,13 +148,13 @@ int start_rootfs(cfg_t *cfg) {
   ensure_runtime();
 
   if (cfg->conf.rootfs_img_path[0]) {
-    auto_free char *abs_path = resolve_path_arg(cfg->conf.rootfs_img_path);
-    if (!abs_path || access(abs_path, F_OK) != 0) {
+    std::string abs_path = resolve_path_arg(cfg->conf.rootfs_img_path);
+    if (abs_path.empty() || access(abs_path.c_str(), F_OK) != 0) {
       log_error("无法解析 rootfs 镜像路径 '%s': %s",
-                abs_path ? abs_path : cfg->conf.rootfs_img_path, strerror(errno));
+                abs_path.empty() ? cfg->conf.rootfs_img_path : abs_path.c_str(), strerror(errno));
       goto cleanup;
     }
-    safe_strncpy(cfg->conf.rootfs_img_path, abs_path, sizeof(cfg->conf.rootfs_img_path));
+    safe_strncpy(cfg->conf.rootfs_img_path, abs_path.c_str(), sizeof(cfg->conf.rootfs_img_path));
   }
 
   if (cfg->rt.foreground && (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))) {
