@@ -5,7 +5,7 @@ std::optional<std::vector<pid_t>> collect_pids() {
     std::error_code ec;
     
     // 使用 C++17 filesystem 遍历目录，更安全简洁
-    for (const auto& entry : std::filesystem::directory_iterator("/proc", ec)) {
+    for (const auto& entry : fs::directory_iterator("/proc", ec)) {
         if (!entry.is_directory()) continue;
         
         std::string filename = entry.path().filename().string();

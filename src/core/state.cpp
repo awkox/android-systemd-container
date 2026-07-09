@@ -24,10 +24,10 @@ std::vector<std::string> collect_active_uuids(size_t max_uuids) {
     if (uuids.size() >= max_uuids) break;
 
     // 优雅拼接路径
-    std::filesystem::path marker_dir = std::format("/proc/{}/root{}", pid, FORK_MARKER);
-    if (!std::filesystem::exists(marker_dir, ec)) continue;
+    fs::path marker_dir = std::format("/proc/{}/root{}", pid, FORK_MARKER);
+    if (!fs::exists(marker_dir, ec)) continue;
 
-    for (const auto& entry : std::filesystem::directory_iterator(marker_dir, ec)) {
+    for (const auto& entry : fs::directory_iterator(marker_dir, ec)) {
       if (uuids.size() >= max_uuids) break;
 
       std::string name = entry.path().filename().string();

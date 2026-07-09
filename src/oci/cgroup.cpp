@@ -176,7 +176,7 @@ int setup_cgroups(const bool force_cgroupv1) {
 
 static void rmdir_cgroup_tree(const fs::path& path) {
   std::error_code ec;
-  if (!std::filesystem::exists(path, ec)) return;
+  if (!fs::exists(path, ec)) return;
 
   // 使用 vector 自动管理内存，彻底消灭 malloc/realloc/free
   std::vector<fs::path> subdirs;

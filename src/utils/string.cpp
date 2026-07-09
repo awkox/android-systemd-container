@@ -28,9 +28,9 @@ std::string resolve_path_arg(const std::string& path) {
     }
 
     std::error_code ec;
-    std::filesystem::path abs_path = std::filesystem::weakly_canonical(expanded_path, ec);
+    fs::path abs_path = fs::weakly_canonical(expanded_path, ec);
     if (ec) {
-        abs_path = std::filesystem::absolute(expanded_path, ec);
+        abs_path = fs::absolute(expanded_path, ec);
     }
 
     std::string result = abs_path.string();
