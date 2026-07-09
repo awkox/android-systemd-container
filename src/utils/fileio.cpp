@@ -90,12 +90,11 @@ bool path_has_symlink(const fs::path& path) {
 }
 
 int safe_openat_proc(const pid_t pid, const char *subpath, const int flags, const mode_t mode) {
-  if (pid <= 0 || !subpath || subpath[0] == '\0')
+  if (pid <= 0)
     return -1;
 
-  char root[64];
-  snprintf(root, sizeof(root), "/proc/%d/root", pid);
-  auto_close int dirfd = open(root, O_PATH | O_DIRECTORY | O_CLOEXEC);
+  fs::path proc_root = fs::path("/proc") / std::to_string(pid) / "root";
+  auto_close int dirfd = open(proc_root.c_str(), O_PATH | O_DIRECTORY | O_CLOEXEC);
   if (dirfd < 0)
     return -1;
 

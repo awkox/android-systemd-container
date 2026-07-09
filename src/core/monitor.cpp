@@ -71,15 +71,8 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
         }
       }
 
-      char cg_path[PATH_MAX];
-      snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/" PROJECT_NAME "/%s",
-               cfg->rt.container_name);
-      mkdir_p(cg_path, 0755);
-
-      char cg_procs[PATH_MAX];
-      safe_strncpy(cg_procs, cg_path, sizeof(cg_procs));
-      strncat(cg_procs, "/cgroup.procs",
-              sizeof(cg_procs) - strlen(cg_procs) - 1);
+      fs::path cg_path = fs::path("/sys/fs/cgroup/asc") / cfg->rt.container_name;
+      mkdir_p(cg_path.c_str(), 0755);
     }
   }
 
@@ -108,10 +101,8 @@ reboot_loop:;
      * 负责为本次引导周期创建全新的命名空间 */
      
     if (allow_cgroup_ns) {
-      char cg_procs[PATH_MAX];
-      snprintf(cg_procs, sizeof(cg_procs), "/sys/fs/cgroup/" PROJECT_NAME "/%s/cgroup.procs", cfg->rt.container_name);
-      
-      FILE *f = fopen(cg_procs, "we");
+      fs::path cg_procs = fs::path("/sys/fs/cgroup/asc") / cfg->rt.container_name / "cgroup.procs";
+      FILE *f = fopen(cg_procs.c_str(), "we");
       if (f) {
         fprintf(f, "%d\n", getpid());
         fclose(f);

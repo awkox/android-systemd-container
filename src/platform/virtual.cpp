@@ -357,10 +357,9 @@ static char *gen_cpu_sysfs(const cfg_t *cfg, size_t *out_len) {
 }
 
 unsigned long get_pid_ns_inode(const pid_t pid) {
-  char path[64];
   struct stat st;
-  snprintf(path, sizeof(path), "/proc/%d/ns/pid", static_cast<int>(pid));
-  return stat(path, &st) == 0 ? st.st_ino : 0UL;
+  fs::path path = fs::path("/proc") / std::to_string(pid) / "ns/pid";
+  return stat(path.c_str(), &st) == 0 ? st.st_ino : 0UL;
 }
 
 static void bind_vfile(const char *vpath, const char *target,
