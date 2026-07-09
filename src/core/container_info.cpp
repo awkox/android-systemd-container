@@ -27,18 +27,6 @@ static void parse_pretty_name(FILE *fp, char *buf, const size_t size) {
   }
 }
 
-static void get_os_pretty(const char *osrelease_path, char *buf, const size_t size) {
-  if (!buf || size == 0)
-    return;
-  buf[0] = '\0';
-
-  auto_fclose FILE *fp = fopen(osrelease_path, "r");
-  if (!fp)
-    return;
-
-  parse_pretty_name(fp, buf, size);
-}
-
 int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
   if (cfg->rt.container_name[0] == '\0') {
     log_error("未指定容器名称。");
@@ -67,15 +55,6 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
   printf("\n容器: %s (运行中)\n",
          cfg->rt.container_name);
   printf("  PID: %d\n", pid);
-
-  char pretty[256];
-  char osr_path[PATH_MAX];
-  if (build_proc_root_path(pid, OS_RELEASE, osr_path,
-                           sizeof(osr_path)) == 0) {
-    get_os_pretty(osr_path, pretty, sizeof(pretty));
-    if (pretty[0])
-      printf("  操作系统: %s\n", pretty);
-  }
 
   if (!trust_cfg_pid) {
     const long uptime_sec = get_container_uptime(pid);

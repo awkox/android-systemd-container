@@ -96,7 +96,6 @@ constexpr int DEFAULT_TTY_GID = 5;
 
 // 通用路径与模式
 #define PROC_ROOT_FMT "/proc/%d/root"
-#define OS_RELEASE "/etc/os-release"
 #define FORK_MARKER "/run/asc"
 #define VPROC_PATH "/run/asc/vproc"
 
