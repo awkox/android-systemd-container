@@ -2,7 +2,7 @@
 
 /* 就地覆盖写：保留原绑定的挂载 inode（不能用 rename，那会破坏覆盖关系）。
  * 通过 safe_openat_proc() 打开文件，防止各个目录层级的符号链接陷阱。 */
-static int write_inplace(const pid_t pid, const char *subpath, const char *buf,
+static int write_inplace(const pid_t pid, fs::path subpath, const char *buf,
                          const size_t len) {
   auto_close const int fd = safe_openat_proc(pid, subpath, O_WRONLY, 0);
   if (fd < 0)
@@ -539,7 +539,7 @@ void virtualize_update(const cfg_t *cfg) {
 
     fs::path subpath = vproc_dir / dyn[i].name;
 
-    if (write_inplace(cfg->rt.container_pid, subpath.c_str(), buf, len) < 0)
+    if (write_inplace(cfg->rt.container_pid, subpath, buf, len) < 0)
       write_monitor_debug_log(cfg->rt.container_name,
                               "[VIRT] 就地覆盖写入 write_inplace 失败: %s (%s)", path.c_str(),
                               strerror(errno));

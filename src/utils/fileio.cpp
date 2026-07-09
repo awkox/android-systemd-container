@@ -106,7 +106,7 @@ bool path_has_symlink(const fs::path& path) {
     return false;
 }
 
-int safe_openat_proc(const pid_t pid, const char *subpath, const int flags, const mode_t mode) {
+int safe_openat_proc(const pid_t pid, fs::path subpath, const int flags, const mode_t mode) {
   if (pid <= 0)
     return -1;
 
@@ -115,11 +115,8 @@ int safe_openat_proc(const pid_t pid, const char *subpath, const int flags, cons
   if (dirfd < 0)
     return -1;
 
-  char tmp[PATH_MAX];
-  safe_strncpy(tmp, subpath, sizeof(tmp));
-
   char *save = nullptr;
-  const char *comp = strtok_r(tmp, "/", &save);
+  const char *comp = strtok_r(subpath.c_str(), "/", &save);
   const char *next = strtok_r(nullptr, "/", &save);
 
   while (comp && next) {
