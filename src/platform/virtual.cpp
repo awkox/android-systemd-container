@@ -535,6 +535,8 @@ void virtualize_update(const cfg_t *cfg) {
       continue;
     }
 
+    fs::path subpath = fs::path("/run/asc/vproc") / dyn[i].name;
+
     if (write_inplace(cfg->rt.container_pid, subpath.c_str(), buf, len) < 0)
       write_monitor_debug_log(cfg->rt.container_name,
                               "[VIRT] 就地覆盖写入 write_inplace 失败: %s (%s)", path.c_str(),

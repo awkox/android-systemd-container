@@ -260,12 +260,10 @@ reboot_loop:;
 
     /* 将 .boot-uuid 写入真实的挂载点内，而非旧容器失效的 proc 路径 */
     if (!cfg->conf.volatile_mode && cfg->conf.img_mount_point[0]) {
-      char run_dir[PATH_MAX];
-      snprintf(run_dir, sizeof(run_dir), "%s/run", cfg->conf.img_mount_point);
-      mkdir(run_dir, 0755);
-      char uuid_path[PATH_MAX];
-      snprintf(uuid_path, sizeof(uuid_path), "%s/.boot-uuid", run_dir);
-      auto_close int fd = open(uuid_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+      fs::path run_dir = fs::path(cfg->conf.img_mount_point) / "run";
+      mkdir(run_dir.c_str(), 0755);
+      fs::path uuid_path = run_dir / ".boot-uuid";
+      auto_close int fd = open(uuid_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
       if (fd >= 0) {
         size_t ulen = strlen(cfg->conf.uuid);
         write_all(fd, cfg->conf.uuid, ulen);

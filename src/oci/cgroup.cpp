@@ -226,17 +226,17 @@ void cgroup_cleanup_container(const char *container_name) {
     if (de->d_name[0] == '.')
       continue;
 
-    char cg_path[PATH_MAX];
-    snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/%s/asc/%s",
-             de->d_name, container_name);
-
-    if (strcmp(de->d_name, "cgroup.procs") == 0)
-      snprintf(cg_path, sizeof(cg_path), "/sys/fs/cgroup/asc/%s",
-               container_name);
+    auto base = fs::path("/sys/fs/cgroup");
+    fs::path cg_path;
+    if (de->d_name == std::string("cgroup.procs")) {
+      cg_path = base / "asc" / container_name;
+    } else {
+      cg_path = base / de->d_name / "asc" / container_name;
+    }
 
     if (!fs::exists(cg_path))
       continue;
-    rmdir_cgroup_tree(cg_path);
+    rmdir_cgroup_tree(cg_path.c_str());
     if (strcmp(de->d_name, "cgroup.procs") == 0)
       break;
   }
@@ -288,9 +288,8 @@ bool cg_word_in_list(const char *list, const char *name) {
 static bool ctrl_supported_v2(const char *cg_path, const char *name) {
   if (strlen(cg_path) > PATH_MAX - 32)
     return false;
-  char path[PATH_MAX + 64];
-  snprintf(path, sizeof(path), "%s/cgroup.controllers", cg_path);
-  auto content = read_file_cpp(path);
+  fs::path path = fs::path(cg_path) / "cgroup.controllers";
+  auto content = read_file_cpp(path.c_str());
   if (!content)
     return false;
   return ctrl_in_list(content->c_str(), name);
@@ -318,21 +317,18 @@ int cgroup_apply_limits(cfg_t *cfg) {
     return 0;
   }
 
-  char cg[PATH_MAX - 64];
-  char path[PATH_MAX + 64], val[64];
   int err = 0;
 
-  snprintf(cg, sizeof(cg), "/sys/fs/cgroup/" PROJECT_NAME "/%s", cfg->rt.container_name);
+  fs::path cg = fs::path("/sys/fs/cgroup/asc") / cfg->rt.container_name;
   if (!fs::exists(cg)) {
     log_warn("[CGROUP] 未找到容器的专属子组，跳过资源限制应用。");
     return -1;
   }
 
   if (cfg->conf.memory_limit) {
-    if (ctrl_supported_v2(cg, "memory")) {
-      snprintf(path, sizeof(path), "%s/memory.max", cg);
-      snprintf(val, sizeof(val), "%lld", cfg->conf.memory_limit);
-      if (write_file(path, val) < 0) {
+    if (ctrl_supported_v2(cg.c_str(), "memory")) {
+      fs::path cg_memory_path = cg / "memory.max";
+      if (write_file(cg_memory_path.c_str(), std::to_string(cfg->conf.memory_limit).c_str()) < 0) {
         log_warn("[CGROUP] 写入 memory.max 失败: %s", strerror(errno));
         cfg->conf.memory_limit = 0;
         err++;
@@ -343,11 +339,10 @@ int cgroup_apply_limits(cfg_t *cfg) {
     }
   }
   if (cfg->conf.cpu_quota) {
-    if (ctrl_supported_v2(cg, "cpu")) {
+    if (ctrl_supported_v2(cg.c_str(), "cpu")) {
       const long long period = cfg->conf.cpu_period > 0 ? cfg->conf.cpu_period : 100000;
-      snprintf(path, sizeof(path), "%s/cpu.max", cg);
-      snprintf(val, sizeof(val), "%lld %lld", cfg->conf.cpu_quota, period);
-      if (write_file(path, val) < 0) {
+      fs::path cg_cpu_path = cg / "cpu.max";
+      if (write_file(cg_cpu_path.c_str(), std::format("{} {}", cfg->conf.cpu_quota, period).c_str()) < 0) {
         log_warn("[CGROUP] 写入 cpu.max 失败: %s", strerror(errno));
         cfg->conf.cpu_quota = 0;
         err++;
@@ -358,10 +353,9 @@ int cgroup_apply_limits(cfg_t *cfg) {
     }
   }
   if (cfg->conf.pids_limit) {
-    if (ctrl_supported_v2(cg, "pids")) {
-      snprintf(path, sizeof(path), "%s/pids.max", cg);
-      snprintf(val, sizeof(val), "%lld", cfg->conf.pids_limit);
-      if (write_file(path, val) < 0) {
+    if (ctrl_supported_v2(cg.c_str(), "pids")) {
+      fs::path cg_pids_path = cg / "pids.max";
+      if (write_file(cg_pids_path.c_str(), std::to_string(cfg->conf.pids_limit).c_str()) < 0) {
         log_warn("[CGROUP] 写入 pids.max 失败: %s", strerror(errno));
         cfg->conf.pids_limit = 0;
         err++;
@@ -384,27 +378,25 @@ int cgroup_get_usage(const char *container_name, long long *mem,
     *pids = -1;
 
   if (cgroup_host_is_v2()) {
-    char cg[PATH_MAX - 64];
-    char path[PATH_MAX + 64];
-    snprintf(cg, sizeof(cg), "/sys/fs/cgroup/asc/%s", container_name);
+    fs::path cg = fs::path("/sys/fs/cgroup/asc") / container_name;
     if (!fs::exists(cg))
       return -1;
     if (mem) {
-      snprintf(path, sizeof(path), "%s/memory.current", cg);
-      if (auto content = read_file_cpp(path))
+      fs::path path = cg / "memory.current";
+      if (auto content = read_file_cpp(path.c_str()))
         *mem = parse_cgroup_ll(content->c_str());
     }
     if (cpu_us) {
-      snprintf(path, sizeof(path), "%s/cpu.stat", cg);
-      if (auto content = read_file_cpp(path)) {
+      fs::path path = cg / "cpu.stat";
+      if (auto content = read_file_cpp(path.c_str())) {
         const char *p = strstr(content->c_str(), "usage_usec ");
         if (p)
           *cpu_us = parse_cgroup_ll(p + 11);
       }
     }
     if (pids) {
-      snprintf(path, sizeof(path), "%s/pids.current", cg);
-      if (auto content = read_file_cpp(path))
+      fs::path path = cg / "pids.current";
+      if (auto content = read_file_cpp(path.c_str()))
         *pids = parse_cgroup_ll(content->c_str());
     }
   }
