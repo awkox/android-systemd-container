@@ -133,8 +133,6 @@ int start_rootfs(cfg_t *cfg) {
     }
   }
 
-  ensure_runtime();
-
   if (cfg->conf.rootfs_img_path[0]) {
     std::string abs_path = resolve_path_arg(cfg->conf.rootfs_img_path);
     if (abs_path.empty() || !fs::exists(abs_path)) {

@@ -407,14 +407,16 @@ int virtualize_init(const cfg_t *cfg) {
   const bool has_mem = cfg->conf.memory_limit > 0;
   const bool has_cpu = cfg->conf.cpu_quota > 0;
 
+  // 位于根目录中
+
   if (has_cpu)
     virtualize_affinity(&cfg->conf);
 
-  if (!create_directories_with_permission("/run/asc/vproc")) {
+  if (!create_directories_with_permission(vproc_dir)) {
     log_warn("[VIRT] 创建 /run/asc/vproc 失败: %s", strerror(errno));
     return -1;
   }
-  if (domount("none", "/run/asc/vproc", "tmpfs", MS_NOSUID | MS_NODEV,
+  if (domount("none", vproc_dir.c_str(), "tmpfs", MS_NOSUID | MS_NODEV,
               "mode=755,size=1M") < 0) {
     log_warn("[VIRT] tmpfs 挂载失败: %s", strerror(errno));
     return -1;
@@ -440,16 +442,17 @@ int virtualize_init(const cfg_t *cfg) {
     if (!buf)
       continue;
 
-    fs::path vpath = fs::path("/run/asc/vproc") / proc_files[i].name;
+    fs::path vpath = vproc_dir / proc_files[i].name;
     fs::path target = proc_dir / proc_files[i].name;
     bind_vfile(vpath.c_str(), target.c_str(), buf);
   }
 
   if (has_cpu) {
-    if (create_directories_with_permission("/run/asc/vproc/cpu_sysfs")) {
+    fs::path cpu_sysfs_path = vproc_dir / "cpu_sysfs";
+    if (create_directories_with_permission(cpu_sysfs_path)) {
       const int n = container_cpus(&cfg->conf);
       for (int i = 0; i < n; i++) {
-        fs::path vcpu = fs::path("/run/asc/vproc/cpu_sysfs") / ("cpu" + std::to_string(i));
+        fs::path vcpu = cpu_sysfs_path / ("cpu" + std::to_string(i));
         fs::path realcpu = fs::path("/sys/devices/system/cpu") / ("cpu" + std::to_string(i));
         if (fs::exists(realcpu)) {
           if (mkdir(vcpu.c_str(), 0755) == 0) {
@@ -465,11 +468,11 @@ int virtualize_init(const cfg_t *cfg) {
         auto_free char *buf = gen_cpu_sysfs(cfg, &len);
         if (!buf)
           continue;
-        fs::path vpath = fs::path("/run/asc/vproc/cpu_sysfs") / sysfs_names[i];
+        fs::path vpath = cpu_sysfs_path / sysfs_names[i];
         write_file(vpath.c_str(), buf);
       }
 
-      if (bind_mount("/run/asc/vproc/cpu_sysfs", "/sys/devices/system/cpu") < 0)
+      if (bind_mount(cpu_sysfs_path.c_str(), "/sys/devices/system/cpu") < 0)
         log_warn("[VIRT] 屏蔽 /sys/devices/system/cpu 失败 (htop 可能会显示宿主机核心)");
     }
   }
@@ -494,9 +497,9 @@ void virtualize_update(const cfg_t *cfg) {
     }
   }
 
-  fs::path vproc_dir = proc_dir / std::to_string(cfg->rt.container_pid) / "root" / "run/asc/vproc";
+  fs::path container_vproc_dir = proc_dir / std::to_string(cfg->rt.container_pid) / "root" / vproc_dir;
   struct stat st_dir;
-  if (stat(vproc_dir.c_str(), &st_dir) != 0 || !S_ISDIR(st_dir.st_mode)) {
+  if (stat(container_vproc_dir.c_str(), &st_dir) != 0 || !S_ISDIR(st_dir.st_mode)) {
     return;
   }
 
@@ -526,7 +529,7 @@ void virtualize_update(const cfg_t *cfg) {
     }
 
     struct stat st;
-    fs::path path = vproc_dir / dyn[i].name;
+    fs::path path = container_vproc_dir / dyn[i].name;
     if (stat(path.c_str(), &st) != 0) {
       write_monitor_debug_log(cfg->rt.container_name,
                               "[VIRT] 虚拟文件丢失: %s (%s)", path.c_str(),
@@ -534,7 +537,7 @@ void virtualize_update(const cfg_t *cfg) {
       continue;
     }
 
-    fs::path subpath = fs::path("/run/asc/vproc") / dyn[i].name;
+    fs::path subpath = vproc_dir / dyn[i].name;
 
     if (write_inplace(cfg->rt.container_pid, subpath.c_str(), buf, len) < 0)
       write_monitor_debug_log(cfg->rt.container_name,

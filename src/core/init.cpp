@@ -177,6 +177,8 @@ void internal_boot(cfg_t *cfg) {
     log_error("pivot_root 后的 chdir(\"/\") 失败: %s", strerror(errno));
     goto boot_fail;
   }
+  
+  // 目前处于根目录
 
   /* 13. 设置 devpts */
   setup_devpts();
@@ -185,7 +187,7 @@ void internal_boot(cfg_t *cfg) {
   apply_jail_mask(cfg->conf.privileged_mask);
 
   /* 13b. 资源可见性虚拟化 */
-  if (is_mountpoint("/proc")) {
+  if (is_mountpoint("proc")) {
     if (virtualize_init(cfg) < 0)
       log_warn("[VIRT] 虚拟化资源初始化失败，将以无虚拟化状态继续运行。");
   } else {
