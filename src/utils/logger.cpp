@@ -36,7 +36,7 @@ static void write_to_log_file(const char *name, const char *component,
     return;
   }
 
-  fs::path log_dir = get_runtime_dir() / fs::path("logs") / name;
+  fs::path log_dir = runtime_dir / fs::path("logs") / name;
   create_directories_with_permission(log_dir);
 
   fs::path log_path = log_dir / "log";
@@ -123,7 +123,7 @@ void print_privileged_warning(const int privileged_mask) {
 }
 
 void open_container_log(const char *container_name) {
-  fs::path log_dir = get_runtime_dir() / fs::path("logs") / container_name;
+  fs::path log_dir = runtime_dir / fs::path("logs") / container_name;
   create_directories_with_permission(log_dir);
 
   fs::path log_path = log_dir / "log";

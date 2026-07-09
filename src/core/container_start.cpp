@@ -224,7 +224,7 @@ int start_rootfs(cfg_t *cfg) {
   }
 
   if (cfg->conf.volatile_mode) {
-    fs::path volatile_dir = get_runtime_dir() / "volatile" / cfg->rt.container_name;
+    fs::path volatile_dir = runtime_dir / "volatile" / cfg->rt.container_name;
     snprintf(cfg->rt.volatile_dir, sizeof(cfg->rt.volatile_dir), volatile_dir.c_str());
   }
 

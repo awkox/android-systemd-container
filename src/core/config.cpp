@@ -222,12 +222,12 @@ int config_save(const char *config_path, cfg_t *cfg) {
 }
 
 int config_load_by_name(const char *name, cfg_t *cfg) {
-  fs::path config_path = get_runtime_dir() / fs::path("config") / name / fs::path("container.config");
+  fs::path config_path = runtime_dir / fs::path("config") / name / fs::path("container.config");
   return config_load(config_path.c_str(), cfg);
 }
 
 int config_save_by_name(const char *name, cfg_t *cfg) {
-  fs::path container_dir = get_runtime_dir() / fs::path("config") / name;
+  fs::path container_dir = runtime_dir / fs::path("config") / name;
   create_directories_with_permission(container_dir);
   fs::path config_path = container_dir / "container.config";
 

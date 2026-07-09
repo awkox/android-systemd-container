@@ -120,6 +120,7 @@ int setup_devpts() {
 
   // 3. 提取 ptmx 虚拟化逻辑为 Lambda，展平深深的 if 嵌套
   auto setup_ptmx_fallback = [&]() -> bool {
+    std::error_code ec;
     // 策略 1: Bind Mount
     fs::remove(ptmx_path, ec);
     if (write_file(ptmx_path.c_str(), "") == 0) {
