@@ -412,7 +412,7 @@ int virtualize_init(const cfg_t *cfg) {
     virtualize_affinity(&cfg->conf);
 
   if (mkdir_p("/run/asc/vproc", 0755) < 0) {
-    log_warn("[VIRT] mkdir_p %s 失败: %s", VPROC_PATH, strerror(errno));
+    log_warn("[VIRT] 创建 /run/asc/vproc 失败: %s", strerror(errno));
     return -1;
   }
   if (domount("none", "/run/asc/vproc", "tmpfs", MS_NOSUID | MS_NODEV,
