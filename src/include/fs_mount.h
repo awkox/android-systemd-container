@@ -5,7 +5,7 @@
 
 bool is_mountpoint(const fs::path& path);
 int domount(const char *src, const char *tgt, const char *fstype, const unsigned long flags, const char *data);
-int bind_mount(const char *src, const char *tgt);
+int bind_mount(fs::path src, fs::path tgt);
 int check_volatile_mode(asc_conf_t *conf);
 int setup_volatile_overlay(cfg_t *cfg);
 int cleanup_volatile_overlay(asc_rt_t *rt);

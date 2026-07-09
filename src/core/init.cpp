@@ -198,20 +198,12 @@ void internal_boot(cfg_t *cfg) {
     log_warn("重置主机名失败: %s", strerror(errno));
   }
 
-  if (!cfg->rt.reboot_cycle) {
-    log_info("正在引导容器 '%s' (使用 init: %s)...", cfg->rt.container_name,
-             cfg->conf.custom_init[0] ? cfg->conf.custom_init : DEFAULT_INIT);
-  }
-
   /* 14b 写入容器标识，供 PID 发现 */
   mkdir("/run/asc", 0755);
   if (cfg->conf.uuid[0] != '\0') {
     fs::path uuid_path = fs::path("/run/asc") / cfg->conf.uuid;
-    write_file(uuid_path.c_str(), "");
+    write_file(uuid_path, "");
   }
-
-  if (cfg->conf.img_mount_point[0])
-    write_file("/run/asc" "/mount", cfg->conf.img_mount_point);
 
   if (cfg->rt.foreground) {
     printf("\r\n(按下 CTRL+ALT+Q 以脱离前台并退出)\r\n");
@@ -279,7 +271,7 @@ void internal_boot(cfg_t *cfg) {
   init_bin = cfg->conf.custom_init[0] ? cfg->conf.custom_init : (char *)DEFAULT_INIT;
   init_args[argc++] = init_bin;
 
-  if (statfs("/sys/fs/cgroup", &_cgsfs) == 0) {
+  if (statfs(cgroup_dir.c_str(), &_cgsfs) == 0) {
     if (_cgsfs.f_type == CGROUP2_SUPER_MAGIC) {
       init_args[argc++] = (char *)"systemd.unified_cgroup_hierarchy=1";
     } else {

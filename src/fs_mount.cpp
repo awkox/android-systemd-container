@@ -51,8 +51,8 @@ int domount(const char *src, const char *tgt, const char *fstype,
   return 0;
 }
 
-int bind_mount(const char *src, const char *tgt) {
-  auto_close const int src_fd = open(src, O_PATH | O_NOFOLLOW | O_CLOEXEC);
+int bind_mount(fs::path src, fs::path tgt) {
+  auto_close const int src_fd = open(src.c_str(), O_PATH | O_NOFOLLOW | O_CLOEXEC);
   if (src_fd < 0) {
     /* 遇到 ELOOP 说明它是一个我们应拒绝的符号链接 */
     return -1;
@@ -69,31 +69,31 @@ int bind_mount(const char *src, const char *tgt) {
   }
 
   struct stat st_tgt;
-  if (lstat(tgt, &st_tgt) < 0) {
+  if (lstat(tgt.c_str(), &st_tgt) < 0) {
     /* 目标不存在 — 如果任何父组件是符号链接则拒绝
      * (lstat 只能防止最后一个组件被跟踪)。 */
-    if (path_has_symlink(tgt)) {
-      log_error("安全违规：绑定挂载的目标路径中包含符号链接 %s", tgt);
+    if (path_has_symlink(tgt.c_str())) {
+      log_error("安全违规：绑定挂载的目标路径中包含符号链接 %s", tgt.c_str());
       errno = ELOOP;
       return -1;
     }
     if (S_ISDIR(st_src.st_mode)) {
-      mkdir(tgt, st_src.st_mode & 07777);
-      if (chown(tgt, st_src.st_uid, st_src.st_gid) < 0) {
+      mkdir(tgt.c_str(), st_src.st_mode & 07777);
+      if (chown(tgt.c_str(), st_src.st_uid, st_src.st_gid) < 0) {
         /* 忽略 chown 失败，这对绑定挂载并非致命 */
       }
     } else {
       write_file(tgt, "");
     }
   } else if (S_ISLNK(st_tgt.st_mode)) {
-    log_error("安全违规：绑定挂载目标 %s 是一个符号链接！", tgt);
+    log_error("安全违规：绑定挂载目标 %s 是一个符号链接！", tgt.c_str());
     errno = ELOOP;
     return -1;
   }
 
   fs::path fd_path = fs::path("/proc/self/fd") / std::to_string(src_fd);
 
-  return domount(fd_path.c_str(), tgt, nullptr, MS_BIND | MS_REC, nullptr);
+  return domount(fd_path.c_str(), tgt.c_str(), nullptr, MS_BIND | MS_REC, nullptr);
 }
 
 /* ---------------------------------------------------------------------------

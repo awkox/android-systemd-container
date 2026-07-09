@@ -134,7 +134,7 @@ int start_rootfs(cfg_t *cfg) {
   }
 
   if (cfg->conf.rootfs_img_path[0]) {
-    std::string abs_path = resolve_path_arg(cfg->conf.rootfs_img_path);
+    fs::path abs_path = resolve_path_arg(cfg->conf.rootfs_img_path);
     if (abs_path.empty() || !fs::exists(abs_path)) {
       log_error("无法解析 rootfs 镜像路径 '%s': %s",
                 abs_path.empty() ? cfg->conf.rootfs_img_path : abs_path.c_str(), strerror(errno));

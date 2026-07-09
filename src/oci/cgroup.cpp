@@ -201,7 +201,7 @@ static void rmdir_cgroup_tree(const fs::path& path) {
 
   fs::path events_path = path / "cgroup.events";
   for (int i = 0; i < 50; i++) {
-    if (auto content = read_file_cpp(events_path.c_str())) {
+    if (auto content = read_file_cpp(events_path)) {
       if (strstr(content->c_str(), "populated 0"))
         break;
     }
@@ -276,11 +276,9 @@ bool cg_word_in_list(const char *list, const char *name) {
   return ctrl_in_list(list, name);
 }
 
-static bool ctrl_supported_v2(const char *cg_path, const char *name) {
-  if (strlen(cg_path) > PATH_MAX - 32)
-    return false;
-  fs::path path = fs::path(cg_path) / "cgroup.controllers";
-  auto content = read_file_cpp(path.c_str());
+static bool ctrl_supported_v2(fs::path cg_path, const char *name) {
+  fs::path path = cg_path / "cgroup.controllers";
+  auto content = read_file_cpp(path);
   if (!content)
     return false;
   return ctrl_in_list(content->c_str(), name);
@@ -317,9 +315,9 @@ int cgroup_apply_limits(cfg_t *cfg) {
   }
 
   if (cfg->conf.memory_limit) {
-    if (ctrl_supported_v2(cg.c_str(), "memory")) {
+    if (ctrl_supported_v2(cg, "memory")) {
       fs::path cg_memory_path = cg / "memory.max";
-      if (write_file(cg_memory_path.c_str(), std::to_string(cfg->conf.memory_limit).c_str()) < 0) {
+      if (write_file(cg_memory_path, std::to_string(cfg->conf.memory_limit).c_str()) < 0) {
         log_warn("[CGROUP] 写入 memory.max 失败: %s", strerror(errno));
         cfg->conf.memory_limit = 0;
         err++;
@@ -330,10 +328,10 @@ int cgroup_apply_limits(cfg_t *cfg) {
     }
   }
   if (cfg->conf.cpu_quota) {
-    if (ctrl_supported_v2(cg.c_str(), "cpu")) {
+    if (ctrl_supported_v2(cg, "cpu")) {
       const long long period = cfg->conf.cpu_period > 0 ? cfg->conf.cpu_period : 100000;
       fs::path cg_cpu_path = cg / "cpu.max";
-      if (write_file(cg_cpu_path.c_str(), std::format("{} {}", cfg->conf.cpu_quota, period).c_str()) < 0) {
+      if (write_file(cg_cpu_path, std::format("{} {}", cfg->conf.cpu_quota, period).c_str()) < 0) {
         log_warn("[CGROUP] 写入 cpu.max 失败: %s", strerror(errno));
         cfg->conf.cpu_quota = 0;
         err++;
@@ -344,9 +342,9 @@ int cgroup_apply_limits(cfg_t *cfg) {
     }
   }
   if (cfg->conf.pids_limit) {
-    if (ctrl_supported_v2(cg.c_str(), "pids")) {
+    if (ctrl_supported_v2(cg, "pids")) {
       fs::path cg_pids_path = cg / "pids.max";
-      if (write_file(cg_pids_path.c_str(), std::to_string(cfg->conf.pids_limit).c_str()) < 0) {
+      if (write_file(cg_pids_path, std::to_string(cfg->conf.pids_limit).c_str()) < 0) {
         log_warn("[CGROUP] 写入 pids.max 失败: %s", strerror(errno));
         cfg->conf.pids_limit = 0;
         err++;
@@ -374,12 +372,12 @@ int cgroup_get_usage(const char *container_name, long long *mem,
       return -1;
     if (mem) {
       fs::path path = cg / "memory.current";
-      if (auto content = read_file_cpp(path.c_str()))
+      if (auto content = read_file_cpp(path))
         *mem = parse_cgroup_ll(content->c_str());
     }
     if (cpu_us) {
       fs::path path = cg / "cpu.stat";
-      if (auto content = read_file_cpp(path.c_str())) {
+      if (auto content = read_file_cpp(path)) {
         const char *p = strstr(content->c_str(), "usage_usec ");
         if (p)
           *cpu_us = parse_cgroup_ll(p + 11);
@@ -387,7 +385,7 @@ int cgroup_get_usage(const char *container_name, long long *mem,
     }
     if (pids) {
       fs::path path = cg / "pids.current";
-      if (auto content = read_file_cpp(path.c_str()))
+      if (auto content = read_file_cpp(path))
         *pids = parse_cgroup_ll(content->c_str());
     }
   }

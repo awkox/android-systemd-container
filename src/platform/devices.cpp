@@ -38,7 +38,7 @@ static int create_devices() {
 
     if (mknod(device_path.c_str(), mode, dev) < 0) {
       fs::path host_path = "/" / device_path; 
-      bind_mount(host_path.c_str(), device_path.c_str());
+      bind_mount(host_path, device_path);
     } else {
       chmod(device_path.c_str(), mode & 0777);
       
@@ -123,7 +123,7 @@ int setup_devpts() {
     std::error_code ec;
     // 策略 1: Bind Mount
     fs::remove(ptmx_path, ec);
-    if (write_file(ptmx_path.c_str(), "") == 0) {
+    if (write_file(ptmx_path, "") == 0) {
       if (mount(pts_ptmx.c_str(), ptmx_path.c_str(), nullptr, MS_BIND, nullptr) == 0) {
         return true;
       }

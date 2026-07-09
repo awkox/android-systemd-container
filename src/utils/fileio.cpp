@@ -29,9 +29,9 @@ bool create_directories_with_permission(const fs::path& target, mode_t mode) {
   return true;
 }
 
-int write_file(const char *path, const char *content) {
+int write_file(fs::path path, const char *content) {
   const int fd =
-    open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+    open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
   if (fd < 0)
     return -1;
 

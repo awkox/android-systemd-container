@@ -63,11 +63,8 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
           if (write_file("/sys/fs/cgroup/cgroup.subtree_control", enable) < 0)
             log_warn("[CGROUP] subtree_control (root): %s", strerror(errno));
           create_directories_with_permission("/sys/fs/cgroup/asc");
-          if (write_file("/sys/fs/cgroup/" PROJECT_NAME
-                         "/cgroup.subtree_control",
-                         enable) < 0)
-            log_warn("[CGROUP] subtree_control (" PROJECT_NAME "): %s",
-                     strerror(errno));
+          if (write_file("/sys/fs/cgroup/asc/cgroup.subtree_control", enable) < 0)
+            log_warn("[CGROUP] subtree_control (asc): %s", strerror(errno));
         }
       }
 

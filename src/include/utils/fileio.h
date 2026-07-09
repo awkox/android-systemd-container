@@ -4,7 +4,7 @@
 #include "common.h"
 
 bool create_directories_with_permission(const fs::path& target, mode_t mode = 0755);
-int write_file(const char *path, const char *content);
+int write_file(fs::path path, const char *content);
 ssize_t write_all(const int fd, const void *buf, const size_t count);
 std::optional<std::string> read_file_cpp(const fs::path& path);
 int remove_recursive(const fs::path& path);

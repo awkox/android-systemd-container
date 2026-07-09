@@ -15,7 +15,7 @@ void safe_strncpy(char *dst, const char *src, const size_t size) {
   snprintf(dst, size, "%s", src);
 }
 
-std::string resolve_path_arg(const std::string& path) {
+fs::path resolve_path_arg(const fs::path& path) {
     if (path.empty()) return "";
 
     std::string expanded_path = path;
@@ -32,12 +32,7 @@ std::string resolve_path_arg(const std::string& path) {
     if (ec) {
         abs_path = fs::absolute(expanded_path, ec);
     }
-
-    std::string result = abs_path.string();
-    while (result.length() > 1 && result.back() == '/') {
-        result.pop_back();
-    }
-    return result;
+    return abs_path.lexically_normal();
 }
 
 void format_uptime(const long uptime_sec, char *buf, const size_t size) {

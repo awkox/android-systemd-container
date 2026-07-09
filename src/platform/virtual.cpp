@@ -362,17 +362,17 @@ unsigned long get_pid_ns_inode(const pid_t pid) {
   return stat(path.c_str(), &st) == 0 ? st.st_ino : 0UL;
 }
 
-static void bind_vfile(const char *vpath, const char *target,
+static void bind_vfile(fs::path vpath, fs::path target,
                        const char *content) {
   if (write_file(vpath, content) < 0)
     return;
   if (!fs::exists(target)) {
-    const int fd = open(target, O_WRONLY | O_CREAT | O_CLOEXEC, 0444);
+    const int fd = open(target.c_str(), O_WRONLY | O_CREAT | O_CLOEXEC, 0444);
     if (fd >= 0)
       close(fd);
   }
   if (bind_mount(vpath, target) < 0)
-    log_warn("[VIRT] bind_mount %s -> %s 失败 (将继续执行)", vpath, target);
+    log_warn("[VIRT] bind_mount %s -> %s 失败 (将继续执行)", vpath.c_str(), target.c_str());
 }
 
 static void virtualize_affinity(const asc_conf_t *conf) {
@@ -444,7 +444,7 @@ int virtualize_init(const cfg_t *cfg) {
 
     fs::path vpath = vproc_dir / proc_files[i].name;
     fs::path target = proc_dir / proc_files[i].name;
-    bind_vfile(vpath.c_str(), target.c_str(), buf);
+    bind_vfile(vpath, target, buf);
   }
 
   if (has_cpu) {
@@ -456,7 +456,7 @@ int virtualize_init(const cfg_t *cfg) {
         fs::path realcpu = fs::path("/sys/devices/system/cpu") / ("cpu" + std::to_string(i));
         if (fs::exists(realcpu)) {
           if (mkdir(vcpu.c_str(), 0755) == 0) {
-            if (bind_mount(realcpu.c_str(), vcpu.c_str()) < 0)
+            if (bind_mount(realcpu, vcpu) < 0)
               log_warn("[VIRT] bind_mount %s -> %s 失败", realcpu.c_str(), vcpu.c_str());
           }
         }
@@ -469,10 +469,10 @@ int virtualize_init(const cfg_t *cfg) {
         if (!buf)
           continue;
         fs::path vpath = cpu_sysfs_path / sysfs_names[i];
-        write_file(vpath.c_str(), buf);
+        write_file(vpath, buf);
       }
 
-      if (bind_mount(cpu_sysfs_path.c_str(), "/sys/devices/system/cpu") < 0)
+      if (bind_mount(cpu_sysfs_path, "/sys/devices/system/cpu") < 0)
         log_warn("[VIRT] 屏蔽 /sys/devices/system/cpu 失败 (htop 可能会显示宿主机核心)");
     }
   }

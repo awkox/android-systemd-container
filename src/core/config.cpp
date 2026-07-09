@@ -69,8 +69,8 @@ static void parse_privileged(std::string_view value, asc_conf_t *conf) {
   }
 }
 
-int config_load(const char *config_path, cfg_t *cfg) {
-  auto_fclose FILE *f = fopen(config_path, "re");
+int config_load(fs::path config_path, cfg_t *cfg) {
+  auto_fclose FILE *f = fopen(config_path.c_str(), "re");
   if (!f) {
     if (errno == ENOENT) {
       cfg->rt.config_file_existed = false;
@@ -161,7 +161,7 @@ static void config_serialize_known(FILE *f, asc_conf_t *conf) {
 
   /* 写入被管理的键 */
   if (conf->rootfs_img_path[0]) {
-    std::string abs_path = resolve_path_arg(conf->rootfs_img_path);
+    fs::path abs_path = resolve_path_arg(conf->rootfs_img_path);
     fprintf(f, "rootfs_path=%s\n", abs_path.empty() ? conf->rootfs_img_path : abs_path.c_str());
   }
 
@@ -192,13 +192,14 @@ static void config_serialize_known(FILE *f, asc_conf_t *conf) {
     fprintf(f, "uuid=%s\n", conf->uuid);
 
   if (conf->custom_init[0]) {
-    std::string abs_path = resolve_path_arg(conf->custom_init);
+    fs::path abs_path = resolve_path_arg(conf->custom_init);
     fprintf(f, "custom_init=%s\n", abs_path.empty() ? conf->custom_init : abs_path.c_str());
   }
 }
 
-int config_save(const char *config_path, cfg_t *cfg) {
-  fs::path temp_path = std::string(config_path) + ".tmp";
+int config_save(fs::path config_path, cfg_t *cfg) {
+  fs::path temp_path = config_path;
+  temp_path += ".tmp";
 
   /* 步骤 1: 将所有配置写入临时文件 */
   FILE *f_out = fopen(temp_path.c_str(), "we");
@@ -210,7 +211,7 @@ int config_save(const char *config_path, cfg_t *cfg) {
   fclose(f_out);
 
   /* 步骤 2: 通过原子重命名提交修改 */
-  if (rename(temp_path.c_str(), config_path) < 0) {
+  if (rename(temp_path.c_str(), config_path.c_str()) < 0) {
     fs::remove(temp_path);
     return -1;
   }
@@ -223,7 +224,7 @@ int config_save(const char *config_path, cfg_t *cfg) {
 
 int config_load_by_name(const char *name, cfg_t *cfg) {
   fs::path config_path = config_dir / name / "container.config";
-  return config_load(config_path.c_str(), cfg);
+  return config_load(config_path, cfg);
 }
 
 int config_save_by_name(const char *name, cfg_t *cfg) {
