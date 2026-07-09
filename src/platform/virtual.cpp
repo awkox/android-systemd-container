@@ -24,13 +24,13 @@ static int write_inplace(const pid_t pid, const fs::path& subpath, const char *b
   return w == static_cast<ssize_t>(len) ? 0 : -1;
 }
 
-static int container_cpus(const asc_conf_t *conf) {
+static int container_cpus(const long long cpu_quota, const long long cpu_period) {
   int host = static_cast<int>(sysconf(_SC_NPROCESSORS_ONLN));
   if (host < 1)
     host = 1;
-  if (conf->cpu_quota <= 0 || conf->cpu_period <= 0)
+  if (cpu_quota <= 0 || cpu_period <= 0)
     return host;
-  int n = static_cast<int>((conf->cpu_quota + conf->cpu_period - 1) / conf->cpu_period);
+  int n = static_cast<int>((cpu_quota + cpu_period - 1) / cpu_period);
   if (n < 1)
     n = 1;
   if (n > host)
@@ -154,7 +154,7 @@ static char *gen_meminfo(const cfg_t *cfg, size_t *out_len) {
 }
 
 static char *gen_cpuinfo(const cfg_t *cfg, size_t *out_len) {
-  const int max_cpus = container_cpus(&cfg->conf);
+  const int max_cpus = container_cpus(cfg->conf.cpu_quota, cfg->conf.cpu_period);
   auto_fclose FILE *f = fopen("/proc/cpuinfo", "r");
   if (!f)
     return nullptr;
@@ -192,7 +192,7 @@ static char *gen_cpuinfo(const cfg_t *cfg, size_t *out_len) {
 }
 
 static char *gen_stat(const cfg_t *cfg, size_t *out_len) {
-  const int max_cpus = container_cpus(&cfg->conf);
+  const int max_cpus = container_cpus(cfg->conf.cpu_quota, cfg->conf.cpu_period);
   auto_fclose FILE *f = fopen("/proc/stat", "r");
   if (!f)
     return nullptr;
@@ -305,7 +305,7 @@ static char *gen_uptime(const cfg_t *cfg, size_t *out_len) {
   if (up < 0.0)
     up = 0.0;
 
-  const int ccpus = container_cpus(&cfg->conf);
+  const int ccpus = container_cpus(cfg->conf.cpu_quota, cfg->conf.cpu_period);
   const double busy = cg_cpu_busy_secs(cfg->rt.container_name);
   double idle = busy >= 0.0 ? up * ccpus - busy : up * ccpus * 0.1;
   if (idle < 0.0)
@@ -328,7 +328,7 @@ static char *gen_loadavg(const cfg_t *cfg, size_t *out_len) {
     return nullptr;
 
   const int hcpus = static_cast<int>(sysconf(_SC_NPROCESSORS_ONLN));
-  const int ccpus = container_cpus(&cfg->conf);
+  const int ccpus = container_cpus(cfg->conf.cpu_quota, cfg->conf.cpu_period);
   const double r = static_cast<double>(ccpus) / static_cast<double>(hcpus);
 
   int srun = static_cast<int>(run * r);
@@ -347,7 +347,7 @@ static char *gen_loadavg(const cfg_t *cfg, size_t *out_len) {
 }
 
 static char *gen_cpu_sysfs(const cfg_t *cfg, size_t *out_len) {
-  const int n = container_cpus(&cfg->conf);
+  const int n = container_cpus(cfg->conf.cpu_quota, cfg->conf.cpu_period);
   char *buf = static_cast<char *>(malloc(32));
   if (!buf)
     return nullptr;
@@ -375,8 +375,8 @@ static void bind_vfile(const fs::path& vpath, const fs::path& target,
     log_warn("[VIRT] bind_mount %s -> %s 失败 (将继续执行)", vpath.c_str(), target.c_str());
 }
 
-static void virtualize_affinity(const asc_conf_t *conf) {
-  const int n = container_cpus(conf);
+static void virtualize_affinity(const long long cpu_quota, const long long cpu_period) {
+  const int n = container_cpus(cpu_quota, cpu_period);
   const int host = static_cast<int>(sysconf(_SC_NPROCESSORS_ONLN));
   if (n >= host || n <= 0)
     return;
@@ -410,7 +410,7 @@ int virtualize_init(const cfg_t *cfg) {
   // 位于根目录中
 
   if (has_cpu)
-    virtualize_affinity(&cfg->conf);
+    virtualize_affinity(cfg->conf.cpu_quota, cfg->conf.cpu_period);
 
   if (!create_directories_with_permission(vproc_dir)) {
     log_warn("[VIRT] 创建 /run/asc/vproc 失败: %s", strerror(errno));
@@ -450,7 +450,7 @@ int virtualize_init(const cfg_t *cfg) {
   if (has_cpu) {
     fs::path cpu_sysfs_path = vproc_dir / "cpu_sysfs";
     if (create_directories_with_permission(cpu_sysfs_path)) {
-      const int n = container_cpus(&cfg->conf);
+      const int n = container_cpus(cfg->conf.cpu_quota, cfg->conf.cpu_period);
       for (int i = 0; i < n; i++) {
         fs::path vcpu = cpu_sysfs_path / ("cpu" + std::to_string(i));
         fs::path realcpu = fs::path("/sys/devices/system/cpu") / ("cpu" + std::to_string(i));

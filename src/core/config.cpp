@@ -43,9 +43,9 @@ static long long parse_ll_positive(const char *val) {
   return v;
 }
 
-static void parse_privileged(std::string_view value, asc_conf_t *conf) {
-  conf->privileged_mask = 0;
-  if (value.empty()) return;
+static int parse_privileged(std::string_view value) {
+  int mask = 0;
+  if (value.empty()) return mask;
 
   size_t start = 0, end = 0;
   while (end != std::string_view::npos) {
@@ -60,13 +60,14 @@ static void parse_privileged(std::string_view value, asc_conf_t *conf) {
     }
 
     // 无需 strcmp，直接进行 == 对比
-    if (token == "nomask") conf->privileged_mask |= PRIV_NOMASK;
-    else if (token == "nocaps") conf->privileged_mask |= PRIV_NOCAPS;
-    else if (token == "noseccomp") conf->privileged_mask |= PRIV_NOSEC;
-    else if (token == "shared") conf->privileged_mask |= PRIV_SHARED;
-    else if (token == "unfiltered-dev") conf->privileged_mask |= PRIV_UNFILT;
-    else if (token == "full") conf->privileged_mask |= PRIV_FULL;
+    if (token == "nomask") mask |= PRIV_NOMASK;
+    else if (token == "nocaps") mask |= PRIV_NOCAPS;
+    else if (token == "noseccomp") mask |= PRIV_NOSEC;
+    else if (token == "shared") mask |= PRIV_SHARED;
+    else if (token == "unfiltered-dev") mask |= PRIV_UNFILT;
+    else if (token == "full") mask |= PRIV_FULL;
   }
+  return mask;
 }
 
 int config_load(const fs::path& config_path, cfg_t *cfg) {
@@ -135,7 +136,7 @@ int config_load(const fs::path& config_path, cfg_t *cfg) {
       else
         log_warn("配置警告: 忽略无效的 pids_limit '%s'", val);
     } else if (strcmp(key, "privileged") == 0) {
-      parse_privileged(val, conf);
+      conf->privileged_mask = parse_privileged(val);
     } else if (strcmp(key, "custom_init") == 0) {
       if (val[0] != '/')
         log_warn("配置警告: 忽略非绝对路径的 custom_init '%s'", val);
@@ -155,7 +156,7 @@ int config_load(const fs::path& config_path, cfg_t *cfg) {
   return 0;
 }
 
-static void config_serialize_known(FILE *f, asc_conf_t *conf) {
+static void config_serialize_known(FILE *f, const asc_conf_t *conf) {
   fprintf(f, "# " PROJECT_NAME " 容器配置文件\n");
   fprintf(f, "# 此文件由程序自动生成 - 手动修改可能会被覆盖\n\n");
 

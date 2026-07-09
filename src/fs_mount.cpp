@@ -100,7 +100,7 @@ int bind_mount(const fs::path& src, const fs::path& tgt) {
  * /dev 与 OverlayFS 挂载设置
  * ---------------------------------------------------------------------------*/
 
-int check_volatile_mode(asc_conf_t *conf) {
+int check_volatile_mode(const asc_conf_t *conf) {
   if (!conf->volatile_mode)
     return 0;
 

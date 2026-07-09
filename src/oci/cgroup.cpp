@@ -233,10 +233,10 @@ void cgroup_cleanup_container(const char *container_name) {
   }
 }
 
-void print_cgroup_status(const cfg_t *cfg) {
-  const bool limits_set = cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit;
+void print_cgroup_status(const asc_conf_t *conf) {
+  const bool limits_set = conf->memory_limit || conf->cpu_quota || conf->pids_limit;
 
-  if (cfg->conf.force_cgroupv1) {
+  if (conf->force_cgroupv1) {
     log_warn("正在使用传统的 Cgroup V1 架构 (由于启用了 force-cgroupv1)");
     if (limits_set) {
       log_warn("资源限制 (memory/cpus/pids-limit) 需要 Cgroup V2 的支持，"
