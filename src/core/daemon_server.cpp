@@ -1,25 +1,25 @@
 #include "asc.h"
 
 static FILE *g_daemon_log_fp = nullptr;
-static char g_daemon_log_path[PATH_MAX] = "";
+static fs::path g_daemon_log_path = "";
 
 static void rotate_daemon_log_if_needed(void) {
-  if (g_daemon_log_path[0] == '\0')
+  if (g_daemon_log_path.empty())
     return;
 
   struct stat st;
-  if (stat(g_daemon_log_path, &st) < 0 || st.st_size < 4 * 1024 * 1024)
+  if (stat(g_daemon_log_path.c_str(), &st) < 0 || st.st_size < 4 * 1024 * 1024)
     return;
 
-  char old_path[sizeof(g_daemon_log_path) + 32];
-  snprintf(old_path, sizeof(old_path), "%s.old", g_daemon_log_path);
-  rename(g_daemon_log_path, old_path);
+  fs::path old_path = g_daemon_log_path;
+  old_path += ".old";
+  rename(g_daemon_log_path.c_str(), old_path.c_str());
 
   if (g_daemon_log_fp) {
     fclose(g_daemon_log_fp);
-    g_daemon_log_fp = fopen(g_daemon_log_path, "ae");
+    g_daemon_log_fp = fopen(g_daemon_log_path.c_str(), "ae");
   } else {
-    const int lfd = open(g_daemon_log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC,
+    const int lfd = open(g_daemon_log_path.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC,
                    0644);
     if (lfd >= 0) {
       dup2(lfd, STDOUT_FILENO);
@@ -571,13 +571,12 @@ static void daemonize(const bool foreground) {
   }
 
   {
-    char log_path[PATH_MAX];
-    snprintf(log_path, sizeof(log_path), "%s/daemon.log", get_logs_dir());
-    safe_strncpy(g_daemon_log_path, log_path, sizeof(g_daemon_log_path));
-    rotate_log(log_path, 2 * 1024 * 1024);
+    fs::path log_path = fs::path(get_logs_dir()) / "daemon.log";
+    g_daemon_log_path = log_path;
+    rotate_log(log_path.c_str(), 2 * 1024 * 1024);
 
     if (!foreground) {
-      const int lfd = open(log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
+      const int lfd = open(log_path.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
       if (lfd >= 0) {
         dup2(lfd, STDOUT_FILENO);
         dup2(lfd, STDERR_FILENO);
@@ -585,7 +584,7 @@ static void daemonize(const bool foreground) {
           close(lfd);
       }
     } else {
-      g_daemon_log_fp = fopen(log_path, "ae");
+      g_daemon_log_fp = fopen(log_path.c_str(), "ae");
     }
   }
 

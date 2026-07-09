@@ -91,10 +91,9 @@ int bind_mount(const char *src, const char *tgt) {
     return -1;
   }
 
-  char proc_path[64];
-  snprintf(proc_path, sizeof(proc_path), "/proc/self/fd/%d", src_fd);
+  fs::path fd_path = fs::path("/proc/self/fd") / std::to_string(src_fd);
 
-  return domount(proc_path, tgt, nullptr, MS_BIND | MS_REC, nullptr);
+  return domount(fd_path.c_str(), tgt, nullptr, MS_BIND | MS_REC, nullptr);
 }
 
 /* ---------------------------------------------------------------------------
@@ -197,16 +196,15 @@ int cleanup_volatile_overlay(asc_rt_t *rt) {
   if (rt->volatile_dir[0] == '\0')
     return 0;
 
-  char merged[PATH_MAX + 32];
-  snprintf(merged, sizeof(merged), "%s/merged", rt->volatile_dir);
+  fs::path merged = fs::path(rt->volatile_dir) / "merged";
 
-  if (!is_mount_in_namespace(merged) &&
+  if (!is_mount_in_namespace(merged.c_str()) &&
       !is_mount_in_namespace(rt->volatile_dir)) {
     goto done;
   }
 
   sync();
-  umount(merged);
+  umount(merged.c_str());
   umount(rt->volatile_dir);
 
 done:
