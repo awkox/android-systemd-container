@@ -1,18 +1,18 @@
 #include "asc.h"
 
+// 优化 1: 将 collect_pids 降级为单层迭代，避免扫描无关的控制文件
 std::optional<std::vector<pid_t>> collect_pids() {
     std::vector<pid_t> pids;
     std::error_code ec;
 
-    // 当宿主机使用 Cgroup V2 时，直接遍历 cgroup.procs 收集进程 PID，
-    // 大幅减少对庞大 /proc 目录的低效全量扫描。
+    // 当宿主机使用 Cgroup V2 时，直接遍历第一层容器子目录即可
     if (cgroup_host_is_v2()) {
         if (fs::exists(project_cgroup_dir, ec)) {
-            auto it = fs::recursive_directory_iterator(project_cgroup_dir, fs::directory_options::skip_permission_denied, ec);
-            auto end = fs::recursive_directory_iterator();
-            while (it != end && !ec) {
-                if (it->is_regular_file(ec) && it->path().filename() == "cgroup.procs") {
-                    if (auto content = read_file_cpp(it->path())) {
+            // 将 recursive_directory_iterator 改为普通的 directory_iterator
+            for (const auto& entry : fs::directory_iterator(project_cgroup_dir, ec)) {
+                if (entry.is_directory(ec)) {
+                    fs::path procs_file = entry.path() / "cgroup.procs";
+                    if (auto content = read_file_cpp(procs_file)) {
                         size_t pos = 0;
                         while (pos < content->length()) {
                             size_t end_pos = content->find('\n', pos);
@@ -27,19 +27,15 @@ std::optional<std::vector<pid_t>> collect_pids() {
                         }
                     }
                 }
-                it.increment(ec);
             }
-            if (!ec) {
-                return pids;
-            }
+            if (!ec) return pids;
             pids.clear();
             ec.clear();
         } else {
-            return pids; // 如果目录不存在，说明目前没有任何运行在 Cgroup v2 下的容器
+            return pids; 
         }
     }
-    
-    // 退路与 Cgroup V1 模式：使用 C++17 filesystem 遍历 /proc 目录
+
     for (const auto& entry : fs::directory_iterator("/proc", ec)) {
         if (!entry.is_directory(ec)) continue;
         
@@ -135,17 +131,46 @@ long get_container_uptime(const pid_t pid) {
   }
 }
 
-pid_t find_container_init_pid(const char *uuid) {
+// 优化 2: O(1) 精确制导查找目标 PID
+pid_t find_container_init_pid(const char *container_name, const char *uuid) {
   if (!uuid || uuid[0] == '\0')
     return 0;
 
-  auto pids_opt = collect_pids();
+  // 高速通道 (Fast Path): 在 Cgroup V2 环境下，直接点对点读取目标容器的 cgroup.procs
+  if (container_name && container_name[0] && cgroup_host_is_v2()) {
+    fs::path cg_procs = project_cgroup_dir / container_name / "cgroup.procs";
+    if (auto content = read_file_cpp(cg_procs)) {
+      size_t pos = 0;
+      while (pos < content->length()) {
+        size_t end_pos = content->find('\n', pos);
+        if (end_pos == std::string::npos) end_pos = content->length();
+        if (end_pos > pos) {
+          try {
+            long val = std::stol(content->substr(pos, end_pos - pos));
+            if (val > 0) {
+              pid_t pid = static_cast<pid_t>(val);
+              fs::path path = proc_dir / std::to_string(pid) / "root/run/asc" / uuid;
+              
+              // 验证进程身份
+              if (fs::exists(path) && is_valid_container_pid(pid)) {
+                return pid;
+              }
+            }
+          } catch (...) {}
+        }
+        pos = end_pos + 1;
+      }
+    }
+    // 兜底设计：如果在 V2 cgroup 没找到目标，不直接 return 0，
+    // 因为可能存在用户使用 force_cgroupv1=true 的异常覆写情况。转入下方全局扫描。
+  }
 
+  // 慢速通道 (Slow Path): Cgroup V1 或是缺乏容器名，回退到全局扫描
+  auto pids_opt = collect_pids();
   if (!pids_opt) return 0;
 
   for (pid_t pid : *pids_opt) {
-    fs::path path = proc_dir / std::to_string(pid) / "root" / "run/asc" / uuid;
-
+    fs::path path = proc_dir / std::to_string(pid) / "root/run/asc" / uuid;
     if (fs::exists(path)) {
       if (is_valid_container_pid(pid)) {
         return pid;

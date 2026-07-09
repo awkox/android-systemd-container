@@ -69,7 +69,7 @@ static void parse_privileged(std::string_view value, asc_conf_t *conf) {
   }
 }
 
-int config_load(fs::path config_path, cfg_t *cfg) {
+int config_load(const fs::path& config_path, cfg_t *cfg) {
   auto_fclose FILE *f = fopen(config_path.c_str(), "re");
   if (!f) {
     if (errno == ENOENT) {
@@ -197,7 +197,7 @@ static void config_serialize_known(FILE *f, asc_conf_t *conf) {
   }
 }
 
-int config_save(fs::path config_path, cfg_t *cfg) {
+int config_save(const fs::path& config_path, cfg_t *cfg) {
   fs::path temp_path = config_path;
   temp_path += ".tmp";
 

@@ -276,7 +276,7 @@ bool cg_word_in_list(const char *list, const char *name) {
   return ctrl_in_list(list, name);
 }
 
-static bool ctrl_supported_v2(fs::path cg_path, const char *name) {
+static bool ctrl_supported_v2(const fs::path& cg_path, const char *name) {
   fs::path path = cg_path / "cgroup.controllers";
   auto content = read_file_cpp(path);
   if (!content)

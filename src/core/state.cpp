@@ -1,10 +1,10 @@
 #include "asc.h"
 
-bool is_container_running(char *uuid, pid_t *pid_out) {
+bool is_container_running(const char *container_name, char *uuid, pid_t *pid_out) {
   if (!uuid || uuid[0] == '\0')
     return false;
 
-  const pid_t deep_pid = find_container_init_pid(uuid);
+  const pid_t deep_pid = find_container_init_pid(container_name, uuid);
   if (deep_pid > 0) {
     if (pid_out)
       *pid_out = deep_pid;

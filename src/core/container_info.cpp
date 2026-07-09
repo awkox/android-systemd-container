@@ -21,7 +21,7 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
   if (trust_cfg_pid) {
     pid = cfg->rt.container_pid;
   } else {
-    is_container_running(cfg->conf.uuid, &pid);
+    is_container_running(cfg->rt.container_name, cfg->conf.uuid, &pid);
   }
 
   if (pid <= 0) {

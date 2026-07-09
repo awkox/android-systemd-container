@@ -126,7 +126,7 @@ int start_rootfs(cfg_t *cfg) {
   }
 
   if (!lock_acquired) {
-    if (is_container_running(cfg->conf.uuid, &existing_pid)) {
+    if (is_container_running(cfg->rt.container_name, cfg->conf.uuid, &existing_pid)) {
       log_error("容器名称 '%s' 已被 PID %d 占用。",
                 cfg->rt.container_name, existing_pid);
       goto cleanup;

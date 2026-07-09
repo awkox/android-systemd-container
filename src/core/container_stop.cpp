@@ -11,7 +11,7 @@ static int stop_rootfs_with_timeout(cfg_t *cfg, int timeout_seconds) {
   }
 
   pid_t pid = 0;
-  if (!is_container_running(cfg->conf.uuid, &pid) || pid <= 0) {
+  if (!is_container_running(cfg->rt.container_name, cfg->conf.uuid, &pid) || pid <= 0) {
     log_error("容器 '%s' 未运行或状态无效。", cfg->rt.container_name);
     release_external_lock();
     return -1;

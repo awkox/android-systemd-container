@@ -197,7 +197,7 @@ reboot_loop:;
         break;
 
       if (cfg->rt.container_pid <= 0 && cfg->conf.uuid[0] != '\0') {
-        pid_t p = find_container_init_pid(cfg->conf.uuid);
+        pid_t p = find_container_init_pid(cfg->rt.container_name, cfg->conf.uuid);
         if (p > 0) {
           cfg->rt.container_pid = p;
           cfg->rt.ns_inode = get_pid_ns_inode(p);

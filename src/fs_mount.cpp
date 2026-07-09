@@ -51,7 +51,7 @@ int domount(const char *src, const char *tgt, const char *fstype,
   return 0;
 }
 
-int bind_mount(fs::path src, fs::path tgt) {
+int bind_mount(const fs::path& src, const fs::path& tgt) {
   auto_close const int src_fd = open(src.c_str(), O_PATH | O_NOFOLLOW | O_CLOEXEC);
   if (src_fd < 0) {
     /* 遇到 ELOOP 说明它是一个我们应拒绝的符号链接 */

@@ -29,7 +29,7 @@ bool create_directories_with_permission(const fs::path& target, mode_t mode) {
   return true;
 }
 
-int write_file(fs::path path, const char *content) {
+int write_file(const fs::path& path, const char *content) {
   const int fd =
     open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
   if (fd < 0)
@@ -106,7 +106,7 @@ bool path_has_symlink(const fs::path& path) {
     return false;
 }
 
-int safe_openat_proc(const pid_t pid, fs::path subpath, const int flags, const mode_t mode) {
+int safe_openat_proc(const pid_t pid, const fs::path& subpath, const int flags, const mode_t mode) {
   if (pid <= 0)
     return -1;
 
@@ -115,8 +115,11 @@ int safe_openat_proc(const pid_t pid, fs::path subpath, const int flags, const m
   if (dirfd < 0)
     return -1;
 
+  char tmp[PATH_MAX];
+  safe_strncpy(tmp, subpath.c_str(), sizeof(tmp));
+
   char *save = nullptr;
-  const char *comp = strtok_r(subpath.c_str(), "/", &save);
+  const char *comp = strtok_r(tmp, "/", &save);
   const char *next = strtok_r(nullptr, "/", &save);
 
   while (comp && next) {

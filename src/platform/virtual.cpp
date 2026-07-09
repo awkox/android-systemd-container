@@ -2,7 +2,7 @@
 
 /* 就地覆盖写：保留原绑定的挂载 inode（不能用 rename，那会破坏覆盖关系）。
  * 通过 safe_openat_proc() 打开文件，防止各个目录层级的符号链接陷阱。 */
-static int write_inplace(const pid_t pid, fs::path subpath, const char *buf,
+static int write_inplace(const pid_t pid, const fs::path& subpath, const char *buf,
                          const size_t len) {
   auto_close const int fd = safe_openat_proc(pid, subpath, O_WRONLY, 0);
   if (fd < 0)
@@ -362,7 +362,7 @@ unsigned long get_pid_ns_inode(const pid_t pid) {
   return stat(path.c_str(), &st) == 0 ? st.st_ino : 0UL;
 }
 
-static void bind_vfile(fs::path vpath, fs::path target,
+static void bind_vfile(const fs::path& vpath, const fs::path& target,
                        const char *content) {
   if (write_file(vpath, content) < 0)
     return;

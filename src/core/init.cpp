@@ -39,7 +39,7 @@ void internal_boot(cfg_t *cfg) {
     goto boot_fail;
   }
 
-  if (is_container_running(cfg->conf.uuid, &existing_pid)) {
+  if (is_container_running(cfg->rt.container_name, cfg->conf.uuid, &existing_pid)) {
     if (existing_pid != getpid()) {
       log_error(
           "严重错误：引导终止 — 名称 '%s' 已被 PID %d 占用。",
