@@ -36,10 +36,10 @@ static void write_to_log_file(const char *name, const char *component,
     return;
   }
 
-  fs::path log_dir = runtime_dir / fs::path("logs") / name;
-  create_directories_with_permission(log_dir);
+  fs::path container_log_dir = log_dir / name;
+  create_directories_with_permission(container_log_dir);
 
-  fs::path log_path = log_dir / "log";
+  fs::path log_path = container_log_dir / "log";
   rotate_log(log_path.c_str(), 2 * 1024 * 1024);
 
   auto_fclose FILE *f = fopen(log_path.c_str(), "ae");
@@ -123,10 +123,10 @@ void print_privileged_warning(const int privileged_mask) {
 }
 
 void open_container_log(const char *container_name) {
-  fs::path log_dir = runtime_dir / fs::path("logs") / container_name;
-  create_directories_with_permission(log_dir);
+  fs::path container_log_dir = log_dir / container_name;
+  create_directories_with_permission(container_log_dir);
 
-  fs::path log_path = log_dir / "log";
+  fs::path log_path = container_log_dir / "log";
 
   rotate_log(log_path.c_str(), 2 * 1024 * 1024);
 

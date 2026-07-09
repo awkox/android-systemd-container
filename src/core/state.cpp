@@ -24,7 +24,7 @@ std::vector<std::string> collect_active_uuids(size_t max_uuids) {
     if (uuids.size() >= max_uuids) break;
 
     // 优雅拼接路径
-    fs::path marker_dir = std::format("/proc/{}/root{}", pid, "/run/asc");
+    fs::path marker_dir = std::format("/proc/{}/root/run/asc", pid);
     if (!fs::exists(marker_dir, ec)) continue;
 
     for (const auto& entry : fs::directory_iterator(marker_dir, ec)) {

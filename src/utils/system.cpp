@@ -11,7 +11,7 @@ int read_proc_environ(const pid_t pid, const char *key, char *value, const size_
   if (!key || !value || size == 0 || pid <= 0)
     return -1;
 
-  fs::path path = fs::path("/proc") / std::to_string(pid) / "environ";
+  fs::path path = proc_dir / std::to_string(pid) / "environ";
   auto_fclose FILE *f = fopen(path.c_str(), "re");
   if (!f)
     return -1;

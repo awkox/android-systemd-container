@@ -39,7 +39,7 @@ static int container_cpus(const asc_conf_t *conf) {
 }
 
 static long long read_cg_ll(const char *container_name, const char *file) {
-  fs::path path = fs::path("/sys/fs/cgroup/asc") / container_name / file;
+  fs::path path = project_cgroup_dir / container_name / file;
   auto content = read_file_cpp(path);
   if (!content)
     return -1;
@@ -74,7 +74,7 @@ static char *gen_meminfo(const cfg_t *cfg, size_t *out_len) {
 
   long long cg_anon = -1, cg_file = -1, cg_slab = -1;
   {
-    fs::path path = fs::path("/sys/fs/cgroup/asc") / cfg->rt.container_name / fs::path("memory.stat");
+    fs::path path = project_cgroup_dir / cfg->rt.container_name / "memory.stat";
     if (auto content = read_file_cpp(path)) {
       const char *p;
       if ((p = strstr(content->c_str(), "anon ")))
@@ -255,7 +255,7 @@ static char *gen_stat(const cfg_t *cfg, size_t *out_len) {
 }
 
 static double cg_cpu_busy_secs(const char *container_name) {
-  fs::path path = fs::path("/sys/fs/cgroup/asc") / container_name / fs::path("cpu.stat");
+  fs::path path = project_cgroup_dir / container_name / "cpu.stat";
   auto content = read_file_cpp(path);
   if (!content)
     return -1.0;
@@ -358,7 +358,7 @@ static char *gen_cpu_sysfs(const cfg_t *cfg, size_t *out_len) {
 
 unsigned long get_pid_ns_inode(const pid_t pid) {
   struct stat st;
-  fs::path path = fs::path("/proc") / std::to_string(pid) / "ns/pid";
+  fs::path path = proc_dir / std::to_string(pid) / "ns/pid";
   return stat(path.c_str(), &st) == 0 ? st.st_ino : 0UL;
 }
 
@@ -441,7 +441,7 @@ int virtualize_init(const cfg_t *cfg) {
       continue;
 
     fs::path vpath = fs::path("/run/asc/vproc") / proc_files[i].name;
-    fs::path target = fs::path("/proc") / proc_files[i].name;
+    fs::path target = proc_dir / proc_files[i].name;
     bind_vfile(vpath.c_str(), target.c_str(), buf);
   }
 
@@ -494,7 +494,7 @@ void virtualize_update(const cfg_t *cfg) {
     }
   }
 
-  fs::path vproc_dir = fs::path("/proc") / std::to_string(cfg->rt.container_pid) / "root" / "run/asc/vproc";
+  fs::path vproc_dir = proc_dir / std::to_string(cfg->rt.container_pid) / "root" / "run/asc/vproc";
   struct stat st_dir;
   if (stat(vproc_dir.c_str(), &st_dir) != 0 || !S_ISDIR(st_dir.st_mode)) {
     return;
@@ -526,8 +526,7 @@ void virtualize_update(const cfg_t *cfg) {
     }
 
     struct stat st;
-    fs::path path = fs::path("/proc") / std::to_string(cfg->rt.container_pid) / "root" /
-                    "run/asc/vproc" / dyn[i].name;
+    fs::path path = vproc_dir / dyn[i].name;
     if (stat(path.c_str(), &st) != 0) {
       write_monitor_debug_log(cfg->rt.container_name,
                               "[VIRT] 虚拟文件丢失: %s (%s)", path.c_str(),

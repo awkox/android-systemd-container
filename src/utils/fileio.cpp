@@ -110,7 +110,7 @@ int safe_openat_proc(const pid_t pid, const char *subpath, const int flags, cons
   if (pid <= 0)
     return -1;
 
-  fs::path proc_root = fs::path("/proc") / std::to_string(pid) / "root";
+  fs::path proc_root = proc_dir / std::to_string(pid) / "root";
   auto_close int dirfd = open(proc_root.c_str(), O_PATH | O_DIRECTORY | O_CLOEXEC);
   if (dirfd < 0)
     return -1;

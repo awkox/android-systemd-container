@@ -71,7 +71,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
         }
       }
 
-      fs::path cg_path = fs::path("/sys/fs/cgroup/asc") / cfg->rt.container_name;
+      fs::path cg_path = project_cgroup_dir / cfg->rt.container_name;
       create_directories_with_permission(cg_path);
     }
   }
@@ -101,7 +101,7 @@ reboot_loop:;
      * 负责为本次引导周期创建全新的命名空间 */
      
     if (allow_cgroup_ns) {
-      fs::path cg_procs = fs::path("/sys/fs/cgroup/asc") / cfg->rt.container_name / "cgroup.procs";
+      fs::path cg_procs = project_cgroup_dir / cfg->rt.container_name / "cgroup.procs";
       FILE *f = fopen(cg_procs.c_str(), "we");
       if (f) {
         fprintf(f, "%d\n", getpid());

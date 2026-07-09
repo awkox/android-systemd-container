@@ -39,7 +39,7 @@ bool cgroup_host_is_v2(void) {
       continue;
     *mp_end = '\0';
 
-    if (strstr(p, "/" PROJECT_NAME "/"))
+    if (strstr(p, "/asc/"))
       continue;
 
     return true;
@@ -217,28 +217,19 @@ static void rmdir_cgroup_tree(const fs::path& path) {
 }
 
 void cgroup_cleanup_container(const char *container_name) {
-  auto_closedir DIR *d = opendir("/sys/fs/cgroup");
-  if (!d)
+  std::error_code ec;
+
+  // 1. Cgroup V2 架构判断：根目录下存在 cgroup.procs
+  if (fs::exists(cgroup_dir / "cgroup.procs", ec)) {
+    rmdir_cgroup_tree(project_cgroup_dir / container_name);
     return;
+  }
 
-  struct dirent *de;
-  while ((de = readdir(d)) != nullptr) {
-    if (de->d_name[0] == '.')
-      continue;
-
-    auto base = fs::path("/sys/fs/cgroup");
-    fs::path cg_path;
-    if (de->d_name == std::string("cgroup.procs")) {
-      cg_path = base / "asc" / container_name;
-    } else {
-      cg_path = base / de->d_name / "asc" / container_name;
+  // 2. 兜底 Cgroup V1 架构：遍历所有独立的控制器目录 (如 /sys/fs/cgroup/memory/...)
+  for (const auto& entry : fs::directory_iterator(cgroup_dir, ec)) {
+    if (entry.is_directory(ec)) {
+      rmdir_cgroup_tree(entry.path() / "asc" / container_name);
     }
-
-    if (!fs::exists(cg_path))
-      continue;
-    rmdir_cgroup_tree(cg_path.c_str());
-    if (strcmp(de->d_name, "cgroup.procs") == 0)
-      break;
   }
 }
 
@@ -319,7 +310,7 @@ int cgroup_apply_limits(cfg_t *cfg) {
 
   int err = 0;
 
-  fs::path cg = fs::path("/sys/fs/cgroup/asc") / cfg->rt.container_name;
+  fs::path cg = project_cgroup_dir / cfg->rt.container_name;
   if (!fs::exists(cg)) {
     log_warn("[CGROUP] 未找到容器的专属子组，跳过资源限制应用。");
     return -1;
@@ -378,7 +369,7 @@ int cgroup_get_usage(const char *container_name, long long *mem,
     *pids = -1;
 
   if (cgroup_host_is_v2()) {
-    fs::path cg = fs::path("/sys/fs/cgroup/asc") / container_name;
+    fs::path cg = project_cgroup_dir / container_name;
     if (!fs::exists(cg))
       return -1;
     if (mem) {

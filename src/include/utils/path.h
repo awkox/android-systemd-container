@@ -3,6 +3,14 @@
 
 #include "common.h"
 
-inline const fs::path runtime_dir = fs::path("/tmp/asc");
+inline const fs::path tmp_dir      = fs::path("/tmp");
+inline const fs::path proc_dir     = fs::path("/proc");
+inline const fs::path cgroup_dir   = fs::path("/sys/fs/cgroup");
+inline const fs::path project_cgroup_dir = cgroup_dir / "asc";
+inline const fs::path runtime_dir  = tmp_dir / "asc";
+inline const fs::path volatile_dir = runtime_dir / "volatile";
+inline const fs::path config_dir   = runtime_dir / "config";
+inline const fs::path log_dir      = runtime_dir / "log";
+inline const fs::path lock_dir     = runtime_dir / "lock";
 
 #endif

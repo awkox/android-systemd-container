@@ -79,26 +79,23 @@ static void block_read_path(const char *path) {
   if (!fs::exists(path))
     return;
 
-  char fifo_path[64];
-  snprintf(fifo_path, sizeof(fifo_path), "/tmp/." PROJECT_NAME "-kmsg-fifo-%d",
-           getpid());
-
+  fs::path fifo_path = tmp_dir / std::format(".asc-kmsg-fifo-{}", getpid());
   fs::remove(fifo_path);
-  if (mkfifo(fifo_path, 0600) < 0)
+  if (mkfifo(fifo_path.c_str(), 0600) < 0)
     return;
 
   /* Fork 出子进程以保持 FIFO 的写端打开。
    * 子进程无任何实际逻辑 — 只是休眠以维持文件描述符存活。 */
   const pid_t child = fork();
   if (child == 0) {
-    const int wfd = open(fifo_path, O_WRONLY);
+    const int wfd = open(fifo_path.c_str(), O_WRONLY);
     if (wfd >= 0)
       pause();
     _exit(0);
   }
 
   if (child > 0)
-    mount(fifo_path, path, nullptr, MS_BIND, nullptr);
+    mount(fifo_path.c_str(), path, nullptr, MS_BIND, nullptr);
 
   fs::remove(fifo_path);
 }

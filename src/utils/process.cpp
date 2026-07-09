@@ -7,9 +7,8 @@ std::optional<std::vector<pid_t>> collect_pids() {
     // 当宿主机使用 Cgroup V2 时，直接遍历 cgroup.procs 收集进程 PID，
     // 大幅减少对庞大 /proc 目录的低效全量扫描。
     if (cgroup_host_is_v2()) {
-        fs::path cg_base = fs::path("/sys/fs/cgroup/asc");
-        if (fs::exists(cg_base, ec)) {
-            auto it = fs::recursive_directory_iterator(cg_base, fs::directory_options::skip_permission_denied, ec);
+        if (fs::exists(project_cgroup_dir, ec)) {
+            auto it = fs::recursive_directory_iterator(project_cgroup_dir, fs::directory_options::skip_permission_denied, ec);
             auto end = fs::recursive_directory_iterator();
             while (it != end && !ec) {
                 if (it->is_regular_file(ec) && it->path().filename() == "cgroup.procs") {
@@ -62,7 +61,7 @@ std::optional<std::vector<pid_t>> collect_pids() {
 }
 
 bool is_container_init(const pid_t pid) {
-  fs::path path = fs::path("proc") / std::to_string(pid) / "status";
+  fs::path path = proc_dir / std::to_string(pid) / "status";
   auto_fclose FILE *f = fopen(path.c_str(), "re");
   if (!f)
     return false;
@@ -93,7 +92,7 @@ bool is_container_init(const pid_t pid) {
 
   struct stat st_pid, st_host;
 
-  fs::path ns_path = fs::path("/proc") / std::to_string(pid) / "ns/pid";
+  fs::path ns_path = proc_dir / std::to_string(pid) / "ns/pid";
   if (stat(ns_path.c_str(), &st_pid) < 0)
     return false;
 
@@ -111,7 +110,7 @@ long get_container_uptime(const pid_t pid) {
   if (clk_tck <= 0)
     clk_tck = 100;
 
-  fs::path stat_path = fs::path("/proc") / std::to_string(pid) / "stat";
+  fs::path stat_path = proc_dir / std::to_string(pid) / "stat";
   unsigned long long start_ticks = 0;
   {
     if (auto content = read_file_cpp(stat_path)) {
@@ -145,7 +144,7 @@ pid_t find_container_init_pid(const char *uuid) {
   if (!pids_opt) return 0;
 
   for (pid_t pid : *pids_opt) {
-    fs::path path = fs::path("/proc") / std::to_string(pid) / "root" / "run/asc" / uuid;
+    fs::path path = proc_dir / std::to_string(pid) / "root" / "run/asc" / uuid;
 
     if (fs::exists(path)) {
       if (is_valid_container_pid(pid)) {

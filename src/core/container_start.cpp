@@ -7,7 +7,7 @@ int acquire_external_lock(const char *name) {
   if (active_lock_fd >= 0)
     return 0;
 
-  fs::path lock_path = get_lock_dir() / name;
+  fs::path lock_path = lock_dir / name;
 
   const int fd = open(lock_path.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644);
   if (fd < 0)
@@ -52,7 +52,7 @@ void release_external_lock(void) {
 }
 
 bool is_external_lock_active(const char *name) {
-  fs::path lock_path = get_lock_dir() / name;
+  fs::path lock_path = lock_dir / name;
 
   auto_close const int fd = open(lock_path.c_str(), O_RDONLY | O_CLOEXEC);
   return !(fd < 0);
@@ -92,7 +92,7 @@ void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
 }
 
 bool is_valid_container_pid(const pid_t pid) {
-  fs::path path = fs::path("/proc") / std::to_string(pid) / "root";
+  fs::path path = proc_dir / std::to_string(pid) / "root";
   if (!fs::exists(path))
     return false;
 
@@ -111,7 +111,7 @@ int start_rootfs(cfg_t *cfg) {
   bool booted = false;
 
   if (cfg->rt.container_name[0]) {
-    fs::path lock_path = get_lock_dir() / cfg->rt.container_name;
+    fs::path lock_path = lock_dir / cfg->rt.container_name;
     if (fs::exists(lock_path)) {
       if (acquire_external_lock(cfg->rt.container_name) == 0) {
         lock_acquired = true;
@@ -224,8 +224,8 @@ int start_rootfs(cfg_t *cfg) {
   }
 
   if (cfg->conf.volatile_mode) {
-    fs::path volatile_dir = runtime_dir / "volatile" / cfg->rt.container_name;
-    snprintf(cfg->rt.volatile_dir, sizeof(cfg->rt.volatile_dir), volatile_dir.c_str());
+    fs::path container_volatile_dir = volatile_dir / cfg->rt.container_name;
+    snprintf(cfg->rt.volatile_dir, sizeof(cfg->rt.volatile_dir), container_volatile_dir.c_str());
   }
 
   fix_host_ptys();
@@ -292,7 +292,7 @@ int start_rootfs(cfg_t *cfg) {
     int ret = console_monitor_loop(cfg->rt.console.master, monitor_pid, cfg);
     return ret;
   } else {
-    fs::path marker = fs::path("/proc") / std::to_string(cfg->rt.container_pid) / "root/run/asc";
+    fs::path marker = proc_dir / std::to_string(cfg->rt.container_pid) / "root/run/asc";
     for (int i = 0; i < 50; i++) {
       if (fs::exists(marker)) {
         booted = true;
