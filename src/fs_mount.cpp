@@ -111,7 +111,7 @@ int check_volatile_mode(const asc_conf_t *conf) {
 
   /* 预检：拒绝 f2fs 底层目录 - 这是已知的 Android 内核限制 */
   struct statfs sfs;
-  if (statfs(conf->img_mount_point, &sfs) == 0 && sfs.f_type == 0xF2F52010) {
+  if (statfs(conf->img_mount_point, &sfs) == 0 && sfs.f_type == F2FS_SUPER_MAGIC) {
     log_error("无法使用易失模式：您的 rootfs 位于 f2fs 分区上，"
               "大多数 Android 内核不支持将其用作 OverlayFS 的下层。");
     log_error("提示：请在 f2fs 分区上使用镜像文件 (-i) 而不是目录 (-r) 来开启易失模式。");
