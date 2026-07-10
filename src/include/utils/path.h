@@ -6,6 +6,7 @@
 inline const fs::path tmp_dir      = fs::path("/tmp");
 inline const fs::path proc_dir     = fs::path("/proc");
 inline const fs::path cgroup_dir   = fs::path("/sys/fs/cgroup");
+inline const fs::payh mount_dir    = fs::path("/mnt/asc");
 inline const fs::path vproc_dir    = fs::path("run/asc/vproc");
 inline const fs::path project_cgroup_dir = cgroup_dir / "asc";
 inline const fs::path runtime_dir  = tmp_dir / "asc";

@@ -19,15 +19,12 @@ bool is_mountpoint(const fs::path& path) {
 /* 使用容器名称在 /mnt/asc/ 中查找或创建可用的挂载点 */
 static int find_available_mountpoint(const char *name, char *mount_path,
                                      const size_t size) {
-  const char *base_dir = IMG_MOUNT_ROOT;
+  mkdir(mount_dir.c_str(), 0755);
 
-  mkdir(base_dir, 0755);
-
-  snprintf(mount_path, size, "%s/%s", base_dir, name);
+  snprintf(mount_path, size, "%s/%s", mount_dir.c_str(), name);
 
   if (mkdir(mount_path, 0755) < 0) {
-    log_error("创建挂载目录 %s 失败: %s", mount_path,
-              strerror(errno));
+    log_error("创建挂载目录 %s 失败: %s", mount_path, strerror(errno));
     return -1;
   }
 

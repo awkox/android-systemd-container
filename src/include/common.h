@@ -83,7 +83,6 @@ constexpr int NL_BUFSIZE = 8192;
 constexpr int DEFAULT_TTY_GID = 5;
 
 // 运行时路径
-#define IMG_MOUNT_ROOT "/mnt/asc"
 #define DEFAULT_INIT "/sbin/init"
 #define ANDROID_TMPFS_CONTEXT "u:object_r:tmpfs:s0"
 
