@@ -415,7 +415,7 @@ int virtualize_init(const cfg_t *cfg) {
     log_warn("[VIRT] 创建 /run/asc/vproc 失败: %s", strerror(errno));
     return -1;
   }
-  if (domount("none", vproc_dir.c_str(), "tmpfs", MS_NOSUID | MS_NODEV,
+  if (domount("none", vproc_dir, "tmpfs", MS_NOSUID | MS_NODEV,
               "mode=755,size=1M") < 0) {
     log_warn("[VIRT] tmpfs 挂载失败: %s", strerror(errno));
     return -1;

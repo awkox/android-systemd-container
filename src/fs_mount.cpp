@@ -38,12 +38,12 @@ static int find_available_mountpoint(const char *name, char *mount_path,
  * 通用挂载包装器
  * ---------------------------------------------------------------------------*/
 
-int domount(const char *src, const char *tgt, const char *fstype,
+int domount(const std::string& src, const std::string& tgt, const char *fstype,
             const unsigned long flags, const char *data) {
-  if (mount(src, tgt, fstype, flags, data) < 0) {
+  if (mount(src.c_str(), tgt.c_str(), fstype, flags, data) < 0) {
     /* 忽略设备忙 (EBUSY) 错误（通常意味着已挂载） */
     if (errno != EBUSY) {
-      log_error("挂载失败 %s 到 %s (%s): %s", src ? src : "none", tgt,
+      log_error("挂载失败 %s 到 %s (%s): %s", src.empty() ? "none" : src.c_str(), tgt.c_str(),
                 fstype ? fstype : "none", strerror(errno));
       return -1;
     }
@@ -93,7 +93,7 @@ int bind_mount(const fs::path& src, const fs::path& tgt) {
 
   fs::path fd_path = fs::path("/proc/self/fd") / std::to_string(src_fd);
 
-  return domount(fd_path.c_str(), tgt.c_str(), nullptr, MS_BIND | MS_REC, nullptr);
+  return domount(fd_path, tgt, nullptr, MS_BIND | MS_REC, nullptr);
 }
 
 /* ---------------------------------------------------------------------------

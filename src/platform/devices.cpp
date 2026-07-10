@@ -107,7 +107,7 @@ int setup_devpts() {
 
   bool mount_success = false;
   for (const auto& opt : mount_opts) {
-    if (domount("devpts", pts_path.c_str(), "devpts", MS_NOSUID | MS_NOEXEC, opt.c_str()) == 0) {
+    if (domount("devpts", pts_path, "devpts", MS_NOSUID | MS_NOEXEC, opt.c_str()) == 0) {
       mount_success = true;
       break;
     }

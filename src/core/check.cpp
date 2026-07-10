@@ -78,7 +78,7 @@ int check_requirements_hw() {
 
   if (!check_kernel_version_supported()) {
     log_error("Linux 内核版本太老");
-    log_info(PROJECT_NAME " 至少需要 Linux %d.%d.0 版本的内核。", MIN_KERNEL_MAJOR,
+    log_info(PROJECT_NAME " 至少需要 Linux %d.%d 版本的内核。", MIN_KERNEL_MAJOR,
              MIN_KERNEL_MINOR);
     missing++;
   }
