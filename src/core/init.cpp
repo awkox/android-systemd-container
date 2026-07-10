@@ -62,29 +62,21 @@ void internal_boot(cfg_t *cfg) {
     goto boot_fail;
   }
 
-  /* 3. 在容器命名空间内设置易失性 Overlay 叠加层。 */
-  if (cfg->conf.volatile_mode) {
-    if (setup_volatile_overlay(cfg) < 0) {
-      log_error("无法建立易失模式叠加层 (Overlay)。");
-      goto boot_fail;
-    }
-  }
-
-  /* 4. 将 rootfs 绑定挂载到其自身 (这是内核 pivot_root 调用的强制要求) */
+  /* 3. 将 rootfs 绑定挂载到其自身 (这是内核 pivot_root 调用的强制要求) */
   if (mount(cfg->conf.img_mount_point, cfg->conf.img_mount_point, nullptr,
             MS_BIND | MS_REC, nullptr) < 0) {
     log_error("无法执行自我绑定挂载: %s", strerror(errno));
     goto boot_fail;
   }
 
-  /* 5. 设置工作目录为 rootfs */
+  /* 4. 设置工作目录为 rootfs */
   if (chdir(cfg->conf.img_mount_point) < 0) {
     log_error("无法 chdir 到 '%s': %s", cfg->conf.img_mount_point,
               strerror(errno));
     goto boot_fail;
   }
 
-  /* 6. 预创建标准的系统目录结构 */
+  /* 5. 预创建标准的系统目录结构 */
   for (size_t i = 0; i < std::size(dirs_to_create); i++) {
     if (mkdir(dirs_to_create[i], 0755) < 0 && errno != EEXIST) {
       log_error("无法创建目录 '%s': %s", dirs_to_create[i],
@@ -99,13 +91,13 @@ void internal_boot(cfg_t *cfg) {
     goto boot_fail;
   }
 
-  /* 7. 配置 /dev (设备节点，或 devtmpfs) */
+  /* 6. 配置 /dev (设备节点，或 devtmpfs) */
   if (setup_dev() < 0) {
     log_error("设置 /dev 环境失败。");
     goto boot_fail;
   }
 
-  /* 8. 挂载虚拟文件系统 (proc, sys) */
+  /* 7. 挂载虚拟文件系统 (proc, sys) */
   if (domount("proc", "proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
     log_error("挂载 procfs 失败: %s", strerror(errno));
     goto boot_fail;
@@ -129,7 +121,7 @@ void internal_boot(cfg_t *cfg) {
     log_warn("无法将 /sys 重新挂载为只读模式: %s", strerror(errno));
   }
 
-  /* 9. 在锁定 /sys 之后设置 Cgroups */
+  /* 8. 在锁定 /sys 之后设置 Cgroups */
   if (setup_cgroups() < 0) {
     log_error("容器 Cgroups 配置失败。");
     goto boot_fail;
@@ -143,12 +135,12 @@ void internal_boot(cfg_t *cfg) {
   if (domount("tmpfs", "tmp", "tmpfs", MS_NOSUID | MS_NODEV, "mode=1777") < 0)
     log_warn("挂载 /tmp (tmpfs) 失败: %s", strerror(errno));
 
-  /* 10. 在 pivot_root 前绑定挂载控制台 */
+  /* 9. 在 pivot_root 前绑定挂载控制台 */
   if (mount(cfg->rt.console.name, "dev/console", nullptr, MS_BIND, nullptr) < 0)
     log_warn("无法绑定挂载 Console '%s': %s", cfg->rt.console.name,
              strerror(errno));
 
-  /* 11. 执行根目录无缝切换 (pivot_root) */
+  /* 10. 执行根目录无缝切换 (pivot_root) */
   if (is_ramfs("/")) {
     log_info("检测到 rootfs/ramfs 宿主机 - 自动回退至 MS_MOVE + chroot 机制");
     used_ms_move = true;
@@ -172,13 +164,13 @@ void internal_boot(cfg_t *cfg) {
   
   // 目前处于根目录
 
-  /* 12. 设置 devpts */
+  /* 11. 设置 devpts */
   setup_devpts();
 
   /* 在 pivot_root 后应用监狱掩码保护 */
   apply_jail_mask(cfg->conf.privileged_mask);
 
-  /* 13. 资源可见性虚拟化 */
+  /* 12. 资源可见性虚拟化 */
   if (is_mountpoint("proc")) {
     if (virtualize_init(cfg) < 0)
       log_warn("[VIRT] 虚拟化资源初始化失败，将以无虚拟化状态继续运行。");
@@ -197,7 +189,7 @@ void internal_boot(cfg_t *cfg) {
   printf("\r\n");
   fflush(stdout);
 
-  /* 14. 清理卸载旧的根文件系统目录 */
+  /* 13. 清理卸载旧的根文件系统目录 */
   if (!used_ms_move) {
     if (umount2("/.old_root", MNT_DETACH) < 0)
       log_warn("卸载 /.old_root 失败: %s", strerror(errno));
@@ -207,7 +199,7 @@ void internal_boot(cfg_t *cfg) {
     fs::remove("/.old_root");
   }
 
-  /* 15. 清除环境变量并设置默认值 */
+  /* 14. 清除环境变量并设置默认值 */
   clearenv();
   setenv("container", PROJECT_NAME, 1);
   if (cfg->conf.img_mount_point[0])
@@ -221,7 +213,7 @@ void internal_boot(cfg_t *cfg) {
 
   apply_capability_hardening(cfg->conf.privileged_mask);
 
-  /* 16. 重定向标准输入输出至 /dev/console
+  /* 15. 重定向标准输入输出至 /dev/console
    * 使用局部代码块，防止 console_fd 触发 C++ 的 goto 跳跃错误 */
   {
     const int console_fd = open("/dev/console", O_RDWR);
@@ -250,13 +242,12 @@ void internal_boot(cfg_t *cfg) {
     }
   }
 
-  /* 17. 最终执行 INIT 程序 */
+  /* 16. 最终执行 INIT 程序 */
   init_bin = cfg->conf.custom_init[0] ? cfg->conf.custom_init : (char *)DEFAULT_INIT;
   init_args[argc++] = init_bin;
 
   /* 项目强制 CgroupV2，总是传递 unified_cgroup_hierarchy 引导标志 */
   init_args[argc++] = (char *)"systemd.unified_cgroup_hierarchy=1";
-
   init_args[argc] = nullptr;
 
   if (execve(init_bin, init_args, environ) < 0) {

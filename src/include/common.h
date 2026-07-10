@@ -113,7 +113,6 @@ typedef struct {
   char img_mount_point[PATH_MAX];
   char custom_init[PATH_MAX];
 
-  bool volatile_mode;
   bool isolation_network;
   bool block_nested_ns;
   int privileged_mask;
@@ -131,7 +130,6 @@ typedef struct {
   bool reboot_cycle;
   bool config_file_existed;
 
-  char volatile_dir[PATH_MAX];
   char config_file[PATH_MAX];
 
   pid_t container_pid;

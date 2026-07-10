@@ -62,18 +62,6 @@ void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
   if (!force_cleanup)
     sync();
 
-  if (cfg->conf.volatile_mode) {
-    if (force_cleanup) {
-      fs::path merged = fs::path(cfg->rt.volatile_dir) / "merged";
-      umount2(merged.c_str(), MNT_DETACH | MNT_FORCE);
-      umount2(cfg->rt.volatile_dir, MNT_DETACH | MNT_FORCE);
-      remove_recursive(cfg->rt.volatile_dir);
-      cfg->rt.volatile_dir[0] = '\0';
-    } else {
-      cleanup_volatile_overlay(&cfg->rt);
-    }
-  }
-
   char mount_point[PATH_MAX] = "";
   if (cfg->conf.img_mount_point[0]) {
     safe_strncpy(mount_point, cfg->conf.img_mount_point, sizeof(mount_point));
@@ -185,10 +173,6 @@ int start_rootfs(cfg_t *cfg) {
     }
   }
 
-  if (check_volatile_mode(&cfg->conf) < 0) {
-    goto cleanup;
-  }
-
   if (cfg->rt.config_file[0]) {
     bool was_new = !cfg->rt.config_file_existed;
     if (config_save(cfg->rt.config_file, cfg) < 0) {
@@ -204,11 +188,6 @@ int start_rootfs(cfg_t *cfg) {
   if (config_save_by_name(cfg->rt.container_name, cfg) < 0) {
     log_warn("无法将工作区镜像配置同步至 '%s': %s",
              cfg->rt.container_name, strerror(errno));
-  }
-
-  if (cfg->conf.volatile_mode) {
-    fs::path container_volatile_dir = volatile_dir / cfg->rt.container_name;
-    snprintf(cfg->rt.volatile_dir, sizeof(cfg->rt.volatile_dir), container_volatile_dir.c_str());
   }
 
   fix_host_ptys();
@@ -259,9 +238,6 @@ int start_rootfs(cfg_t *cfg) {
 
   log_info("容器启动成功，主 PID 为 %d (Monitor PID: %d)", cfg->rt.container_pid,
            monitor_pid);
-
-  if (cfg->conf.volatile_mode)
-    log_info("正在进入易失模式 (OverlayFS)...");
 
   if (cfg->conf.img_mount_point[0]) {
     cfg_t save_cfg = *cfg;
