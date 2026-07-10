@@ -6,9 +6,6 @@ void internal_boot(cfg_t *cfg) {
   bool dir_creation_failed = false;
   const char *dirs_to_create[] = {".old_root", "proc", "sys", "run", "tmp"};
   bool used_ms_move = false;
-  char *init_bin = nullptr;
-  char *init_args[16];
-  int argc = 0;
   unsigned long root_prop = MS_PRIVATE;
 
   /* 防御性检查：确保配置有效 */
@@ -242,18 +239,19 @@ void internal_boot(cfg_t *cfg) {
     }
   }
 
-  /* 16. 最终执行 INIT 程序 */
-  init_bin = cfg->conf.custom_init[0] ? cfg->conf.custom_init : (char *)DEFAULT_INIT;
-  init_args[argc++] = init_bin;
+  {
+    const char *init_bin = cfg->conf.custom_init[0] ? cfg->conf.custom_init : DEFAULT_INIT;
+    const char *init_args[] = {
+      init_bin,
+      "systemd.unified_cgroup_hierarchy=1",  /* 项目强制 CgroupV2 */
+      nullptr
+    };
 
-  /* 项目强制 CgroupV2，总是传递 unified_cgroup_hierarchy 引导标志 */
-  init_args[argc++] = (char *)"systemd.unified_cgroup_hierarchy=1";
-  init_args[argc] = nullptr;
-
-  if (execve(init_bin, init_args, environ) < 0) {
-    log_error("执行 %s 失败: %s", init_bin, strerror(errno));
-    log_die("容器引导崩溃。请检查 rootfs 是否损坏，且存在合法的 %s 二进制程序。",
-            init_bin);
+    if (execve(init_bin, const_cast<char *const *>(init_args), environ) < 0) {
+      log_error("执行 %s 失败: %s", init_bin, strerror(errno));
+      log_die("容器引导崩溃。请检查 rootfs 是否损坏，且存在合法的 %s 二进制程序。",
+              init_bin);
+    }
   }
 
 boot_fail:
