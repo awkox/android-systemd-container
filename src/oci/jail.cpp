@@ -126,25 +126,6 @@ void apply_jail_mask(const int privileged_mask) {
   }
 
   /*
-   * 全局：屏蔽所有 cgroup v1 的 release_agent 文件。
-   * 这拦截了最经典的 CVE-2022-0492 容器逃逸漏洞。
-   */
-  {
-    auto_closedir DIR *cgdir = opendir("/sys/fs/cgroup");
-    if (cgdir) {
-      struct dirent *de;
-      while ((de = readdir(cgdir)) != nullptr) {
-        if (de->d_name[0] == '.')
-          continue;
-        char agent_path[PATH_MAX];
-        snprintf(agent_path, sizeof(agent_path),
-                 "/sys/fs/cgroup/%s/release_agent", de->d_name);
-        mask_path(agent_path);
-      }
-    }
-  }
-
-  /*
    * 大规模 /proc/sys 锁定 - 无论是在标准模式还是硬件模式均适用。
    */
   {

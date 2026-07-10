@@ -5,54 +5,30 @@ std::optional<std::vector<pid_t>> collect_pids() {
     std::vector<pid_t> pids;
     std::error_code ec;
 
-    // 当宿主机使用 Cgroup V2 时，直接遍历第一层容器子目录即可
-    if (cgroup_host_is_v2()) {
-        if (fs::exists(project_cgroup_dir, ec)) {
-            // 将 recursive_directory_iterator 改为普通的 directory_iterator
-            for (const auto& entry : fs::directory_iterator(project_cgroup_dir, ec)) {
-                if (entry.is_directory(ec)) {
-                    fs::path procs_file = entry.path() / "cgroup.procs";
-                    if (auto content = read_file_cpp(procs_file)) {
-                        size_t pos = 0;
-                        while (pos < content->length()) {
-                            size_t end_pos = content->find('\n', pos);
-                            if (end_pos == std::string::npos) end_pos = content->length();
-                            if (end_pos > pos) {
-                                try {
-                                    long val = std::stol(content->substr(pos, end_pos - pos));
-                                    if (val > 0) pids.push_back(static_cast<pid_t>(val));
-                                } catch (...) {}
-                            }
-                            pos = end_pos + 1;
-                        }
-                    }
-                }
-            }
-            if (!ec) return pids;
-            pids.clear();
-            ec.clear();
-        } else {
-            return pids; 
-        }
+    if (!fs::exists(project_cgroup_dir, ec)) {
+        return pids;
     }
 
-    for (const auto& entry : fs::directory_iterator("/proc", ec)) {
-        if (!entry.is_directory(ec)) continue;
-        
-        std::string filename = entry.path().filename().string();
-        try {
-            size_t pos;
-            long val = std::stol(filename, &pos);
-            // 确保整个字符串都是数字且 > 0
-            if (pos == filename.length() && val > 0) {
-                pids.push_back(static_cast<pid_t>(val));
+    for (const auto& entry : fs::directory_iterator(project_cgroup_dir, ec)) {
+        if (entry.is_directory(ec)) {
+            fs::path procs_file = entry.path() / "cgroup.procs";
+            if (auto content = read_file_cpp(procs_file)) {
+                size_t pos = 0;
+                while (pos < content->length()) {
+                    size_t end_pos = content->find('\n', pos);
+                    if (end_pos == std::string::npos) end_pos = content->length();
+                    if (end_pos > pos) {
+                        try {
+                            long val = std::stol(content->substr(pos, end_pos - pos));
+                            if (val > 0) pids.push_back(static_cast<pid_t>(val));
+                        } catch (...) {}
+                    }
+                    pos = end_pos + 1;
+                }
             }
-        } catch (...) {
-            // 忽略非数字目录（如 /proc/sys）
         }
     }
-    
-    if (ec) return std::nullopt; // 遍历失败
+    if (ec) return std::nullopt;
     return pids;
 }
 
@@ -136,8 +112,7 @@ pid_t find_container_init_pid(const char *container_name, const char *uuid) {
   if (!uuid || uuid[0] == '\0')
     return 0;
 
-  // 高速通道 (Fast Path): 在 Cgroup V2 环境下，直接点对点读取目标容器的 cgroup.procs
-  if (container_name && container_name[0] && cgroup_host_is_v2()) {
+  if (container_name && container_name[0]) {
     fs::path cg_procs = project_cgroup_dir / container_name / "cgroup.procs";
     if (auto content = read_file_cpp(cg_procs)) {
       size_t pos = 0;

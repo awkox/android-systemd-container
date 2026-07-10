@@ -148,8 +148,6 @@ int start_rootfs(cfg_t *cfg) {
     log_warn("无交互式终端 - 已禁用前台模式，转入后台运行。");
   }
 
-  print_cgroup_status(&cfg->conf);
-
   has_side_effects = true;
 
   if (cfg->conf.rootfs_img_path[0] && !lock_acquired) {

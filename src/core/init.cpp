@@ -271,13 +271,8 @@ void internal_boot(cfg_t *cfg) {
   init_bin = cfg->conf.custom_init[0] ? cfg->conf.custom_init : (char *)DEFAULT_INIT;
   init_args[argc++] = init_bin;
 
-  if (statfs(cgroup_dir.c_str(), &_cgsfs) == 0) {
-    if (_cgsfs.f_type == CGROUP2_SUPER_MAGIC) {
-      init_args[argc++] = (char *)"systemd.unified_cgroup_hierarchy=1";
-    } else {
-      init_args[argc++] = (char *)"systemd.unified_cgroup_hierarchy=0";
-      init_args[argc++] = (char *)"systemd.legacy_systemd_cgroup_controller=1";
-    }
+  if (statfs(cgroup_dir.c_str(), &_cgsfs) == 0 && _cgsfs.f_type == CGROUP2_SUPER_MAGIC) {
+    init_args[argc++] = (char *)"systemd.unified_cgroup_hierarchy=1";
   }
 
   init_args[argc] = nullptr;
