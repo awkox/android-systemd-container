@@ -9,7 +9,6 @@ void internal_boot(cfg_t *cfg) {
   char *init_bin = nullptr;
   char *init_args[16];
   int argc = 0;
-  struct statfs _cgsfs;
   unsigned long root_prop = MS_PRIVATE;
 
   /* 防御性检查：确保配置有效 */
@@ -39,7 +38,7 @@ void internal_boot(cfg_t *cfg) {
     goto boot_fail;
   }
 
-  if (is_container_running(cfg->rt.container_name, cfg->conf.uuid, &existing_pid)) {
+  if (is_container_running(cfg->rt.container_name, &existing_pid)) {
     if (existing_pid != getpid()) {
       log_error(
           "严重错误：引导终止 — 名称 '%s' 已被 PID %d 占用。",
@@ -85,14 +84,7 @@ void internal_boot(cfg_t *cfg) {
     goto boot_fail;
   }
 
-  /* 6. 从 /run/.boot-uuid 读取 UUID */
-  if (cfg->conf.uuid[0] == '\0') {
-    if(auto content = read_file_cpp("/run/.boot-uuid"))
-      snprintf(cfg->conf.uuid, sizeof(cfg->conf.uuid), "%s", content->c_str());
-  }
-  fs::remove("run/.boot-uuid");
-
-  /* 7. 预创建标准的系统目录结构 */
+  /* 6. 预创建标准的系统目录结构 */
   for (size_t i = 0; i < std::size(dirs_to_create); i++) {
     if (mkdir(dirs_to_create[i], 0755) < 0 && errno != EEXIST) {
       log_error("无法创建目录 '%s': %s", dirs_to_create[i],
@@ -107,13 +99,13 @@ void internal_boot(cfg_t *cfg) {
     goto boot_fail;
   }
 
-  /* 8. 配置 /dev (设备节点，或 devtmpfs) */
+  /* 7. 配置 /dev (设备节点，或 devtmpfs) */
   if (setup_dev() < 0) {
     log_error("设置 /dev 环境失败。");
     goto boot_fail;
   }
 
-  /* 9. 挂载虚拟文件系统 (proc, sys) */
+  /* 8. 挂载虚拟文件系统 (proc, sys) */
   if (domount("proc", "proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
     log_error("挂载 procfs 失败: %s", strerror(errno));
     goto boot_fail;
@@ -137,7 +129,7 @@ void internal_boot(cfg_t *cfg) {
     log_warn("无法将 /sys 重新挂载为只读模式: %s", strerror(errno));
   }
 
-  /* 10. 在锁定 /sys 之后设置 Cgroups */
+  /* 9. 在锁定 /sys 之后设置 Cgroups */
   if (setup_cgroups() < 0) {
     log_error("容器 Cgroups 配置失败。");
     goto boot_fail;
@@ -151,12 +143,12 @@ void internal_boot(cfg_t *cfg) {
   if (domount("tmpfs", "tmp", "tmpfs", MS_NOSUID | MS_NODEV, "mode=1777") < 0)
     log_warn("挂载 /tmp (tmpfs) 失败: %s", strerror(errno));
 
-  /* 11. 在 pivot_root 前绑定挂载控制台 */
+  /* 10. 在 pivot_root 前绑定挂载控制台 */
   if (mount(cfg->rt.console.name, "dev/console", nullptr, MS_BIND, nullptr) < 0)
     log_warn("无法绑定挂载 Console '%s': %s", cfg->rt.console.name,
              strerror(errno));
 
-  /* 12. 执行根目录无缝切换 (pivot_root) */
+  /* 11. 执行根目录无缝切换 (pivot_root) */
   if (is_ramfs("/")) {
     log_info("检测到 rootfs/ramfs 宿主机 - 自动回退至 MS_MOVE + chroot 机制");
     used_ms_move = true;
@@ -180,13 +172,13 @@ void internal_boot(cfg_t *cfg) {
   
   // 目前处于根目录
 
-  /* 13. 设置 devpts */
+  /* 12. 设置 devpts */
   setup_devpts();
 
   /* 在 pivot_root 后应用监狱掩码保护 */
   apply_jail_mask(cfg->conf.privileged_mask);
 
-  /* 13b. 资源可见性虚拟化 */
+  /* 13. 资源可见性虚拟化 */
   if (is_mountpoint("proc")) {
     if (virtualize_init(cfg) < 0)
       log_warn("[VIRT] 虚拟化资源初始化失败，将以无虚拟化状态继续运行。");
@@ -198,13 +190,6 @@ void internal_boot(cfg_t *cfg) {
     log_warn("重置主机名失败: %s", strerror(errno));
   }
 
-  /* 14b 写入容器标识，供 PID 发现 */
-  mkdir("/run/asc", 0755);
-  if (cfg->conf.uuid[0] != '\0') {
-    fs::path uuid_path = fs::path("/run/asc") / cfg->conf.uuid;
-    write_file(uuid_path, "");
-  }
-
   if (cfg->rt.foreground) {
     printf("\r\n(按下 CTRL+ALT+Q 以脱离前台并退出)\r\n");
     fflush(stdout);
@@ -212,7 +197,7 @@ void internal_boot(cfg_t *cfg) {
   printf("\r\n");
   fflush(stdout);
 
-  /* 15. 清理卸载旧的根文件系统目录 */
+  /* 14. 清理卸载旧的根文件系统目录 */
   if (!used_ms_move) {
     if (umount2("/.old_root", MNT_DETACH) < 0)
       log_warn("卸载 /.old_root 失败: %s", strerror(errno));
@@ -222,9 +207,7 @@ void internal_boot(cfg_t *cfg) {
     fs::remove("/.old_root");
   }
 
-  /* 16. 清除环境变量并设置默认值 */
-  // 设置的环境变量会在proc environ形成快照
-  // 除非故意修改内核的环境变量指针，否则proc environ不会被修改
+  /* 15. 清除环境变量并设置默认值 */
   clearenv();
   setenv("container", PROJECT_NAME, 1);
   if (cfg->conf.img_mount_point[0])
@@ -238,7 +221,7 @@ void internal_boot(cfg_t *cfg) {
 
   apply_capability_hardening(cfg->conf.privileged_mask);
 
-  /* 17. 重定向标准输入输出至 /dev/console
+  /* 16. 重定向标准输入输出至 /dev/console
    * 使用局部代码块，防止 console_fd 触发 C++ 的 goto 跳跃错误 */
   {
     const int console_fd = open("/dev/console", O_RDWR);
@@ -267,13 +250,12 @@ void internal_boot(cfg_t *cfg) {
     }
   }
 
-  /* 18. 最终执行 INIT 程序 */
+  /* 17. 最终执行 INIT 程序 */
   init_bin = cfg->conf.custom_init[0] ? cfg->conf.custom_init : (char *)DEFAULT_INIT;
   init_args[argc++] = init_bin;
 
-  if (statfs(cgroup_dir.c_str(), &_cgsfs) == 0 && _cgsfs.f_type == CGROUP2_SUPER_MAGIC) {
-    init_args[argc++] = (char *)"systemd.unified_cgroup_hierarchy=1";
-  }
+  /* 项目强制 CgroupV2，总是传递 unified_cgroup_hierarchy 引导标志 */
+  init_args[argc++] = (char *)"systemd.unified_cgroup_hierarchy=1";
 
   init_args[argc] = nullptr;
 

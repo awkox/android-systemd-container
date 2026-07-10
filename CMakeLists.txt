@@ -61,7 +61,6 @@ add_executable(asc
 	src/utils/process.cpp
 	src/utils/string.cpp
 	src/utils/workspace.cpp
-	src/utils/uuid.cpp
 	src/utils/system.cpp
 )
 target_include_directories(asc PRIVATE 

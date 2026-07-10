@@ -1,37 +1,5 @@
 #include "asc.h"
 
-// 优化 1: 将 collect_pids 降级为单层迭代，避免扫描无关的控制文件
-std::optional<std::vector<pid_t>> collect_pids() {
-    std::vector<pid_t> pids;
-    std::error_code ec;
-
-    if (!fs::exists(project_cgroup_dir, ec)) {
-        return pids;
-    }
-
-    for (const auto& entry : fs::directory_iterator(project_cgroup_dir, ec)) {
-        if (entry.is_directory(ec)) {
-            fs::path procs_file = entry.path() / "cgroup.procs";
-            if (auto content = read_file_cpp(procs_file)) {
-                size_t pos = 0;
-                while (pos < content->length()) {
-                    size_t end_pos = content->find('\n', pos);
-                    if (end_pos == std::string::npos) end_pos = content->length();
-                    if (end_pos > pos) {
-                        try {
-                            long val = std::stol(content->substr(pos, end_pos - pos));
-                            if (val > 0) pids.push_back(static_cast<pid_t>(val));
-                        } catch (...) {}
-                    }
-                    pos = end_pos + 1;
-                }
-            }
-        }
-    }
-    if (ec) return std::nullopt;
-    return pids;
-}
-
 bool is_container_init(const pid_t pid) {
   fs::path path = proc_dir / std::to_string(pid) / "status";
   auto_fclose FILE *f = fopen(path.c_str(), "re");
@@ -107,51 +75,34 @@ long get_container_uptime(const pid_t pid) {
   }
 }
 
-// 优化 2: O(1) 精确制导查找目标 PID
-pid_t find_container_init_pid(const char *container_name, const char *uuid) {
-  if (!uuid || uuid[0] == '\0')
+// 优化: O(1) 纯 CgroupV2 目录解析，废除全局 PID 扫描的回退机制
+pid_t find_container_init_pid(const char *container_name) {
+  if (!container_name || container_name[0] == '\0')
     return 0;
 
-  if (container_name && container_name[0]) {
-    fs::path cg_procs = project_cgroup_dir / container_name / "cgroup.procs";
-    if (auto content = read_file_cpp(cg_procs)) {
-      size_t pos = 0;
-      while (pos < content->length()) {
-        size_t end_pos = content->find('\n', pos);
-        if (end_pos == std::string::npos) end_pos = content->length();
-        if (end_pos > pos) {
-          try {
-            long val = std::stol(content->substr(pos, end_pos - pos));
-            if (val > 0) {
-              pid_t pid = static_cast<pid_t>(val);
-              fs::path path = proc_dir / std::to_string(pid) / "root/run/asc" / uuid;
-              
-              // 验证进程身份
-              if (fs::exists(path) && is_valid_container_pid(pid)) {
-                return pid;
-              }
+  fs::path cg_procs = project_cgroup_dir / container_name / "cgroup.procs";
+  if (auto content = read_file_cpp(cg_procs)) {
+    size_t pos = 0;
+    while (pos < content->length()) {
+      size_t end_pos = content->find('\n', pos);
+      if (end_pos == std::string::npos) end_pos = content->length();
+      if (end_pos > pos) {
+        try {
+          long val = std::stol(content->substr(pos, end_pos - pos));
+          if (val > 0) {
+            pid_t pid = static_cast<pid_t>(val);
+            
+            // 验证是否为 cgroup 中有效的 1 号 init 进程
+            if (is_valid_container_pid(pid)) {
+              return pid;
             }
-          } catch (...) {}
-        }
-        pos = end_pos + 1;
+          }
+        } catch (...) {}
       }
-    }
-    // 兜底设计：如果在 V2 cgroup 没找到目标，不直接 return 0，
-    // 因为可能存在用户使用 force_cgroupv1=true 的异常覆写情况。转入下方全局扫描。
-  }
-
-  // 慢速通道 (Slow Path): Cgroup V1 或是缺乏容器名，回退到全局扫描
-  auto pids_opt = collect_pids();
-  if (!pids_opt) return 0;
-
-  for (pid_t pid : *pids_opt) {
-    fs::path path = proc_dir / std::to_string(pid) / "root/run/asc" / uuid;
-    if (fs::exists(path)) {
-      if (is_valid_container_pid(pid)) {
-        return pid;
-      }
+      pos = end_pos + 1;
     }
   }
 
+  // Cgroup 中未找到有效进程，直接判定为死亡
   return 0;
 }

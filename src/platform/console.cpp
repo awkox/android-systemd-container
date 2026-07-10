@@ -183,7 +183,7 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
           if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
             ioctl(console_master_fd, TIOCSWINSZ, &ws);
         } else if (fdsi.ssi_signo == SIGINT || fdsi.ssi_signo == SIGTERM) {
-          pid_t live_pid = find_container_init_pid(cfg->rt.container_name, cfg->conf.uuid);
+          pid_t live_pid = find_container_init_pid(cfg->rt.container_name);
           if (live_pid > 0)
             kill(live_pid, static_cast<int>(fdsi.ssi_signo));
         }

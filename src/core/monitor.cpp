@@ -31,45 +31,40 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
 
   prctl(PR_SET_NAME, "[ds-monitor]", 0, 0, 0);
 
-  /* 自适应 Cgroup 命名空间支持 */
-  bool allow_cgroup_ns = fs::exists("/proc/self/ns/cgroup");
-  if (allow_cgroup_ns) {
-    if (fs::exists("/sys/fs/cgroup/cgroup.procs")) {
-      if (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit) {
-        char enable[64] = "";
-        int eoff = 0;
-        if (auto content = read_file_cpp("/sys/fs/cgroup/cgroup.controllers")) {
-          const struct {
-            long long limit;
-            const char *controller;
-          } ctrl_map[] = {
-            {cfg->conf.memory_limit, "memory"},
-            {cfg->conf.cpu_quota,    "cpu"},
-            {cfg->conf.pids_limit,   "pids"},
-          };
-          for (const auto &c : ctrl_map) {
-            if (c.limit && cg_word_in_list(content->c_str(), c.controller)) {
-              const int n = snprintf(enable + eoff,
-                                     sizeof(enable) - static_cast<size_t>(eoff),
-                                     "%s+%s", eoff ? " " : "", c.controller);
-              if (n > 0)
-                eoff += n;
-            }
-          }
-        }
-        if (eoff > 0) {
-          if (write_file("/sys/fs/cgroup/cgroup.subtree_control", enable) < 0)
-            log_warn("[CGROUP] subtree_control (root): %s", strerror(errno));
-          create_directories_with_permission("/sys/fs/cgroup/asc");
-          if (write_file("/sys/fs/cgroup/asc/cgroup.subtree_control", enable) < 0)
-            log_warn("[CGROUP] subtree_control (asc): %s", strerror(errno));
+  /* Cgroup V2 强制引导逻辑 */
+  if (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit) {
+    char enable[64] = "";
+    int eoff = 0;
+    if (auto content = read_file_cpp("/sys/fs/cgroup/cgroup.controllers")) {
+      const struct {
+        long long limit;
+        const char *controller;
+      } ctrl_map[] = {
+        {cfg->conf.memory_limit, "memory"},
+        {cfg->conf.cpu_quota,    "cpu"},
+        {cfg->conf.pids_limit,   "pids"},
+      };
+      for (const auto &c : ctrl_map) {
+        if (c.limit && cg_word_in_list(content->c_str(), c.controller)) {
+          const int n = snprintf(enable + eoff,
+                                 sizeof(enable) - static_cast<size_t>(eoff),
+                                 "%s+%s", eoff ? " " : "", c.controller);
+          if (n > 0)
+            eoff += n;
         }
       }
-
-      fs::path cg_path = project_cgroup_dir / cfg->rt.container_name;
-      create_directories_with_permission(cg_path);
+    }
+    if (eoff > 0) {
+      if (write_file("/sys/fs/cgroup/cgroup.subtree_control", enable) < 0)
+        log_warn("[CGROUP] subtree_control (root): %s", strerror(errno));
+      create_directories_with_permission("/sys/fs/cgroup/asc");
+      if (write_file("/sys/fs/cgroup/asc/cgroup.subtree_control", enable) < 0)
+        log_warn("[CGROUP] subtree_control (asc): %s", strerror(errno));
     }
   }
+
+  fs::path cg_path = project_cgroup_dir / cfg->rt.container_name;
+  create_directories_with_permission(cg_path);
 
   /* 应用资源限制 */
   if (cgroup_apply_limits(cfg) < 0 &&
@@ -95,20 +90,17 @@ reboot_loop:;
     /* ==== 中间进程 (Intermediate Process) ====
      * 负责为本次引导周期创建全新的命名空间 */
      
-    if (allow_cgroup_ns) {
-      fs::path cg_procs = project_cgroup_dir / cfg->rt.container_name / "cgroup.procs";
-      FILE *f = fopen(cg_procs.c_str(), "we");
-      if (f) {
-        fprintf(f, "%d\n", getpid());
-        fclose(f);
-      }
+    /* 将中间进程加入 Cgroup V2 (作为追踪基准，后续 init_pid 会继承) */
+    fs::path cg_procs = project_cgroup_dir / cfg->rt.container_name / "cgroup.procs";
+    FILE *f = fopen(cg_procs.c_str(), "we");
+    if (f) {
+      fprintf(f, "%d\n", getpid());
+      fclose(f);
     }
 
-    int clone_flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC;
+    int clone_flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWCGROUP;
     if (cfg->conf.isolation_network)
       clone_flags |= CLONE_NEWNET;
-    if (allow_cgroup_ns)
-      clone_flags |= CLONE_NEWCGROUP;
 
     if (unshare(clone_flags) < 0) {
       log_error("命名空间隔离(unshare)失败: %s", strerror(errno));
@@ -194,13 +186,13 @@ reboot_loop:;
       if (r < 0 && errno != EINTR)
         break;
 
-      if (cfg->rt.container_pid <= 0 && cfg->conf.uuid[0] != '\0') {
-        pid_t p = find_container_init_pid(cfg->rt.container_name, cfg->conf.uuid);
+      if (cfg->rt.container_pid <= 0) {
+        pid_t p = find_container_init_pid(cfg->rt.container_name);
         if (p > 0) {
           cfg->rt.container_pid = p;
           cfg->rt.ns_inode = get_pid_ns_inode(p);
           write_monitor_debug_log(cfg->rt.container_name,
-                                  "[VIRT] 已通过 /proc 扫描解析到 container_pid=%d "
+                                  "[VIRT] 已通过 CgroupV2 列表解析到 container_pid=%d "
                                   "ns_inode=%lu",
                                   (int)p, cfg->rt.ns_inode);
         }
@@ -251,18 +243,6 @@ reboot_loop:;
     if (cfg->rt.foreground) {
       printf("\n容器 %s 正在重启\n", cfg->rt.container_name);
       fflush(stdout);
-    }
-
-    /* 将 .boot-uuid 写入真实的挂载点内，而非旧容器失效的 proc 路径 */
-    if (!cfg->conf.volatile_mode && cfg->conf.img_mount_point[0]) {
-      fs::path run_dir = fs::path(cfg->conf.img_mount_point) / "run";
-      mkdir(run_dir.c_str(), 0755);
-      fs::path uuid_path = run_dir / ".boot-uuid";
-      auto_close int fd = open(uuid_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-      if (fd >= 0) {
-        size_t ulen = strlen(cfg->conf.uuid);
-        write_all(fd, cfg->conf.uuid, ulen);
-      }
     }
 
     /* 重新加载工作区配置 */

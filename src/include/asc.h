@@ -29,7 +29,6 @@
 #include "utils/process.h"
 #include "utils/string.h"
 #include "utils/workspace.h"
-#include "utils/uuid.h"
 #include "utils/system.h"
 #include "utils/path.h"
 

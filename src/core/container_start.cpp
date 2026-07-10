@@ -126,7 +126,7 @@ int start_rootfs(cfg_t *cfg) {
   }
 
   if (!lock_acquired) {
-    if (is_container_running(cfg->rt.container_name, cfg->conf.uuid, &existing_pid)) {
+    if (is_container_running(cfg->rt.container_name, &existing_pid)) {
       log_error("容器名称 '%s' 已被 PID %d 占用。",
                 cfg->rt.container_name, existing_pid);
       goto cleanup;
@@ -187,19 +187,6 @@ int start_rootfs(cfg_t *cfg) {
 
   if (check_volatile_mode(&cfg->conf) < 0) {
     goto cleanup;
-  }
-
-  {
-    auto active_uuids = collect_active_uuids();
-    bool need_new = (cfg->conf.uuid[0] == '\0');
-    if (!need_new) {
-      // 借助 std::find 一行完成查找
-      if (std::find(active_uuids.begin(), active_uuids.end(), cfg->conf.uuid) != active_uuids.end()) {
-        need_new = true;
-      }
-    }
-    if (need_new)
-      generate_uuid(cfg->conf.uuid, sizeof(cfg->conf.uuid));
   }
 
   if (cfg->rt.config_file[0]) {
@@ -288,9 +275,9 @@ int start_rootfs(cfg_t *cfg) {
     int ret = console_monitor_loop(cfg->rt.console.master, monitor_pid, cfg);
     return ret;
   } else {
-    fs::path marker = proc_dir / std::to_string(cfg->rt.container_pid) / "root/run/asc";
+    // 根据项目设计强制要求 Cgroup V2，此处的探测退化为极速验证
     for (int i = 0; i < 50; i++) {
-      if (fs::exists(marker)) {
+      if (find_container_init_pid(cfg->rt.container_name) == cfg->rt.container_pid) {
         booted = true;
         break;
       }

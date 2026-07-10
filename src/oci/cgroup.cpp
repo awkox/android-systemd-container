@@ -12,7 +12,7 @@ int cgroup_host_bootstrap() {
     return 0;
 
   if (!cgroup_kernel_supports_v2()) {
-    log_info("[CGROUP] 系统文件系统不支持 cgroup2，跳过引导初始化。");
+    log_error("[CGROUP] 系统不支持 cgroup2。本项目已强制要求 Cgroup V2 环境，无法启动。");
     return -1;
   }
 

@@ -76,7 +76,6 @@ namespace fs = std::filesystem;
 // 常量定义
 constexpr int MIN_KERNEL_MAJOR = 4;
 constexpr int MIN_KERNEL_MINOR = 9;
-constexpr int UUID_LEN = 32;
 constexpr int MAX_CONTAINERS = 1024;
 constexpr int STOP_TIMEOUT = 15;
 constexpr unsigned int RETRY_DELAY_US = 200000;
@@ -113,7 +112,6 @@ typedef struct {
   char rootfs_img_path[PATH_MAX];
   char img_mount_point[PATH_MAX];
   char custom_init[PATH_MAX];
-  char uuid[UUID_LEN + 1];
 
   bool volatile_mode;
   bool isolation_network;

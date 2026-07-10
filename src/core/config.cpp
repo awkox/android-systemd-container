@@ -142,8 +142,6 @@ int config_load(const fs::path& config_path, cfg_t *cfg) {
         log_warn("配置警告: 忽略包含空格的 custom_init 路径 '%s'", val);
       else
         safe_strncpy(conf->custom_init, val, sizeof(conf->custom_init));
-    } else if (strcmp(key, "uuid") == 0) {
-      safe_strncpy(conf->uuid, val, sizeof(conf->uuid));
     } else if (strcmp(key, "isolation_network") == 0) {
       conf->isolation_network = parse_bool(val);
     } else {
@@ -185,9 +183,6 @@ static void config_serialize_known(FILE *f, const asc_conf_t *conf) {
   }
 
   fprintf(f, "isolation_network=%d\n", conf->isolation_network);
-
-  if (conf->uuid[0])
-    fprintf(f, "uuid=%s\n", conf->uuid);
 
   if (conf->custom_init[0]) {
     fs::path abs_path = resolve_path_arg(conf->custom_init);
