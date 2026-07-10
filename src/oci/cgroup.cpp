@@ -7,7 +7,7 @@ static bool cgroup_kernel_supports_v2(void) {
 int cgroup_host_bootstrap() {
   struct statfs sfs;
 
-  if (statfs("/sys/fs/cgroup", &sfs) == 0 &&
+  if (statfs("sys/fs/cgroup", &sfs) == 0 &&
       sfs.f_type == CGROUP2_SUPER_MAGIC)
     return 0;
 
@@ -16,32 +16,32 @@ int cgroup_host_bootstrap() {
     return -1;
   }
 
-  if (!fs::exists("/sys/fs/cgroup")) {
-    if (!create_directories_with_permission("/sys/fs/cgroup")) {
-      log_error("[CGROUP] 创建 /sys/fs/cgroup 失败: %s",
+  if (!fs::exists("sys/fs/cgroup")) {
+    if (!create_directories_with_permission("sys/fs/cgroup")) {
+      log_error("[CGROUP] 创建 sys/fs/cgroup 失败: %s",
                 strerror(errno));
       return -1;
     }
   }
 
-  if (statfs("/sys/fs/cgroup", &sfs) == 0 &&
+  if (statfs("sys/fs/cgroup", &sfs) == 0 &&
       sfs.f_type != TMPFS_MAGIC &&
       sfs.f_type != CGROUP2_SUPER_MAGIC) {
-    if (mount("none", "/sys/fs/cgroup", "tmpfs",
+    if (mount("none", "sys/fs/cgroup", "tmpfs",
               MS_NOSUID | MS_NODEV | MS_NOEXEC, "mode=755,size=16M") != 0) {
-      log_error("[CGROUP] 挂载 tmpfs 到 /sys/fs/cgroup 失败: %s",
+      log_error("[CGROUP] 挂载 tmpfs 到 sys/fs/cgroup 失败: %s",
                 strerror(errno));
       return -1;
     }
     log_info("[CGROUP] 已在 /sys/fs/cgroup 挂载 tmpfs 锚点。");
   }
 
-  if (mount("none", "/sys/fs/cgroup", "cgroup2",
+  if (mount("none", "sys/fs/cgroup", "cgroup2",
             MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) != 0) {
-    log_error("挂载 cgroup2 到 /sys/fs/cgroup 失败: %s", strerror(errno));
+    log_error("挂载 cgroup2 到 sys/fs/cgroup 失败: %s", strerror(errno));
     return -1;
   }
-  log_info("自动引导并挂载了 cgroup2 到 /sys/fs/cgroup。");
+  log_info("自动引导并挂载了 cgroup2 到 sys/fs/cgroup。");
   return 0;
 }
 
