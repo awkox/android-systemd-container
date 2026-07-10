@@ -77,9 +77,6 @@ long get_container_uptime(const pid_t pid) {
 
 // 优化: O(1) 纯 CgroupV2 目录解析，废除全局 PID 扫描的回退机制
 pid_t find_container_init_pid(const char *container_name) {
-  if (!container_name || container_name[0] == '\0')
-    return 0;
-
   fs::path cg_procs = project_cgroup_dir / container_name / "cgroup.procs";
   if (auto content = read_file_cpp(cg_procs)) {
     size_t pos = 0;

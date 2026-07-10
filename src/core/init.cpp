@@ -30,11 +30,6 @@ void internal_boot(cfg_t *cfg) {
 
   /* 0. 引导防护：确保名称存在且唯一。
    * 这是一个关键的安全检查，防止无名或冲突的容器被意外引导。 */
-  if (!cfg->rt.container_name[0]) {
-    log_error("严重错误：引导终止 — 容器名称为空。");
-    goto boot_fail;
-  }
-
   if (is_container_running(cfg->rt.container_name, &existing_pid)) {
     if (existing_pid != getpid()) {
       log_error(

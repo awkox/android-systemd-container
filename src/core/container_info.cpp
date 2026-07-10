@@ -8,11 +8,6 @@ static const char *get_architecture(void) {
 }
 
 int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
-  if (cfg->rt.container_name[0] == '\0') {
-    log_error("未指定容器名称。");
-    return 0;
-  }
-
   if (!trust_cfg_pid) {
     config_load_by_name(cfg->rt.container_name, cfg);
   }

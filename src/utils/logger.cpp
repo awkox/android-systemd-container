@@ -15,9 +15,6 @@ void rotate_log(const fs::path& path, const size_t max_size) {
 
 static void write_to_log_file(const char *name, const char *component,
                               const char *raw_msg, const int pre_opened_fd) {
-  if (!name || !name[0])
-    return;
-
   struct timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
   struct tm tm;
@@ -102,9 +99,6 @@ void die_internal(const char *fmt, ...) {
 }
 
 void write_monitor_debug_log(const char *name, const char *fmt, ...) {
-  if (!name || !name[0] || !fmt)
-    return;
-
   char raw_msg[8192];
   va_list ap;
   va_start(ap, fmt);

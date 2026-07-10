@@ -98,18 +98,16 @@ int start_rootfs(cfg_t *cfg) {
   pid_t monitor_pid = -1;
   bool booted = false;
 
-  if (cfg->rt.container_name[0]) {
-    fs::path lock_path = lock_dir / cfg->rt.container_name;
-    if (fs::exists(lock_path)) {
-      if (acquire_external_lock(cfg->rt.container_name) == 0) {
-        lock_acquired = true;
+  fs::path lock_path = lock_dir / cfg->rt.container_name;
+  if (fs::exists(lock_path)) {
+    if (acquire_external_lock(cfg->rt.container_name) == 0) {
+      lock_acquired = true;
 
-        if (cfg->conf.img_mount_point[0] && is_mountpoint(cfg->conf.img_mount_point)) {
-          cgroup_cleanup_container(cfg->rt.container_name);
-        } else {
-          release_external_lock();
-          lock_acquired = false;
-        }
+      if (cfg->conf.img_mount_point[0] && is_mountpoint(cfg->conf.img_mount_point)) {
+        cgroup_cleanup_container(cfg->rt.container_name);
+      } else {
+        release_external_lock();
+        lock_acquired = false;
       }
     }
   }

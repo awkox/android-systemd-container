@@ -148,10 +148,8 @@ int main(const int argc, char **argv) {
   }
 
   /* 为集中式日志引擎设置全局日志上下文 */
-  if (cfg.rt.container_name[0] != '\0') {
-    safe_strncpy(log_container_name, cfg.rt.container_name,
-                 sizeof(log_container_name));
-  }
+  safe_strncpy(log_container_name, cfg.rt.container_name,
+               sizeof(log_container_name));
 
   /* 基础信息命令 */
   if (strcmp(cmd, "help") == 0) {
