@@ -182,8 +182,7 @@ static void config_serialize_known(FILE *f, const asc_conf_t *conf) {
   fprintf(f, "isolation_network=%d\n", conf->isolation_network);
 
   if (conf->custom_init[0]) {
-    fs::path abs_path = resolve_path_arg(conf->custom_init);
-    fprintf(f, "custom_init=%s\n", abs_path.empty() ? conf->custom_init : abs_path.c_str());
+    fprintf(f, "custom_init=%s\n", conf->custom_init);
   }
 }
 
