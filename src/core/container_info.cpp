@@ -58,11 +58,6 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
     feat_count++;
   }
 
-  if (cfg->conf.force_cgroupv1) {
-    printf("  强制 Cgroup V1: 是\n");
-    feat_count++;
-  }
-
   if (cfg->conf.block_nested_ns) {
     printf("  死锁保护护盾: 是\n");
     feat_count++;
@@ -81,7 +76,7 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
 
   if (!trust_cfg_pid &&
       (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit) &&
-      !cfg->conf.force_cgroupv1 && cgroup_host_is_v2()) {
+      cgroup_host_is_v2()) {
     long long mu = -1, cu = -1, pu = -1;
     cgroup_get_usage(cfg->rt.container_name, &mu, &cu, &pu);
     printf("\n资源限制与使用状态:\n");

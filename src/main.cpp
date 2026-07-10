@@ -171,7 +171,7 @@ int main(const int argc, char **argv) {
     print_privileged_warning(cfg.conf.privileged_mask);
     if (cfg.conf.privileged_mask & PRIV_NOSEC && cfg.conf.block_nested_ns)
       log_warn("警告：由于启用了 privileged=noseccomp，block-nested-namespaces 已失效。");
-    cgroup_host_bootstrap(cfg.conf.force_cgroupv1);
+    cgroup_host_bootstrap();
     ret = start_rootfs(&cfg);
     goto cleanup;
   }

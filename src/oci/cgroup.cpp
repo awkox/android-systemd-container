@@ -52,10 +52,8 @@ static bool cgroup_kernel_supports_v2(void) {
   return grep_file("/proc/filesystems", "cgroup2");
 }
 
-void cgroup_host_bootstrap(const bool force_cgroupv1) {
+void cgroup_host_bootstrap() {
   struct statfs sfs;
-  if (force_cgroupv1)
-    return;
 
   if (statfs("/sys/fs/cgroup", &sfs) == 0 &&
       sfs.f_type == CGROUP2_SUPER_MAGIC)
@@ -130,8 +128,8 @@ static void mount_v1_controllers(void) {
   }
 }
 
-int setup_cgroups(const bool force_cgroupv1) {
-  cgroup_host_bootstrap(force_cgroupv1);
+int setup_cgroups() {
+  cgroup_host_bootstrap();
 
   if (!fs::exists("sys/fs/cgroup")) {
     if (!create_directories_with_permission("sys/fs/cgroup"))
@@ -142,7 +140,7 @@ int setup_cgroups(const bool force_cgroupv1) {
               MS_NOSUID | MS_NODEV | MS_NOEXEC, "mode=755,size=16M") < 0)
     return -1;
 
-  const bool v2_active = cgroup_host_is_v2() && !force_cgroupv1;
+  const bool v2_active = cgroup_host_is_v2();
   bool systemd_setup_done = false;
 
   if (v2_active) {
@@ -236,15 +234,6 @@ void cgroup_cleanup_container(const char *container_name) {
 void print_cgroup_status(const asc_conf_t *conf) {
   const bool limits_set = conf->memory_limit || conf->cpu_quota || conf->pids_limit;
 
-  if (conf->force_cgroupv1) {
-    log_warn("正在使用传统的 Cgroup V1 架构 (由于启用了 force-cgroupv1)");
-    if (limits_set) {
-      log_warn("资源限制 (memory/cpus/pids-limit) 需要 Cgroup V2 的支持，"
-               "在当前模式下将不会生效。");
-    }
-    return;
-  }
-
   const bool host_supports_v2 = cgroup_kernel_supports_v2();
 
   if (!host_supports_v2) {
@@ -299,7 +288,7 @@ int cgroup_apply_limits(cfg_t *cfg) {
   if (!cfg->conf.memory_limit && !cfg->conf.cpu_quota && !cfg->conf.pids_limit)
     return 0;
 
-  if (cfg->conf.force_cgroupv1 || !cgroup_host_is_v2()) {
+  if (!cgroup_host_is_v2()) {
     cfg->conf.memory_limit = 0;
     cfg->conf.cpu_quota = 0;
     cfg->conf.pids_limit = 0;

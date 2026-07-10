@@ -116,7 +116,6 @@ typedef struct {
   char uuid[UUID_LEN + 1];
 
   bool volatile_mode;
-  bool force_cgroupv1;
   bool isolation_network;
   bool block_nested_ns;
   int privileged_mask;

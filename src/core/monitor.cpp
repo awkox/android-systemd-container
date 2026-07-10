@@ -33,8 +33,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
 
   /* 自适应 Cgroup 命名空间支持
    * 只有在 v2 处于活动状态并且未强制使用 v1 时才启用。 */
-  bool allow_cgroup_ns = fs::exists("/proc/self/ns/cgroup") &&
-                 cgroup_host_is_v2() && !cfg->conf.force_cgroupv1;
+  bool allow_cgroup_ns = fs::exists("/proc/self/ns/cgroup") && cgroup_host_is_v2();
   if (allow_cgroup_ns) {
     if (fs::exists("/sys/fs/cgroup/cgroup.procs")) {
       if (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit) {
@@ -269,14 +268,8 @@ reboot_loop:;
 
     /* 重新加载工作区配置 */
     {
-      bool old_force_cgv1 = cfg->conf.force_cgroupv1;
-
       cfg_t reboot_cfg = *cfg;
       if (config_load_by_name(cfg->rt.container_name, &reboot_cfg) == 0) {
-        if (reboot_cfg.conf.force_cgroupv1 != old_force_cgv1) {
-          printf("\n警告: force_cgroupv1 已被修改，但这需要完全重启容器才能生效。\n");
-          reboot_cfg.conf.force_cgroupv1 = old_force_cgv1;
-        }
         *cfg = reboot_cfg;
       }
     }

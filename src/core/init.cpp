@@ -138,7 +138,7 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* 10. 在锁定 /sys 之后设置 Cgroups */
-  if (setup_cgroups(cfg->conf.force_cgroupv1) < 0) {
+  if (setup_cgroups() < 0) {
     log_error("容器 Cgroups 配置失败。");
     goto boot_fail;
   }

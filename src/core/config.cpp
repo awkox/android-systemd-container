@@ -107,8 +107,6 @@ int config_load(const fs::path& config_path, cfg_t *cfg) {
       safe_strncpy(conf->img_mount_point, val, sizeof(conf->img_mount_point));
     } else if (strcmp(key, "volatile_mode") == 0) {
       conf->volatile_mode = parse_bool(val);
-    } else if (strcmp(key, "force_cgroupv1") == 0) {
-      conf->force_cgroupv1 = parse_bool(val);
     } else if (strcmp(key, "block_nested_ns") == 0) {
       conf->block_nested_ns = parse_bool(val);
     } else if (strcmp(key, "memory_limit") == 0) {
@@ -170,7 +168,6 @@ static void config_serialize_known(FILE *f, const asc_conf_t *conf) {
     fprintf(f, "img_mount_point=%s\n", conf->img_mount_point);
 
   fprintf(f, "volatile_mode=%d\n", conf->volatile_mode);
-  fprintf(f, "force_cgroupv1=%d\n", conf->force_cgroupv1);
   fprintf(f, "block_nested_ns=%d\n", conf->block_nested_ns);
   if (conf->memory_limit > 0)
     fprintf(f, "memory_limit=%lld\n", conf->memory_limit);
