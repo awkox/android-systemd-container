@@ -8,12 +8,6 @@ void internal_boot(cfg_t *cfg) {
   bool used_ms_move = false;
   unsigned long root_prop = MS_PRIVATE;
 
-  /* 防御性检查：确保配置有效 */
-  if (!cfg) {
-    log_error("internal_boot 收到 NULL 空配置。");
-    return;
-  }
-
   /* 在隔离挂载命名空间 / 执行 pivot_root 之前，预先打开容器日志文件。
    * 这个文件描述符将在挂载命名空间变更中存活，确保能够捕获所有的底层日志。 */
   open_container_log(cfg->rt.container_name);

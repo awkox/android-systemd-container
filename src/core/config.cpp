@@ -16,9 +16,6 @@ static char *trim_whitespace(char *str) {
 
 /* 简易的布尔解析器 */
 static bool parse_bool(const char *val) {
-  if (!val)
-    return false;
-
   if (strcasecmp(val, "1") == 0)
     return true;
 
@@ -33,8 +30,6 @@ static bool parse_bool(const char *val) {
  * 若发生任何错误（溢出、为空、非数字、负数）则返回 -1。
  */
 static long long parse_ll_positive(const char *val) {
-  if (!val || !*val)
-    return -1;
   char *end;
   errno = 0;
   const long long v = strtoll(val, &end, 10);
