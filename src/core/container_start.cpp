@@ -105,6 +105,7 @@ int start_rootfs(cfg_t *cfg) {
         lock_acquired = true;
 
         if (cfg->conf.img_mount_point[0] && is_mountpoint(cfg->conf.img_mount_point)) {
+          cgroup_cleanup_container(cfg->rt.container_name);
         } else {
           release_external_lock();
           lock_acquired = false;
@@ -151,7 +152,7 @@ int start_rootfs(cfg_t *cfg) {
       rootfs_mp = fs::path(cfg->conf.img_mount_point);
     else {
       log_error("未获取到 Rootfs 镜像挂载点。");
-      return -1;
+      goto cleanup;
     }
 
     fs::path init_bin = cfg->conf.custom_init[0] ? 
@@ -162,14 +163,12 @@ int start_rootfs(cfg_t *cfg) {
       log_error("未找到 Init 文件: %s", init_path.c_str());
       log_error("请确保 rootfs 路径正确且包含了 %s 可执行文件。",
                 init_bin.c_str());
-      unmount_rootfs_img(cfg->conf.img_mount_point, cfg->rt.foreground);
-      return -1;
+      goto cleanup;
     }
     if (!S_ISLNK(st.st_mode) && access(init_path.c_str(), X_OK) != 0) {
       log_error("Init 文件没有可执行权限: %s", init_path.c_str());
       log_error("请确保为其赋予可执行权限 (chmod +x)。");
-      unmount_rootfs_img(cfg->conf.img_mount_point, cfg->rt.foreground);
-      return -1;
+      goto cleanup;
     }
   }
 

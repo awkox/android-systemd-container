@@ -18,6 +18,15 @@ static void rotate_daemon_log_if_needed(void) {
   if (g_daemon_log_fp) {
     fclose(g_daemon_log_fp);
     g_daemon_log_fp = fopen(g_daemon_log_path.c_str(), "ae");
+    if (g_daemon_log_fp) {
+      int lfd = fileno(g_daemon_log_fp);
+      if (lfd >= 0) {
+        dup2(lfd, STDOUT_FILENO);
+        dup2(lfd, STDERR_FILENO);
+        if (lfd > STDERR_FILENO)
+          close(lfd);
+      }
+    }
   } else {
     const int lfd = open(g_daemon_log_path.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC,
                    0644);
@@ -439,15 +448,21 @@ static void handle_session(int conn, req_t *r) {
     }
 
     if (child_done == 1) {
+      /* 非 PTY 模式：child 已退出，drain stdout/stderr 管道残余数据后退出 */
       if (out[0] >= 0)
         drain_fd(out[0], conn, MSG_OUT);
       if (err[0] >= 0)
         drain_fd(err[0], conn, MSG_ERR);
       break;
-    } else if (child_done == 2) {
-      if (is_pty && master >= 0)
-        drain_fd(master, conn, MSG_OUT);
+    } else if (child_done == 2 && master < 0) {
+      /* PTY 模式：child 已退出且 master 已关闭 — 所有数据已排空 */
       break;
+    } else if (child_done == 2 && is_pty) {
+      /* PTY 模式：child 已退出但 master 仍打开。
+       * 不立即退出 — 继续 epoll 循环等待 master EPOLLHUP
+       * （表示 slave 端已关闭、所有数据已 flush）。
+       * 同时做一次非阻塞 drain 以尽快排空已缓冲的数据。 */
+      drain_fd(master, conn, MSG_OUT);
     }
   }
 

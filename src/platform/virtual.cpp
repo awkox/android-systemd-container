@@ -164,15 +164,14 @@ static char *gen_cpuinfo(const cfg_t *cfg, size_t *out_len) {
   if (!buf)
     return nullptr;
   size_t off = 0;
-  int cur_cpu = -1;
   char line[4096];
 
   while (fgets(line, sizeof(line), f)) {
     int id;
-    if (sscanf(line, "processor : %d", &id) == 1)
-      cur_cpu = id;
-    if (cur_cpu >= max_cpus)
-      break;
+    if (sscanf(line, "processor : %d", &id) == 1) {
+      if (id >= max_cpus)
+        break;
+    }
     const size_t len = strlen(line);
     if (off + len + 1 >= cap) {
       cap *= 2;

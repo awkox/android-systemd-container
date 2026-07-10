@@ -88,9 +88,12 @@ static void block_read_path(const char *path) {
    * 子进程无任何实际逻辑 — 只是休眠以维持文件描述符存活。 */
   const pid_t child = fork();
   if (child == 0) {
+    signal(SIGTERM, SIG_DFL);  // 恢复被 monitor SIG_IGN 覆盖的默认处置
     const int wfd = open(fifo_path.c_str(), O_WRONLY);
-    if (wfd >= 0)
-      pause();
+    if (wfd >= 0) {
+      while (true)
+        sleep(36000);
+    }
     _exit(0);
   }
 
