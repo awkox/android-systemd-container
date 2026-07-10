@@ -193,8 +193,10 @@ int main(const int argc, char **argv) {
     if (strcmp(subcmd, "start") == 0) {
       ret = daemon_run(cfg.rt.foreground);
     } else if (strcmp(subcmd, "stop") == 0) {
-      /* 如果执行到这里，说明 Daemon 没启动（client_run 代理失败并回退了） */
-      log_info("守护进程当前未运行。");
+      char *stop_args[] = {(char*)"daemon-stop", nullptr};
+      if (client_run(1, stop_args) == -2) {
+        log_info("守护进程当前未运行。");
+      }
       ret = 0;
     }
     goto cleanup;

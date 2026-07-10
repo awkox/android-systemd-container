@@ -509,11 +509,8 @@ static void handle_conn(const int conn) {
     _exit(0);
   }
 
-  for (int i = 0; i < req.argc; i++) {
-    if (i > 0 && req.argv[i - 1][0] == '-')
-      continue;
-    if (strcmp(req.argv[i], "daemon") == 0 ||
-        strcmp(req.argv[i], "client") == 0) {
+  if (req.argc > 0) {
+    if (strcmp(req.argv[0], "daemon") == 0) {
       send_frame(conn, MSG_ERR, "daemon: 拒绝递归调用\n", 31);
       send_exit(conn, 1);
       free_req(&req);
