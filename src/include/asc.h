@@ -24,6 +24,7 @@
 #include "platform/pty.h"
 #include "platform/virtual.h"
 
+#include "utils/log.h"
 #include "utils/fileio.h"
 #include "utils/logger.h"
 #include "utils/process.h"

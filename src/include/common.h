@@ -68,7 +68,6 @@
 #include <wordexp.h>
 
 #include "version.h"
-#include "utils/log.h"
 #include "cleanup.h"
 
 namespace fs = std::filesystem;

@@ -1,8 +1,7 @@
 #ifndef ASC_UTILS_LOG_H
 #define ASC_UTILS_LOG_H
 
-#include <stdbool.h>
-#include <stddef.h>
+#include "common.h"
 
 extern bool log_silent;
 extern char log_container_name[256];
@@ -14,7 +13,7 @@ void log_internal(const char *prefix, bool is_err, const char *fmt, ...);
 [[gnu::format(printf, 1, 2)]]
 void die_internal(const char *fmt, ...);
 
-void rotate_log(const char *path, size_t max_size);
+void rotate_log(const fs::path& path, size_t max_size);
 
 #define log_info(fmt, ...) log_internal("+", false, fmt __VA_OPT__(,) __VA_ARGS__)
 #define log_warn(fmt, ...) log_internal("!", true, fmt __VA_OPT__(,) __VA_ARGS__)

@@ -585,7 +585,7 @@ static void daemonize(const bool foreground) {
   {
     fs::path log_path = log_dir / "daemon.log";
     g_daemon_log_path = log_path;
-    rotate_log(log_path.c_str(), 2 * 1024 * 1024);
+    rotate_log(log_path, 2 * 1024 * 1024);
 
     if (!foreground) {
       const int lfd = open(log_path.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);

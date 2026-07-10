@@ -26,11 +26,10 @@ int asc_openpty(int *master, int *slave, char *name) {
     unsigned int ptyno;
     if (ioctl(m, TIOCGPTN, &ptyno) < 0)
       goto err;
-    char pts_path[PATH_MAX];
-    snprintf(pts_path, PATH_MAX, "/dev/pts/%u", ptyno);
+    fs::path pts_path = fs::path("/dev/pts") / std::to_string(ptyno);
     if (name)
-      snprintf(name, PATH_MAX, "%s", pts_path);
-    s = open(pts_path, O_RDWR | O_NOCTTY | O_CLOEXEC);
+      snprintf(name, PATH_MAX, "%s", pts_path.c_str());
+    s = open(pts_path.c_str(), O_RDWR | O_NOCTTY | O_CLOEXEC);
     if (s < 0)
       goto err;
   }

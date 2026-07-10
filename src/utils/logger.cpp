@@ -4,12 +4,12 @@ bool log_silent = false;
 char log_container_name[256] = "";
 int log_container_fd = -1;
 
-void rotate_log(const char *path, const size_t max_size) {
+void rotate_log(const fs::path& path, const size_t max_size) {
   struct stat st;
-  if (stat(path, &st) == 0 && static_cast<size_t>(st.st_size) >= max_size) {
-    char old_path[PATH_MAX + 8];
-    snprintf(old_path, sizeof(old_path), "%s.old", path);
-    rename(path, old_path);
+  if (stat(path.c_str(), &st) == 0 && static_cast<size_t>(st.st_size) >= max_size) {
+    fs::path old_path = path;
+    old_path += ".old";
+    rename(path.c_str(), old_path.c_str());
   }
 }
 
@@ -40,7 +40,7 @@ static void write_to_log_file(const char *name, const char *component,
   create_directories_with_permission(container_log_dir);
 
   fs::path log_path = container_log_dir / "log";
-  rotate_log(log_path.c_str(), 2 * 1024 * 1024);
+  rotate_log(log_path, 2 * 1024 * 1024);
 
   auto_fclose FILE *f = fopen(log_path.c_str(), "ae");
   if (!f)
@@ -128,7 +128,7 @@ void open_container_log(const char *container_name) {
 
   fs::path log_path = container_log_dir / "log";
 
-  rotate_log(log_path.c_str(), 2 * 1024 * 1024);
+  rotate_log(log_path, 2 * 1024 * 1024);
 
   const int fd = open(log_path.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
   if (fd >= 0)
