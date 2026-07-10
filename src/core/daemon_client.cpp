@@ -19,11 +19,6 @@ int client_run(int argc, char **argv) {
   bool has_tty = isatty(STDIN_FILENO) && isatty(STDOUT_FILENO);
 
   if (interactive && !has_tty) {
-    bool forces_tty = (argc > 1 && strcmp(argv[argc - 1], "-f") == 0);
-
-    if (forces_tty) {
-      argv[--argc] = nullptr;
-    }
     interactive = false;
   }
 
