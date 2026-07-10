@@ -145,18 +145,11 @@ int start_rootfs(cfg_t *cfg) {
   }
 
   {
-    fs::path rootfs_mp;
-    if (cfg->conf.img_mount_point[0])
-      rootfs_mp = fs::path(cfg->conf.img_mount_point);
-    else {
-      log_error("未获取到 Rootfs 镜像挂载点。");
-      goto cleanup;
-    }
-
     fs::path init_bin = cfg->conf.custom_init[0] ? 
              fs::path(cfg->conf.custom_init) : fs::path(DEFAULT_INIT);
     init_bin = init_bin.relative_path();
-    fs::path init_path = rootfs_mp / init_bin;
+    fs::path init_path = fs::path(cfg->conf.img_mount_point) / init_bin;
+
     struct stat st;
     if (lstat(init_path.c_str(), &st) != 0) {
       log_error("未找到 Init 文件: %s", init_path.c_str());
