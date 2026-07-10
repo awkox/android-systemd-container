@@ -114,7 +114,11 @@ void internal_boot(cfg_t *cfg) {
     log_warn("无法绑定挂载网络设备路径 (网络功能可能受限)");
   }
 
-  if (mount(nullptr, "sys", nullptr, MS_REMOUNT | MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
+  /* 必须先将 sys 转换为 bind 挂载，切断与全局 superblock 属性的强绑定 */
+  mount("sys", "sys", nullptr, MS_BIND | MS_REC, nullptr);
+
+  /* 在 remount 时必须带上 MS_BIND 标志，明确告诉内核只修改当前挂载点的属性 */
+  if (mount(nullptr, "sys", nullptr, MS_BIND | MS_REMOUNT | MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
     log_warn("无法将 /sys 重新挂载为只读模式: %s", strerror(errno));
   }
 
