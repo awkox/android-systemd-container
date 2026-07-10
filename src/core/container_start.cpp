@@ -157,6 +157,7 @@ int start_rootfs(cfg_t *cfg) {
 
     fs::path init_bin = cfg->conf.custom_init[0] ? 
              fs::path(cfg->conf.custom_init) : fs::path(DEFAULT_INIT);
+    init_bin = init_bin.relative_path();
     fs::path init_path = rootfs_mp / init_bin;
     struct stat st;
     if (lstat(init_path.c_str(), &st) != 0) {
