@@ -133,4 +133,6 @@ typedef struct {
   asc_rt_t rt;
 } cfg_t;
 
+int asc_main(int argc, char **argv);
+
 #endif

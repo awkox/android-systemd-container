@@ -18,7 +18,7 @@ static void print_usage() {
       "  help                      显示此帮助信息\n\n");
 }
 
-int main(const int argc, char **argv) {
+int asc_main(int argc, char **argv) {
   if (argc < 2) {
     print_usage();
     return 1;
@@ -203,4 +203,8 @@ usage_error:
 
 cleanup:
   return ret;
+}
+
+int main(int argc, char **argv) {
+  return asc_main(argc, argv);
 }

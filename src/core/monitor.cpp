@@ -1,5 +1,28 @@
 #include "asc.h"
 
+struct InitArgs {
+  cfg_t *cfg;
+  int sync_fd;
+};
+
+static int init_trampoline(void *arg) {
+  InitArgs *args = static_cast<InitArgs *>(arg);
+  
+  /* 阻塞等待父进程(Monitor)将我们安全迁入 Cgroup 树 */
+  char c;
+  if (read(args->sync_fd, &c, 1) < 0) {}
+  close(args->sync_fd);
+
+  /* 现在我们在正确的 Cgroup 中，执行 Cgroup 命名空间隔离锁定 */
+  if (unshare(CLONE_NEWCGROUP) < 0) {
+    log_error("Init Cgroup 隔离失败: %s", strerror(errno));
+    return -1;
+  }
+
+  internal_boot(args->cfg);
+  return -1; 
+}
+
 /* ---------------------------------------------------------------------------
  * monitor_run - 容器的监督守护进程
  *
@@ -47,53 +70,40 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
       }
     }
 
-    pid_t mid_pid = fork();
-    if (mid_pid < 0)
+    const size_t stack_size = 2 * 1024 * 1024;
+    void *stack = malloc(stack_size);
+    if (!stack) _exit(EXIT_FAILURE);
+    void *stack_top = static_cast<char *>(stack) + stack_size;
+
+    int pipefd[2];
+    if (pipe(pipefd) < 0) _exit(EXIT_FAILURE);
+    InitArgs args = {cfg, pipefd[0]};
+
+    int clone_flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNS | SIGCHLD;
+    if (cfg->conf.isolation_network) clone_flags |= CLONE_NEWNET;
+
+    /* 直接克隆 Init 进程，消除冗余的 Intermediate 节点 */
+    pid_t init_pid = clone(init_trampoline, stack_top, clone_flags, &args);
+    close(pipefd[0]);
+
+    if (init_pid < 0) {
+      log_error("clone 容器进程失败: %s", strerror(errno));
+      free(stack);
+      close(pipefd[1]);
       _exit(EXIT_FAILURE);
+    }
 
-    if (mid_pid == 0) {
-      /* ==== 中间进程 (Intermediate Process) ====
-       * 负责为本次引导周期创建全新的命名空间 */
-
-      /* 将中间进程加入 Cgroup V2 (作为追踪基准，后续 init_pid 会继承) */
       fs::path cg_procs = project_cgroup_dir / cfg->rt.container_name / "cgroup.procs";
       FILE *f = fopen(cg_procs.c_str(), "we");
       if (f) {
-        fprintf(f, "%d\n", getpid());
+        fprintf(f, "%d\n", init_pid);
         fclose(f);
       }
 
-      int clone_flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWCGROUP;
-      if (cfg->conf.isolation_network)
-        clone_flags |= CLONE_NEWNET;
-
-      if (unshare(clone_flags) < 0) {
-        log_error("命名空间隔离(unshare)失败: %s", strerror(errno));
-        _exit(EXIT_FAILURE);
-      }
-
-      pid_t init_pid = fork();
-      if (init_pid < 0)
-        _exit(EXIT_FAILURE);
-
-      if (init_pid == 0) {
-        /* 容器内的 INIT 进程 (PID 1) */
-        close(sync_pipe[1]);
-        sync_pipe[1] = -1;
-        internal_boot(cfg);
-        _exit(-1);
-      }
-
-      if (!cfg->rt.foreground) {
-        auto_close int devnull = open("/dev/null", O_RDWR);
-        if (devnull >= 0) {
-          dup2(devnull, 0);
-          dup2(devnull, 1);
-          dup2(devnull, 2);
-        }
-      }
-
-      /* 首次引导时将 init PID 发送给父进程 */
+      /* 释放 Init 进程，允许它推进引导过程 */
+      char wake_char = 'A';
+      if (write(pipefd[1], &wake_char, 1) < 0) {}
+      close(pipefd[1]);
       if (sync_pipe[1] >= 0) {
         if (write(sync_pipe[1], &init_pid, sizeof(pid_t)) != sizeof(pid_t)) {
         }
@@ -101,24 +111,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
         sync_pipe[1] = -1;
       }
 
-      int init_status;
-      while (waitpid(init_pid, &init_status, 0) < 0 && errno == EINTR)
-        ;
-
-      if (WIFSIGNALED(init_status) && WTERMSIG(init_status) == SIGHUP) {
-        _exit(REBOOT_EXIT);
-      }
-
-      _exit(WIFEXITED(init_status) ? WEXITSTATUS(init_status) : EXIT_FAILURE);
-    }
-
-    /* ==== 监控进程 (Monitor) ==== */
-
-    if (sync_pipe[1] >= 0) {
-      close(sync_pipe[1]);
-      sync_pipe[1] = -1;
-    }
-
+    cfg->rt.container_pid = init_pid;
     cfg->rt.ns_inode = get_pid_ns_inode(cfg->rt.container_pid);
 
     if (chdir("/") < 0) {
@@ -135,48 +128,49 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
       stdio_redirected = true;
     }
 
-    /* 监控器心跳循环：每 500ms 刷新一次虚拟化数据，并探测子进程 */
+    /* 利用 pidfd (无轮询事件驱动) 高效等待容器退出 */
     {
-      sigset_t mask;
-      sigemptyset(&mask);
-      sigaddset(&mask, SIGCHLD);
-      sigprocmask(SIG_BLOCK, &mask, nullptr);
-      auto_close int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+      int pfd = syscall(__NR_pidfd_open, init_pid, 0);
+      if (pfd < 0) {
+        while (waitpid(init_pid, &status, 0) < 0 && errno == EINTR);
+      } else {
+        sigset_t mask;
+        sigemptyset(&mask);
+        sigaddset(&mask, SIGCHLD);
+        sigprocmask(SIG_BLOCK, &mask, nullptr);
+        auto_close int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+
+        struct pollfd pfds[2] = {};
+        pfds[0].fd = pfd; pfds[0].events = POLLIN;
+        pfds[1].fd = sfd; pfds[1].events = POLLIN;
+        int nfds = (sfd >= 0) ? 2 : 1;
+        bool reaped = false;
 
       while (1) {
-        pid_t r = waitpid(mid_pid, &status, WNOHANG);
-        if (r == mid_pid)
-          break;
-        if (r < 0 && errno != EINTR)
-          break;
+        int r = poll(pfds, nfds, -1);
+          if (r < 0 && errno == EINTR) continue;
 
-        if (cfg->rt.container_pid <= 0) {
-          pid_t p = find_container_init_pid(cfg->rt.container_name);
-          if (p > 0) {
-            cfg->rt.container_pid = p;
-            cfg->rt.ns_inode = get_pid_ns_inode(p);
-            write_monitor_debug_log(cfg->rt.container_name,
-                                    "[VIRT] 已通过 CgroupV2 列表解析到 container_pid=%d "
-                                    "ns_inode=%lu",
-                                    (int)p, cfg->rt.ns_inode);
+          if (pfds[0].revents & POLLIN) {
+            break;
           }
-        }
 
-        if (sfd >= 0) {
-          struct pollfd pfd = {.fd = sfd, .events = POLLIN, .revents = 0};
-          poll(&pfd, 1, 500);
-          if (pfd.revents & POLLIN) {
+          if (nfds == 2 && (pfds[1].revents & POLLIN)) {
             struct signalfd_siginfo si;
             while (read(sfd, &si, sizeof(si)) == static_cast<ssize_t>(sizeof(si)))
               ;
+            pid_t rpid = waitpid(init_pid, &status, WNOHANG);
+            if (rpid == init_pid) {
+              reaped = true;
+              break;
+            }
           }
-        } else {
-          usleep(500000);
         }
+        close(pfd);
+        sigprocmask(SIG_UNBLOCK, &mask, nullptr);
+        if (!reaped) waitpid(init_pid, &status, 0);
       }
-
-      sigprocmask(SIG_UNBLOCK, &mask, nullptr);
     }
+    free(stack);
 
     /* 记录监控器捕获的退出状态 */
     if (WIFEXITED(status)) {
@@ -189,7 +183,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
       }
     } else if (WIFSIGNALED(status)) {
       write_monitor_debug_log(cfg->rt.container_name,
-                              "中间进程被信号异常终止: %d (%s)",
+                              "Init 进程被信号异常终止: %d (%s)",
                               WTERMSIG(status), strsignal(WTERMSIG(status)));
     }
 

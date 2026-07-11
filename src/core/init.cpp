@@ -2,7 +2,6 @@
 
 void internal_boot(cfg_t *cfg) {
   /* 定义所有的局部变量以避免 C++ 的 goto 跳跃错误 */
-  pid_t existing_pid = 0;
   bool dir_creation_failed = false;
   const char *dirs_to_create[] = {".old_root", "proc", "sys", "run", "tmp"};
   bool used_ms_move = false;
@@ -13,17 +12,6 @@ void internal_boot(cfg_t *cfg) {
    * 这个文件描述符将在挂载命名空间变更中存活，确保能够捕获所有的底层日志。 */
   open_container_log(cfg->rt.container_name);
 
-  /* 0. 引导防护：确保名称存在且唯一。
-   * 这是一个关键的安全检查，防止无名或冲突的容器被意外引导。 */
-  if (is_container_running(cfg->rt.container_name, &existing_pid)) {
-    if (existing_pid != getpid()) {
-      log_error(
-          "严重错误：引导终止 — 名称 '%s' 已被 PID %d 占用。",
-          cfg->rt.container_name, existing_pid);
-      goto boot_fail;
-    }
-  }
-
   /* 对于启用网络隔离的情况：在隔离的网络命名空间中启动 loopback 回环网卡 */
   if (cfg->conf.isolation_network) {
     auto_free nl_ctx_t *nlctx = nl_open();
@@ -32,12 +20,6 @@ void internal_boot(cfg_t *cfg) {
       close(nlctx->fd);
       log_info("[NET] 隔离网络命名空间：loopback 已启动");
     }
-  }
-
-  /* 1. 隔离挂载命名空间 */
-  if (unshare(CLONE_NEWNS) < 0) {
-    log_error("无法隔离挂载命名空间 (unshare): %s", strerror(errno));
-    goto boot_fail;
   }
 
   /* 2. 挂载传播隔离 */

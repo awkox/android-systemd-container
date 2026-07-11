@@ -73,15 +73,8 @@ static void daemon_log_tee(const char *prefix, const char *fmt, ...) {
     daemon_log_tee("-", fmt __VA_OPT__(,) __VA_ARGS__);                        \
   } while (0)
 
-static char g_self_path[PATH_MAX];
 static volatile sig_atomic_t g_sigusr2_received = 0;
 static volatile sig_atomic_t g_terminate = 0;
-
-static void reexec(char **argv) {
-  const char *path = g_self_path[0] != '\0' ? g_self_path : "/proc/self/exe";
-  execv(path, argv);
-  _exit(127);
-}
 
 static char **make_exec_argv(const req_t *r) {
   char **av = static_cast<char **>(malloc(static_cast<size_t>(r->argc + 2) * sizeof(char *)));
@@ -198,7 +191,7 @@ static void handle_session(int conn, req_t *r) {
     signal(SIGHUP, SIG_DFL);
     signal(SIGPIPE, SIG_DFL);
     signal(SIGCHLD, SIG_DFL);
-    reexec(av);
+    _exit(asc_main(r->argc + 1, av));
   }
 
   int epfd = epoll_create1(EPOLL_CLOEXEC);
@@ -620,15 +613,6 @@ int daemon_run(const bool foreground) {
   }
 
   daemonize(foreground);
-
-  {
-    const ssize_t n =
-        readlink("/proc/self/exe", g_self_path, sizeof(g_self_path) - 1);
-    if (n > 0)
-      g_self_path[n] = '\0';
-    else
-      g_self_path[0] = '\0';
-  }
 
   signal(SIGUSR2, sigusr2_handler);
 
