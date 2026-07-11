@@ -151,8 +151,7 @@ static void config_serialize_known(FILE *f, const asc_conf_t *conf) {
 
   /* 写入被管理的键 */
   if (conf->rootfs_img_path[0]) {
-    fs::path abs_path = resolve_path_arg(conf->rootfs_img_path);
-    fprintf(f, "rootfs_path=%s\n", abs_path.empty() ? conf->rootfs_img_path : abs_path.c_str());
+    fprintf(f, "rootfs_path=%s\n", conf->rootfs_img_path);
   }
 
   if (conf->img_mount_point[0])
@@ -216,5 +215,5 @@ int config_save_by_name(const char *name, cfg_t *cfg) {
   create_directories_with_permission(container_dir);
   fs::path config_path = container_dir / "container.config";
 
-  return config_save(config_path.c_str(), cfg);
+  return config_save(config_path, cfg);
 }
