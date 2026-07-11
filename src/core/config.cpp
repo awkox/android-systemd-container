@@ -86,9 +86,7 @@ int config_load(const fs::path& config_path, cfg_t *cfg) {
     } else if (strcmp(key, "privileged") == 0) {
       conf->privileged_mask = parse_privileged(val);
     } else if (strcmp(key, "custom_init") == 0) {
-      if (val[0] != '/')
-        log_warn("配置警告: 忽略非绝对路径的 custom_init '%s'", val);
-      else if (strchr(val, ' '))
+      if (strchr(val, ' '))
         log_warn("配置警告: 忽略包含空格的 custom_init 路径 '%s'", val);
       else
         conf->custom_init = val;
