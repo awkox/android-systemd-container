@@ -14,18 +14,6 @@ static const char *universal_nullify[] = {
   nullptr
 };
 
-/* 
- * 屏蔽内核日志路径，并使用 FIFO 代替 /dev/null:
- * rsyslogd 等服务如果读 /dev/null 遇到 EOF 会导致 100% CPU 死循环。
- * 绑定一个拥有持久写入者的 FIFO 可以让读操作无限阻塞，
- * 既防止了死循环，又成功阻断了宿主机的内核日志泄漏。
- */
-static const char *kmsg_block_paths[] = {
-  "/dev/kmsg",
-  "/proc/kmsg",
-  nullptr
-};
-
 /* 标准模式下的只读路径 - 允许读取，禁止修改。
  * 覆盖了敏感的 proc 子树和危险的 sys 接口。 */
 static const char *standard_ro[] = {
@@ -73,37 +61,6 @@ static void nullify_path(const char *path) {
 }
 
 /*
- * 使用持久的 FIFO 写入者来阻塞读取请求。
- */
-static void block_read_path(const char *path) {
-  if (!fs::exists(path))
-    return;
-
-  fs::path fifo_path = tmp_dir / std::format(".asc-kmsg-fifo-{}", getpid());
-  fs::remove(fifo_path);
-  if (mkfifo(fifo_path.c_str(), 0600) < 0)
-    return;
-
-  /* Fork 出子进程以保持 FIFO 的写端打开。
-   * 子进程无任何实际逻辑 — 只是休眠以维持文件描述符存活。 */
-  const pid_t child = fork();
-  if (child == 0) {
-    signal(SIGTERM, SIG_DFL);  // 恢复被 monitor SIG_IGN 覆盖的默认处置
-    const int wfd = open(fifo_path.c_str(), O_WRONLY);
-    if (wfd >= 0) {
-      while (true)
-        sleep(36000);
-    }
-    _exit(0);
-  }
-
-  if (child > 0)
-    mount(fifo_path.c_str(), path, nullptr, MS_BIND, nullptr);
-
-  fs::remove(fifo_path);
-}
-
-/*
  * apply_jail_mask()
  *
  * 通过绑定自身并重新挂载为只读来保护敏感内核接口。
@@ -122,10 +79,6 @@ void apply_jail_mask(const int privileged_mask) {
 
   for (int i = 0; universal_nullify[i]; i++) {
     nullify_path(universal_nullify[i]);
-  }
-
-  for (int i = 0; kmsg_block_paths[i]; i++) {
-    block_read_path(kmsg_block_paths[i]);
   }
 
   /*
