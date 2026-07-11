@@ -59,7 +59,6 @@ static int parse_privileged(std::string_view value) {
     else if (token == "nocaps") mask |= PRIV_NOCAPS;
     else if (token == "noseccomp") mask |= PRIV_NOSEC;
     else if (token == "shared") mask |= PRIV_SHARED;
-    else if (token == "unfiltered-dev") mask |= PRIV_UNFILT;
     else if (token == "full") mask |= PRIV_FULL;
   }
   return mask;

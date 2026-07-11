@@ -91,7 +91,6 @@ constexpr int PRIV_NOMASK = 1 << 0;
 constexpr int PRIV_NOCAPS = 1 << 1;
 constexpr int PRIV_NOSEC  = 1 << 2;
 constexpr int PRIV_SHARED = 1 << 3;
-constexpr int PRIV_UNFILT = 1 << 4;
 constexpr int PRIV_FULL   = 0xFF;
 
 typedef struct {
