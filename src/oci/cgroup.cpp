@@ -52,11 +52,6 @@ int setup_cgroups() {
   if (cgroup_host_bootstrap() < 0) return -1;
 
   // 处理容器cgroup
-  if (!fs::exists("sys/fs/cgroup")) {
-    if (!create_directories_with_permission("sys/fs/cgroup"))
-      return -1;
-  }
-
   if (domount("none", "sys/fs/cgroup", "tmpfs",
               MS_NOSUID | MS_NODEV | MS_NOEXEC, "mode=755,size=16M") < 0)
     return -1;
