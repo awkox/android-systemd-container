@@ -111,10 +111,10 @@ int mount_rootfs_img(const fs::path& img_path, const fs::path& mount_point) {
   for (int attempt = 0; attempt < 3; attempt++) {
     if (attempt == 0)
       log_info("正在挂载 %s 格式的镜像 %s 到 %s...", fstype, img_path.c_str(),
-               mount_point);
+               mount_point.c_str());
     else
       log_info("正在挂载 %s 格式的镜像 %s 到 %s (第 %d/3 次尝试)...", fstype,
-               img_path.c_str(), mount_point, attempt + 1);
+               img_path.c_str(), mount_point.c_str(), attempt + 1);
 
     struct stat st;
     const bool is_blk = stat(img_path.c_str(), &st) == 0 && S_ISBLK(st.st_mode);
@@ -129,10 +129,10 @@ int mount_rootfs_img(const fs::path& img_path, const fs::path& mount_point) {
     }
 
     if (is_blk || loop_fd >= 0) {
-      const int ret = mount(final_src, mount_point, fstype, mnt_flags, mnt_data);
+      const int ret = mount(final_src, mount_point.c_str(), fstype, mnt_flags, mnt_data);
       if (ret == 0) {
         /* Android 修复：针对部分内核的强制 nosuid 补丁进行读写重挂载 */
-        mount(nullptr, mount_point, nullptr, MS_REMOUNT | mnt_flags, mnt_data);
+        mount(nullptr, mount_point.c_str(), nullptr, MS_REMOUNT | mnt_flags, mnt_data);
         success = true;
       } else {
         log_warn("挂载 mount(%s, %s) 失败: %s", final_src, fstype, strerror(errno));

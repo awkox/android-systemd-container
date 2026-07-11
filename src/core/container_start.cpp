@@ -100,8 +100,7 @@ int start_rootfs(cfg_t *cfg) {
       lock_acquired = true;
 
       if (is_mountpoint(mount_dir / cfg->rt.container_name)) {
-        // 跳过移除挂载
-        cgroup_cleanup_container(cfg->rt.container_name);
+        cleanup_container_resources(cfg, false);
       } else {
         release_external_lock();
         lock_acquired = false;

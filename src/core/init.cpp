@@ -7,6 +7,7 @@ void internal_boot(cfg_t *cfg) {
   const char *dirs_to_create[] = {".old_root", "proc", "sys", "run", "tmp"};
   bool used_ms_move = false;
   unsigned long root_prop = MS_PRIVATE;
+  fs::path mount_point = mount_dir / cfg->rt.container_name;
 
   /* 在隔离挂载命名空间 / 执行 pivot_root 之前，预先打开容器日志文件。
    * 这个文件描述符将在挂载命名空间变更中存活，确保能够捕获所有的底层日志。 */
@@ -48,8 +49,7 @@ void internal_boot(cfg_t *cfg) {
     goto boot_fail;
   }
 
-  fs::path mount_point = mount_dir / cfg->rt.container_name;
-  if (cfg->conf.rootfs_img_path[0] && !lock_acquired) {
+  if (cfg->conf.rootfs_img_path[0]) {
     if (mount_rootfs_img(cfg->conf.rootfs_img_path, mount_point) < 0) {
       log_error("无法挂载镜像: %s", strerror(errno));
       goto boot_fail;
