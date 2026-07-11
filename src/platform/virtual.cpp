@@ -1,5 +1,70 @@
 #include "asc.h"
 
+struct virt_snapshot {
+  // cgroup 数据
+  long long mem_current;    // memory.current
+  long long mem_anon;       // memory.stat 中的 anon
+  long long mem_file;       // memory.stat 中的 file
+  long long mem_slab;       // memory.stat 中的 slab
+  double    cpu_busy_sec;   // cpu.stat 中的 usage_usec / 1e6
+  bool      valid;          // 数据是否有效
+};
+
+static long long read_cg_ll(const char *container_name, const char *file) {
+  fs::path path = project_cgroup_dir / container_name / file;
+  if (auto content = read_file_cpp(path)) {
+    if (content->starts_with("max")) return -1;
+    try {
+      return std::stoll(*content);
+    } catch (...) {
+      return -1;
+    }
+  }
+  return -1;
+}
+
+static virt_snapshot read_cgroup_snapshot(const char *container_name) {
+  virt_snapshot snap = {};
+  snap.valid = false;
+
+  // 一次读取 memory.current
+  snap.mem_current = read_cg_ll(container_name, "memory.current");
+
+  // 一次读取 memory.stat，解析多个字段
+  {
+    fs::path path = project_cgroup_dir / container_name / "memory.stat";
+    if (auto content = read_file_cpp(path)) {
+      std::istringstream iss(*content);
+      std::string key;
+      long long val;
+      while (iss >> key >> val) {
+        if (key == "anon")       snap.mem_anon = val;
+        else if (key == "file")  snap.mem_file = val;
+        else if (key == "slab")  snap.mem_slab = val;
+      }
+    }
+  }
+
+  // 一次读取 cpu.stat
+  {
+    fs::path path = project_cgroup_dir / container_name / "cpu.stat";
+    if (auto content = read_file_cpp(path)) {
+      std::istringstream iss(*content);
+      std::string key;
+      long long val;
+      while (iss >> key >> val) {
+        if (key == "usage_usec") {
+          snap.cpu_busy_sec = static_cast<double>(val) / 1e6;
+          break;
+        }
+      }
+    }
+  }
+
+  snap.valid = true;
+  return snap;
+}
+
 /* 就地覆盖写：保留原绑定的挂载 inode（不能用 rename，那会破坏覆盖关系）。
  * 通过 safe_openat_proc() 打开文件，防止各个目录层级的符号链接陷阱。 */
 static int write_inplace(const pid_t pid, const fs::path& subpath, std::string_view content) {
@@ -33,22 +98,11 @@ static int container_cpus(const long long cpu_quota, const long long cpu_period)
   return std::clamp(n, 1, host);
 }
 
-static long long read_cg_ll(const char *container_name, const char *file) {
-  fs::path path = project_cgroup_dir / container_name / file;
-  if (auto content = read_file_cpp(path)) {
-    if (content->starts_with("max")) return -1;
-    try {
-      return std::stoll(*content);
-    } catch (...) {
-      return -1;
-    }
-  }
-  return -1;
-}
-
-static std::optional<std::string> gen_meminfo(const cfg_t *cfg) {
-  const long long mem_limit = cfg->conf.memory_limit; 
-  long long mem_used = std::max(0LL, read_cg_ll(cfg->rt.container_name, "memory.current"));
+// 签名改为接收快照引用
+static std::optional<std::string> gen_meminfo(const cfg_t *cfg,
+                                              const virt_snapshot &snap) {
+  const long long mem_limit = cfg->conf.memory_limit;
+  const long long mem_used = std::max(0LL, snap.mem_current);  // ← 直接用快照
 
   std::ifstream f("/proc/meminfo");
   if (!f) return std::nullopt;
@@ -70,20 +124,10 @@ static std::optional<std::string> gen_meminfo(const cfg_t *cfg) {
   if (mem_limit > 0 && host_total_kb > 0)
     ratio = static_cast<double>(mem_limit) / (static_cast<double>(host_total_kb) * 1024.0);
 
-  long long cg_anon = -1, cg_file = -1, cg_slab = -1;
-  {
-    fs::path path = project_cgroup_dir / cfg->rt.container_name / "memory.stat";
-    if (auto content = read_file_cpp(path)) {
-      std::istringstream iss(*content);
-      std::string key;
-      long long val;
-      while (iss >> key >> val) {
-        if (key == "anon") cg_anon = val;
-        else if (key == "file") cg_file = val;
-        else if (key == "slab") cg_slab = val;
-      }
-    }
-  }
+  // 不再单独读 memory.stat，直接用快照
+  const long long cg_anon = snap.mem_anon;
+  const long long cg_file = snap.mem_file;
+  const long long cg_slab = snap.mem_slab;
 
   std::string result;
   for (const auto& l : lines) {
@@ -118,7 +162,8 @@ static std::optional<std::string> gen_meminfo(const cfg_t *cfg) {
   return result;
 }
 
-static std::optional<std::string> gen_cpuinfo(const cfg_t *cfg) {
+static std::optional<std::string> gen_cpuinfo(const cfg_t *cfg,
+                                              const virt_snapshot &/*snap*/) {
   const int max_cpus = container_cpus(cfg->conf.cpu_quota, cfg->conf.cpu_period);
   std::ifstream f("/proc/cpuinfo");
   if (!f) return std::nullopt;
@@ -139,7 +184,8 @@ static std::optional<std::string> gen_cpuinfo(const cfg_t *cfg) {
   return result;
 }
 
-static std::optional<std::string> gen_stat(const cfg_t *cfg) {
+static std::optional<std::string> gen_stat(const cfg_t *cfg,
+                                           const virt_snapshot &/*snap*/) {
   const int max_cpus = container_cpus(cfg->conf.cpu_quota, cfg->conf.cpu_period);
   std::ifstream f("/proc/stat");
   if (!f) return std::nullopt;
@@ -203,21 +249,6 @@ static std::optional<std::string> gen_stat(const cfg_t *cfg) {
   return result;
 }
 
-static double cg_cpu_busy_secs(const char *container_name) {
-  fs::path path = project_cgroup_dir / container_name / "cpu.stat";
-  if (auto content = read_file_cpp(path)) {
-    std::istringstream iss(*content);
-    std::string key;
-    long long val;
-    while (iss >> key >> val) {
-      if (key == "usage_usec") {
-        return static_cast<double>(val) / 1e6;
-      }
-    }
-  }
-  return -1.0;
-}
-
 static double container_start_time_secs(const pid_t pid) {
   auto content = read_file_cpp(proc_dir / std::to_string(pid) / "stat");
   if (!content) return -1.0;
@@ -246,7 +277,8 @@ static double container_start_time_secs(const pid_t pid) {
   return -1.0;
 }
 
-static std::optional<std::string> gen_uptime(const cfg_t *cfg) {
+static std::optional<std::string> gen_uptime(const cfg_t *cfg,
+                                             const virt_snapshot &snap) {
   struct timespec boot;
   clock_gettime(CLOCK_BOOTTIME, &boot);
   const double boottime = static_cast<double>(boot.tv_sec) + static_cast<double>(boot.tv_nsec) / 1e9;
@@ -265,15 +297,14 @@ static std::optional<std::string> gen_uptime(const cfg_t *cfg) {
     up = 0.0;
 
   const int ccpus = container_cpus(cfg->conf.cpu_quota, cfg->conf.cpu_period);
-  const double busy = cg_cpu_busy_secs(cfg->rt.container_name);
+  const double busy = snap.cpu_busy_sec;  // ← 直接用快照，不再读文件
   double idle = busy >= 0.0 ? up * ccpus - busy : up * ccpus * 0.1;
-  if (idle < 0.0)
-    idle = 0.0;
 
   return std::format("{:.2f} {:.2f}\n", up, idle);
 }
 
-static std::optional<std::string> gen_loadavg(const cfg_t *cfg) {
+static std::optional<std::string> gen_loadavg(const cfg_t *cfg,
+                                              const virt_snapshot &/*snap*/) {
   auto content = read_file_cpp("/proc/loadavg");
   if (!content) return std::nullopt;
 
@@ -370,7 +401,9 @@ int virtualize_init(const cfg_t *cfg) {
     return -1;
   }
 
-  using GenFunc = std::optional<std::string>(*)(const cfg_t*);
+  const virt_snapshot snap = read_cgroup_snapshot(cfg->rt.container_name);
+
+  using GenFunc = std::optional<std::string>(*)(const cfg_t*, const virt_snapshot&);
   const struct {
     const char *name;
     GenFunc gen;
@@ -378,16 +411,14 @@ int virtualize_init(const cfg_t *cfg) {
   } proc_files[] = {
     {"meminfo", gen_meminfo, has_mem},
     {"cpuinfo", gen_cpuinfo, has_cpu},
-    {"stat", gen_stat, has_cpu},
-    {"uptime", gen_uptime, true},
+    {"stat",    gen_stat,    has_cpu},
+    {"uptime",  gen_uptime,  true},
     {"loadavg", gen_loadavg, true},
   };
 
-  for (const auto& pf : proc_files) {
-    if (!pf.enabled)
-      continue;
-    
-    auto opt_str = pf.gen(cfg);
+  for (const auto &pf : proc_files) {
+    if (!pf.enabled) continue;
+    auto opt_str = pf.gen(cfg, snap);
     if (!opt_str)
       continue;
 
@@ -447,33 +478,30 @@ void virtualize_update(const cfg_t *cfg) {
     }
   }
 
+  // === 每周期只读一次 cgroup ===
+  const virt_snapshot snap = read_cgroup_snapshot(cfg->rt.container_name);
+
   fs::path container_vproc_dir = proc_dir / std::to_string(cfg->rt.container_pid) / "root" / vproc_dir;
-  
-  std::error_code ec;
-  if (!fs::is_directory(container_vproc_dir, ec)) {
-    return;
-  }
 
   const bool has_mem = cfg->conf.memory_limit > 0;
   const bool has_cpu = cfg->conf.cpu_quota > 0;
 
-  using GenFunc = std::optional<std::string>(*)(const cfg_t*);
+  using GenFunc = std::optional<std::string>(*)(const cfg_t*, const virt_snapshot&);
   const struct {
     const char *name;
     GenFunc gen;
     bool enabled;
   } dyn[] = {
     {"meminfo", gen_meminfo, has_mem},
-    {"stat", gen_stat, has_cpu},
-    {"uptime", gen_uptime, true},
+    {"stat",    gen_stat,    has_cpu},
+    {"uptime",  gen_uptime,  true},
     {"loadavg", gen_loadavg, true},
   };
 
-  for (const auto& d : dyn) {
-    if (!d.enabled)
-      continue;
-      
-    auto opt_str = d.gen(cfg);
+  for (const auto &d : dyn) {
+    if (!d.enabled) continue;
+
+    auto opt_str = d.gen(cfg, snap);  // ← 传入快照
     if (!opt_str) {
       write_monitor_debug_log(cfg->rt.container_name,
                               "[VIRT] 生成器 gen_%s 返回了 nullopt", d.name);
@@ -481,13 +509,6 @@ void virtualize_update(const cfg_t *cfg) {
     }
 
     fs::path path = container_vproc_dir / d.name;
-    if (!fs::exists(path, ec)) {
-      write_monitor_debug_log(cfg->rt.container_name,
-                              "[VIRT] 虚拟文件丢失: %s (%s)", path.c_str(),
-                              ec.message().c_str());
-      continue;
-    }
-
     fs::path subpath = vproc_dir / d.name;
 
     if (write_inplace(cfg->rt.container_pid, subpath, *opt_str) < 0)

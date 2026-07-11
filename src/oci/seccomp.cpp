@@ -44,7 +44,6 @@ int seccomp_apply_minimal(const int privileged_mask) {
       (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
 #endif
 
-  if (!(privileged_mask & PRIV_NOSEC)) {
     /* 4. 阻止内核模块加载 */
     filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K,
                                                   __NR_init_module, 0, 1);
@@ -158,7 +157,6 @@ int seccomp_apply_minimal(const int privileged_mask) {
     filter[curr++] = (struct sock_filter)BPF_STMT(
         BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
 #endif
-  }
 
   filter[curr++] =
       (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);

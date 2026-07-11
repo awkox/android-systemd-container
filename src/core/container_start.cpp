@@ -29,7 +29,6 @@ int acquire_external_lock(const char *name) {
   }
 
   if (errno == EACCES || errno == EAGAIN) {
-    fl.l_type = F_WRLCK;
     if (fcntl(fd, F_GETLK, &fl) == 0 && fl.l_type != F_UNLCK) {
       log_warn("无法获取锁: 当前已被进程 %d 持有", fl.l_pid);
     }
@@ -207,11 +206,6 @@ int start_rootfs(cfg_t *cfg) {
              cfg->rt.container_name, cfg->rt.container_pid, monitor_pid);
     return 0;
   }
-
-  if (lock_acquired)
-    release_external_lock();
-
-  return 0;
 
 cleanup:
   if (has_side_effects) {

@@ -63,8 +63,6 @@ int setup_cgroups() {
     log_error("挂载 cgroup2 失败: %s", strerror(errno));
     return -1;
   }
-
-  return 0;
 }
 
 static void rmdir_cgroup_tree(const fs::path& path) {

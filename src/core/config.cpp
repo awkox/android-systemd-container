@@ -193,9 +193,6 @@ int config_save(const fs::path& config_path, cfg_t *cfg) {
     return -1;
   }
 
-  if (!cfg->rt.config_file_existed) {
-    cfg->rt.config_file_existed = true;
-  }
   return 0;
 }
 
