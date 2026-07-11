@@ -24,7 +24,6 @@ static int stop_rootfs_with_timeout(const asc_rt_t *rt, int timeout_seconds) {
   bool unkillable = false;
   if (pfd >= 0) {
     syscall(__NR_pidfd_send_signal, pfd, SIGRTMIN + 3, nullptr, 0);
-    log_info("正在等待容器优雅关闭 (最长可能需要 %d 秒)...", timeout_seconds);
 
     struct pollfd pfd_poll = {.fd = pfd, .events = POLLIN, .revents = 0};
     int r = poll(&pfd_poll, 1, timeout_seconds * 1000);
@@ -46,7 +45,6 @@ static int stop_rootfs_with_timeout(const asc_rt_t *rt, int timeout_seconds) {
   } else {
     /* 对不支持 PIDFD 系统调用的老旧内核回退 */
     kill(pid, SIGRTMIN + 3);
-    log_info("正在等待容器优雅关闭 (最长可能需要 %d 秒)...", timeout_seconds);
 
     for (int i = 0; i < timeout_seconds * 5; i++) {
       if (kill(pid, 0) < 0 && errno == ESRCH) {
