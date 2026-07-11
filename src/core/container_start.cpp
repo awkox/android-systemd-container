@@ -58,19 +58,19 @@ bool is_external_lock_active(const char *name) {
   return !(fd < 0);
 }
 
-void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
+void cleanup_container_resources(const asc_rt_t *rt, const bool force_cleanup) {
   if (!force_cleanup)
     sync();
 
-  cgroup_cleanup_container(cfg->rt.container_name);
+  cgroup_cleanup_container(rt->container_name);
 
-  fs::path mount_point = mount_dir / cfg->rt.container_name;
+  fs::path mount_point = mount_dir / rt->container_name;
   if (is_mountpoint(mount_point)) {
     if (force_cleanup) {
       umount2(mount_point.c_str(), MNT_DETACH | MNT_FORCE);
       fs::remove(mount_point);
     } else {
-      unmount_rootfs_img(mount_point, cfg->rt.foreground);
+      unmount_rootfs_img(mount_point, rt->foreground);
     }
   }
 }
@@ -92,7 +92,6 @@ int start_rootfs(cfg_t *cfg) {
   pid_t existing_pid = 0;
   int sync_pipe[2] = {-1, -1};
   pid_t monitor_pid = -1;
-  bool booted = false;
 
   fs::path lock_path = lock_dir / cfg->rt.container_name;
   if (fs::exists(lock_path)) {
@@ -100,7 +99,7 @@ int start_rootfs(cfg_t *cfg) {
       lock_acquired = true;
 
       if (is_mountpoint(mount_dir / cfg->rt.container_name)) {
-        cleanup_container_resources(cfg, false);
+        cleanup_container_resources(&cfg->rt, false);
       } else {
         release_external_lock();
         lock_acquired = false;
@@ -216,7 +215,7 @@ int start_rootfs(cfg_t *cfg) {
 
 cleanup:
   if (has_side_effects) {
-    cleanup_container_resources(cfg, true);
+    cleanup_container_resources(&cfg->rt, true);
   }
   if (lock_acquired)
     release_external_lock();

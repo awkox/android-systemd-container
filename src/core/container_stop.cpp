@@ -55,7 +55,7 @@ static int stop_rootfs_with_timeout(cfg_t *cfg, int timeout_seconds) {
     }
   }
 
-  cleanup_container_resources(cfg, unkillable);
+  cleanup_container_resources(&cfg->rt, unkillable);
 
   if (!cfg->rt.foreground)
     log_info("容器 '%s' 已停止。", cfg->rt.container_name);
