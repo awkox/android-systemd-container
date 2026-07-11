@@ -113,18 +113,3 @@ void format_privileged_mask(const int mask, char *buf, const size_t size) {
     }
   }
 }
-
-void format_size(const long long bytes, char *buf, const size_t sz) {
-  if (bytes <= 0) {
-    snprintf(buf, sz, "N/A");
-    return;
-  }
-  static const char *units[] = {"B", "KB", "MB", "GB", "TB"};
-  int u = 0;
-  double d = static_cast<double>(bytes);
-  while (d >= 1024 && u < 4) {
-    d /= 1024;
-    u++;
-  }
-  snprintf(buf, sz, "%.2f %s", d, units[u]);
-}

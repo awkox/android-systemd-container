@@ -73,16 +73,6 @@ std::optional<std::string> read_file_cpp(const fs::path& path) {
     return content;
 }
 
-int remove_recursive(const fs::path& path) {
-    std::error_code ec;
-    fs::remove_all(path, ec);
-    if (ec) {
-        errno = ec.value();
-        return -1;
-    }
-    return 0;
-}
-
 bool grep_file(const fs::path& path, std::string_view pattern) {
     std::ifstream file(path);
     std::string line;

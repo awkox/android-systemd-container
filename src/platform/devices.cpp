@@ -91,8 +91,6 @@ int setup_devpts() {
   const fs::path pts_path = "/dev/pts";
   const fs::path pts_ptmx = "/dev/pts/ptmx";
   const fs::path ptmx_path = "/dev/ptmx";
-
-  umount2(pts_path.c_str(), MNT_DETACH);
   
   create_directories_with_permission(pts_path);
 
