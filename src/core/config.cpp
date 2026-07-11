@@ -151,12 +151,12 @@ int config_save(const fs::path& config_path, cfg_t *cfg) {
   return 0;
 }
 
-int config_load_by_name(const char *name, cfg_t *cfg) {
+int config_load_by_name(const std::string& name, cfg_t *cfg) {
   fs::path config_path = config_dir / name / "container.config";
   return config_load(config_path, cfg);
 }
 
-int config_save_by_name(const char *name, cfg_t *cfg) {
+int config_save_by_name(const std::string& name, cfg_t *cfg) {
   fs::path container_dir = config_dir / name;
   create_directories_with_permission(container_dir);
   fs::path config_path = container_dir / "container.config";

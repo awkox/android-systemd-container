@@ -3,7 +3,7 @@
 static int active_lock_fd = -1;
 static fs::path active_lock_path = "";
 
-int acquire_external_lock(const char *name) {
+int acquire_external_lock(const std::string& name) {
   if (active_lock_fd >= 0)
     return 0;
 
@@ -50,7 +50,7 @@ void release_external_lock(void) {
   }
 }
 
-bool is_external_lock_active(const char *name) {
+bool is_external_lock_active(const std::string& name) {
   fs::path lock_path = lock_dir / name;
 
   auto_close const int fd = open(lock_path.c_str(), O_RDONLY | O_CLOEXEC);

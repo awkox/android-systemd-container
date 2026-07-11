@@ -113,7 +113,7 @@ typedef struct {
 } asc_conf_t;
 
 typedef struct {
-  char container_name[256];
+  std::string container_name;
 
   bool foreground;
   bool reboot_cycle;

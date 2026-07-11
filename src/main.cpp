@@ -100,7 +100,7 @@ int asc_main(int argc, char **argv) {
       ret = 1;
       goto cleanup;
     }
-    safe_strncpy(cfg.rt.container_name, name, sizeof(cfg.rt.container_name));
+    cfg.rt.container_name = name;
   }
   if (config_path) {
     cfg.rt.config_file = config_path;

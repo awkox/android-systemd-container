@@ -3,8 +3,8 @@
 
 #include "common.h"
 
-bool is_external_lock_active(const char *name);
-int acquire_external_lock(const char *name);
+bool is_external_lock_active(const std::string& name);
+int acquire_external_lock(const std::string& name);
 void release_external_lock();
 void cleanup_container_resources(const asc_rt_t *rt, const bool force_cleanup);
 bool is_valid_container_pid(const pid_t pid);
