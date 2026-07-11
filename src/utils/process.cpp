@@ -77,29 +77,35 @@ long get_container_uptime(const pid_t pid) {
 
 // 优化: O(1) 纯 CgroupV2 目录解析，废除全局 PID 扫描的回退机制
 pid_t find_container_init_pid(const char *container_name) {
-  fs::path cg_procs = project_cgroup_dir / container_name / "cgroup.procs";
-  if (auto content = read_file_cpp(cg_procs)) {
-    size_t pos = 0;
-    while (pos < content->length()) {
-      size_t end_pos = content->find('\n', pos);
-      if (end_pos == std::string::npos) end_pos = content->length();
-      if (end_pos > pos) {
-        try {
-          long val = std::stol(content->substr(pos, end_pos - pos));
-          if (val > 0) {
-            pid_t pid = static_cast<pid_t>(val);
-            
-            // 验证是否为 cgroup 中有效的 1 号 init 进程
-            if (is_valid_container_pid(pid)) {
-              return pid;
-            }
+  fs::path cg_root = project_cgroup_dir / container_name;
+  std::error_code ec;
+  
+  if (!fs::exists(cg_root, ec)) return 0;
+
+  // 遍历 cg_root 及其所有子目录
+  for (const auto& entry : fs::recursive_directory_iterator(cg_root, fs::directory_options::skip_permission_denied, ec)) {
+    if (entry.path().filename() == "cgroup.procs") {
+      if (auto content = read_file_cpp(entry.path())) {
+        size_t pos = 0;
+        while (pos < content->length()) {
+          size_t end_pos = content->find('\n', pos);
+          if (end_pos == std::string::npos) end_pos = content->length();
+          if (end_pos > pos) {
+            try {
+              long val = std::stol(content->substr(pos, end_pos - pos));
+              if (val > 0) {
+                pid_t pid = static_cast<pid_t>(val);
+                if (is_valid_container_pid(pid)) {
+                  return pid; // 找到了真正的 Init 进程
+                }
+              }
+            } catch (...) {}
           }
-        } catch (...) {}
+          pos = end_pos + 1;
+        }
       }
-      pos = end_pos + 1;
     }
   }
 
-  // Cgroup 中未找到有效进程，直接判定为死亡
   return 0;
 }
