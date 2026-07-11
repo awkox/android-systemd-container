@@ -20,7 +20,8 @@ static int create_devices() {
     DeviceConfig{"urandom", S_IFCHR | 0666, makedev(1, 9)},
     DeviceConfig{"tty",     S_IFCHR | 0666, makedev(5, 0)},
     DeviceConfig{"console", S_IFCHR | 0620, makedev(5, 1)},
-    DeviceConfig{"ptmx",    S_IFCHR | 0666, makedev(5, 2)}
+    DeviceConfig{"ptmx",    S_IFCHR | 0666, makedev(5, 2)},
+    DeviceConfig{"kmsg",    S_IFCHR | 0600, makedev(1, 11)}, 
   };
   
   constexpr std::array symlinks{
