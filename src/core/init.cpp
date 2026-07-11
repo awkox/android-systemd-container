@@ -49,6 +49,12 @@ void internal_boot(cfg_t *cfg) {
   }
 
   fs::path mount_point = mount_dir / cfg->rt.container_name;
+  if (cfg->conf.rootfs_img_path[0] && !lock_acquired) {
+    if (mount_rootfs_img(cfg->conf.rootfs_img_path, mount_point) < 0) {
+      log_error("无法挂载镜像: %s", strerror(errno));
+      goto boot_fail;
+    }
+  }
   /* 3. 将 rootfs 绑定挂载到其自身 (这是内核 pivot_root 调用的强制要求) */
   if (mount(mount_point.c_str(), mount_point.c_str(), nullptr,
             MS_BIND | MS_REC, nullptr) < 0) {

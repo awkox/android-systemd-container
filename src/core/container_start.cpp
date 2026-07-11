@@ -133,32 +133,6 @@ int start_rootfs(cfg_t *cfg) {
 
   has_side_effects = true;
 
-  if (cfg->conf.rootfs_img_path[0] && !lock_acquired) {
-    if (mount_rootfs_img(cfg->conf.rootfs_img_path, mount_dir / cfg->rt.container_name) < 0) {
-      goto cleanup;
-    }
-  }
-
-  {
-    fs::path init_bin = cfg->conf.custom_init[0] ? 
-             fs::path(cfg->conf.custom_init) : fs::path(DEFAULT_INIT);
-    init_bin = init_bin.relative_path();
-    fs::path init_path = mount_dir / cfg->rt.container_name / init_bin;
-
-    struct stat st;
-    if (lstat(init_path.c_str(), &st) != 0) {
-      log_error("未找到 Init 文件: %s", init_path.c_str());
-      log_error("请确保 rootfs 路径正确且包含了 %s 可执行文件。",
-                init_bin.c_str());
-      goto cleanup;
-    }
-    if (!S_ISLNK(st.st_mode) && access(init_path.c_str(), X_OK) != 0) {
-      log_error("Init 文件没有可执行权限: %s", init_path.c_str());
-      log_error("请确保为其赋予可执行权限 (chmod +x)。");
-      goto cleanup;
-    }
-  }
-
   if (cfg->rt.config_file[0]) {
     bool was_new = !cfg->rt.config_file_existed;
     if (config_save(cfg->rt.config_file, cfg) < 0) {
