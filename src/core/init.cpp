@@ -231,11 +231,7 @@ void internal_boot(cfg_t *cfg) {
 
   {
     const char *init_bin = cfg->conf.custom_init[0] ? cfg->conf.custom_init : DEFAULT_INIT;
-    const char *init_args[] = {
-      init_bin,
-      "systemd.unified_cgroup_hierarchy=1",  /* 项目强制 CgroupV2 */
-      nullptr
-    };
+    const char *init_args[] = {init_bin, nullptr};
 
     if (execve(init_bin, const_cast<char *const *>(init_args), environ) < 0) {
       log_error("执行 %s 失败: %s", init_bin, strerror(errno));
