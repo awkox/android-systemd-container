@@ -62,6 +62,8 @@ void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
   if (!force_cleanup)
     sync();
 
+  cgroup_cleanup_container(cfg->rt.container_name);
+
   fs::path mount_point = mount_dir / cfg->rt.container_name;
   if (is_mountpoint(mount_point)) {
     if (force_cleanup) {
@@ -71,8 +73,6 @@ void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
       unmount_rootfs_img(mount_point, cfg->rt.foreground);
     }
   }
-
-  cgroup_cleanup_container(cfg->rt.container_name);
 }
 
 bool is_valid_container_pid(const pid_t pid) {
@@ -100,6 +100,7 @@ int start_rootfs(cfg_t *cfg) {
       lock_acquired = true;
 
       if (is_mountpoint(mount_dir / cfg->rt.container_name)) {
+        // 跳过移除挂载
         cgroup_cleanup_container(cfg->rt.container_name);
       } else {
         release_external_lock();
@@ -123,7 +124,6 @@ int start_rootfs(cfg_t *cfg) {
                 abs_path.empty() ? cfg->conf.rootfs_img_path : abs_path.c_str(), strerror(errno));
       goto cleanup;
     }
-    safe_strncpy(cfg->conf.rootfs_img_path, abs_path.c_str(), sizeof(cfg->conf.rootfs_img_path));
   }
 
   if (cfg->rt.foreground && (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))) {
