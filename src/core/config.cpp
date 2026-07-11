@@ -109,9 +109,8 @@ static void config_serialize_known(FILE *f, const asc_conf_t *conf) {
   fprintf(f, "block_nested_ns=%d\n", conf->block_nested_ns);
 
   if (conf->privileged_mask > 0) {
-    char mask_str[256];
-    format_privileged_mask(conf->privileged_mask, mask_str, sizeof(mask_str));
-    fprintf(f, "privileged=%s\n", mask_str);
+    std::string mask_str = format_privileged_mask(conf->privileged_mask);
+    fprintf(f, "privileged=%s\n", mask_str.c_str());
   }
 
   fprintf(f, "isolation_network=%d\n", conf->isolation_network);

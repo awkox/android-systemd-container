@@ -196,7 +196,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
             "检测到外部命令锁 - 中止内部重启，移交控制权给 CLI");
       } else {
         if (cfg->rt.foreground) {
-          printf("\n容器 %s 正在重启\n", cfg->rt.container_name);
+          printf("\n容器 %s 正在重启\n", cfg->rt.container_name.c_str());
           fflush(stdout);
         }
 

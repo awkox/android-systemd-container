@@ -20,15 +20,14 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
   }
 
   if (pid <= 0) {
-    log_error("容器 '%s' 未运行或状态无效。", cfg->rt.container_name);
+    log_error("容器 '%s' 未运行或状态无效。", cfg->rt.container_name.c_str());
     return -1;
   }
 
   const char *arch = get_architecture();
   printf("宿主机架构: %s\n", arch);
 
-  printf("\n容器: %s (运行中)\n",
-         cfg->rt.container_name);
+  printf("\n容器: %s (运行中)\n", cfg->rt.container_name.c_str());
   printf("  PID: %d\n", pid);
 
   if (!trust_cfg_pid) {
@@ -54,9 +53,8 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
   }
 
   if (cfg->conf.privileged_mask > 0) {
-    char mask_str[256];
-    format_privileged_mask(cfg->conf.privileged_mask, mask_str, sizeof(mask_str));
-    printf("  特权模式掩码: %s\n", mask_str);
+    std::string mask_str = format_privileged_mask(cfg->conf.privileged_mask);
+    printf("  特权模式掩码: %s\n", mask_str.c_str());
     feat_count++;
   }
 

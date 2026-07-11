@@ -78,38 +78,24 @@ int reject_container_name(const std::string& name) {
   return 0;
 }
 
-void format_privileged_mask(const int mask, char *buf, const size_t size) {
-  if (size == 0)
-    return;
-  buf[0] = '\0';
+std::string format_privileged_mask(const int mask) {
+    if (mask == PRIV_FULL) return "full";
 
-  if (mask <= 0)
-    return;
+    std::string result;
+    // 按需调整标志列表即可
+    const std::pair<int, std::string_view> flags[] = {
+        {PRIV_NOMASK, "nomask"},
+        {PRIV_NOCAPS, "nocaps"},
+        {PRIV_NOSEC,  "noseccomp"},
+        {PRIV_SHARED, "shared"},
+    };
 
-  if (mask == PRIV_FULL) {
-    safe_strncpy(buf, "full", size);
-    return;
-  }
-
-  bool first = true;
-  const struct {
-    int flag;
-    const char *name;
-  } flags[] = {
-    {PRIV_NOMASK, "nomask"},
-    {PRIV_NOCAPS, "nocaps"},
-    {PRIV_NOSEC,  "noseccomp"},
-    {PRIV_SHARED, "shared"},
-  };
-
-  size_t pos = 0;
-  for (const auto &f : flags) {
-    if (mask & f.flag) {
-      const int n = snprintf(buf + pos, size - pos, "%s%s",
-                              first ? "" : ",", f.name);
-      if (n > 0)
-        pos += static_cast<size_t>(n);
-      first = false;
+    for (const auto &[flag, name] : flags) {
+        if (mask & flag) {
+            if (!result.empty()) result += ',';
+            result += name;
+        }
     }
-  }
+
+    return result;
 }
