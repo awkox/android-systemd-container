@@ -141,7 +141,7 @@ int asc_main(int argc, char **argv) {
   /* 如果我们有名称但尚未成功加载配置文件，按名称加载。 */
   if (!loaded && cfg.rt.container_name[0] != '\0') {
     if (config_load_by_name(cfg.rt.container_name, &cfg) < 0) {
-      log_error("未找到容器 '%s' 或元数据丢失。", cfg.rt.container_name);
+      log_error("未找到容器 '%s' 或元数据丢失。", cfg.rt.container_name.c_str());
       ret = 1;
       goto cleanup;
     }

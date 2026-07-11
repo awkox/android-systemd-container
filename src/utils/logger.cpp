@@ -13,7 +13,7 @@ void rotate_log(const fs::path& path, const size_t max_size) {
   }
 }
 
-static void write_to_log_file(const std::string& name, const char *component,
+static void write_to_log_file(std::string_view name, const char *component,
                               const char *raw_msg, const int pre_opened_fd) {
   struct timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
@@ -98,7 +98,7 @@ void die_internal(const char *fmt, ...) {
   exit(EXIT_FAILURE);
 }
 
-void write_monitor_debug_log(const std::string& name, const char *fmt, ...) {
+void write_monitor_debug_log(std::string_view name, const char *fmt, ...) {
   char raw_msg[8192];
   va_list ap;
   va_start(ap, fmt);
@@ -116,7 +116,7 @@ void print_privileged_warning(const int privileged_mask) {
   fflush(stdout);
 }
 
-void open_container_log(const std::string& container_name) {
+void open_container_log(std::string_view container_name) {
   fs::path container_log_dir = log_dir / container_name;
   create_directories_with_permission(container_log_dir);
 

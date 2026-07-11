@@ -6,6 +6,6 @@
 bool cgroup_host_is_v2();
 int cgroup_host_bootstrap();
 int setup_cgroups();
-void cgroup_cleanup_container(const std::string& container_name);
+void cgroup_cleanup_container(std::string_view container_name);
 
 #endif

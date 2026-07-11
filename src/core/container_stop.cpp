@@ -6,18 +6,18 @@ static int stop_rootfs_with_timeout(const asc_rt_t *rt, int timeout_seconds) {
 
   if (acquire_external_lock(rt->container_name) != 0) {
     log_error("无法停止 '%s': 另一个命令正在管理此容器",
-              rt->container_name);
+              rt->container_name.c_str());
     return -1;
   }
 
   pid_t pid = 0;
   if (!is_container_running(rt->container_name, &pid)) {
-    log_error("容器 '%s' 未运行或状态无效。", rt->container_name);
+    log_error("容器 '%s' 未运行或状态无效。", rt->container_name.c_str());
     release_external_lock();
     return -1;
   }
 
-  log_info("正在停止容器 '%s' (PID %d)...", rt->container_name, pid);
+  log_info("正在停止容器 '%s' (PID %d)...", rt->container_name.c_str(), pid);
 
   int pfd = syscall(__NR_pidfd_open, pid, 0);
   bool stopped = false;
@@ -78,7 +78,7 @@ static int stop_rootfs_with_timeout(const asc_rt_t *rt, int timeout_seconds) {
   cleanup_container_resources(rt, unkillable);
 
   if (!rt->foreground)
-    log_info("容器 '%s' 已停止。", rt->container_name);
+    log_info("容器 '%s' 已停止。", rt->container_name.c_str());
 
   release_external_lock();
 

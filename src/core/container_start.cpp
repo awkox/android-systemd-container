@@ -3,7 +3,7 @@
 static int active_lock_fd = -1;
 static fs::path active_lock_path = "";
 
-int acquire_external_lock(const std::string& name) {
+int acquire_external_lock(std::string_view name) {
   if (active_lock_fd >= 0)
     return 0;
 
@@ -50,7 +50,7 @@ void release_external_lock(void) {
   }
 }
 
-bool is_external_lock_active(const std::string& name) {
+bool is_external_lock_active(std::string_view name) {
   fs::path lock_path = lock_dir / name;
 
   auto_close const int fd = open(lock_path.c_str(), O_RDONLY | O_CLOEXEC);
@@ -109,7 +109,7 @@ int start_rootfs(cfg_t *cfg) {
   if (!lock_acquired) {
     if (is_container_running(cfg->rt.container_name, &existing_pid)) {
       log_error("容器名称 '%s' 已被 PID %d 占用。",
-                cfg->rt.container_name, existing_pid);
+                cfg->rt.container_name.c_str(), existing_pid);
       goto cleanup;
     }
   }
@@ -143,7 +143,7 @@ int start_rootfs(cfg_t *cfg) {
 
   if (config_save_by_name(cfg->rt.container_name, cfg) < 0) {
     log_warn("无法将工作区镜像配置同步至 '%s': %s",
-             cfg->rt.container_name, strerror(errno));
+             cfg->rt.container_name.c_str(), strerror(errno));
   }
 
   fix_host_ptys();
@@ -202,7 +202,7 @@ int start_rootfs(cfg_t *cfg) {
   } else {
     // 直接返回，monitor 负责后续一切
     log_info("容器 '%s' 已提交至后台 (PID %d, Monitor %d)。",
-             cfg->rt.container_name, cfg->rt.container_pid, monitor_pid);
+             cfg->rt.container_name.c_str(), cfg->rt.container_pid, monitor_pid);
     return 0;
   }
 

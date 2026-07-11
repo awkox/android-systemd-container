@@ -107,6 +107,6 @@ static void rmdir_cgroup_tree(const fs::path& path) {
   }
 }
 
-void cgroup_cleanup_container(const std::string& container_name) {
+void cgroup_cleanup_container(std::string_view container_name) {
   rmdir_cgroup_tree(project_cgroup_dir / container_name);
 }
