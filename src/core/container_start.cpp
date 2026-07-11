@@ -198,11 +198,6 @@ int start_rootfs(cfg_t *cfg) {
   log_info("容器启动成功，主 PID 为 %d (Monitor PID: %d)", cfg->rt.container_pid,
            monitor_pid);
 
-  {
-    cfg_t save_cfg = *cfg;
-    config_save_by_name(cfg->rt.container_name, &save_cfg);
-  }
-
   if (lock_acquired) release_external_lock();
 
   if (cfg->rt.foreground) {
