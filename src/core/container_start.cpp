@@ -203,31 +203,15 @@ int start_rootfs(cfg_t *cfg) {
     config_save_by_name(cfg->rt.container_name, &save_cfg);
   }
 
+  if (lock_acquired) release_external_lock();
+
   if (cfg->rt.foreground) {
-    if (lock_acquired) {
-      release_external_lock();
-    }
-    int ret = console_monitor_loop(cfg->rt.console.master, monitor_pid, cfg);
-    return ret;
+    return console_monitor_loop(cfg->rt.console.master, monitor_pid, cfg);
   } else {
-    // 根据项目设计强制要求 Cgroup V2，此处的探测退化为极速验证
-    for (int i = 0; i < 50; i++) {
-      if (find_container_init_pid(cfg->rt.container_name) == cfg->rt.container_pid) {
-        booted = true;
-        break;
-      }
-      if (kill(cfg->rt.container_pid, 0) < 0 && errno == ESRCH)
-        break;
-      usleep(100000);
-    }
-
-    if (!booted) {
-      log_error("容器未能正确完成引导流程。");
-      goto cleanup;
-    }
-
-    show_info(cfg, true);
-    log_info("容器 '%s' 正在后台运行。", cfg->rt.container_name);
+    // 直接返回，monitor 负责后续一切
+    log_info("容器 '%s' 已提交至后台 (PID %d, Monitor %d)。",
+             cfg->rt.container_name, cfg->rt.container_pid, monitor_pid);
+    return 0;
   }
 
   if (lock_acquired)
