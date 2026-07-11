@@ -1,8 +1,8 @@
 #include "asc.h"
 
 /* 探测超级块的魔数来识别文件系统类型 */
-const char *detect_fs_type(const char *img_path) {
-  auto_close const int fd = open(img_path, O_RDONLY | O_CLOEXEC);
+const char *detect_fs_type(const fs::path& img_path) {
+  auto_close const int fd = open(img_path.c_str(), O_RDONLY | O_CLOEXEC);
   if (fd < 0)
     return nullptr;
 

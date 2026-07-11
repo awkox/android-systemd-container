@@ -97,7 +97,7 @@ int bind_mount(const fs::path& src, const fs::path& tgt) {
  * Rootfs 镜像处理 - 纯 C 实现的 loop 设备管理
  * ---------------------------------------------------------------------------*/
 
-int mount_rootfs_img(const char *img_path, char *mount_point, const size_t mp_size,
+int mount_rootfs_img(const fs::path& img_path, char *mount_point, const size_t mp_size,
                      const char *name) {
   if (find_available_mountpoint(name, mount_point, mp_size) < 0) {
     log_error("无法为 %s 找到可用的挂载点", name);
@@ -108,7 +108,7 @@ int mount_rootfs_img(const char *img_path, char *mount_point, const size_t mp_si
   const char *fstype = detect_fs_type(img_path);
   if (!fstype) {
     log_warn("位于 %s 的文件系统未知。仅支持 ext4 和 btrfs。",
-             img_path);
+             img_path.c_str());
     return -1;
   }
 
@@ -126,22 +126,22 @@ int mount_rootfs_img(const char *img_path, char *mount_point, const size_t mp_si
 
   for (int attempt = 0; attempt < 3; attempt++) {
     if (attempt == 0)
-      log_info("正在挂载 %s 格式的镜像 %s 到 %s...", fstype, img_path,
+      log_info("正在挂载 %s 格式的镜像 %s 到 %s...", fstype, img_path.c_str(),
                mount_point);
     else
       log_info("正在挂载 %s 格式的镜像 %s 到 %s (第 %d/3 次尝试)...", fstype,
-               img_path, mount_point, attempt + 1);
+               img_path.c_str(), mount_point, attempt + 1);
 
     struct stat st;
-    const bool is_blk = stat(img_path, &st) == 0 && S_ISBLK(st.st_mode);
+    const bool is_blk = stat(img_path.c_str(), &st) == 0 && S_ISBLK(st.st_mode);
     char final_src[PATH_MAX];
     int loop_fd = -1;
     bool success = false;
 
     if (is_blk) {
-      safe_strncpy(final_src, img_path, sizeof(final_src));
+      safe_strncpy(final_src, img_path.c_str(), sizeof(final_src));
     } else {
-      loop_fd = loop_attach(img_path, final_src, sizeof(final_src));
+      loop_fd = loop_attach(img_path.c_str(), final_src, sizeof(final_src));
     }
 
     if (is_blk || loop_fd >= 0) {
@@ -176,7 +176,7 @@ int mount_rootfs_img(const char *img_path, char *mount_point, const size_t mp_si
     }
   }
 
-  log_error("重试 3 次后，依然无法挂载镜像 %s", img_path);
+  log_error("重试 3 次后，依然无法挂载镜像 %s", img_path.c_str());
   return -1;
 }
 
