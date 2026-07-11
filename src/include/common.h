@@ -117,7 +117,6 @@ typedef struct {
 
   bool foreground;
   bool reboot_cycle;
-  bool config_file_existed;
 
   fs::path config_file;
 

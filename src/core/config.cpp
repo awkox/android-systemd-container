@@ -55,13 +55,10 @@ int config_load(const fs::path& config_path, cfg_t *cfg) {
   auto_fclose FILE *f = fopen(config_path.c_str(), "re");
   if (!f) {
     if (errno == ENOENT) {
-      cfg->rt.config_file_existed = false;
       return 0; /* 配置是可选的 */
     }
     return -1;
   }
-
-  cfg->rt.config_file_existed = true;
 
   asc_conf_t *conf = &cfg->conf;
 
@@ -106,9 +103,6 @@ int config_load(const fs::path& config_path, cfg_t *cfg) {
 }
 
 static void config_serialize_known(FILE *f, const asc_conf_t *conf) {
-  fprintf(f, "# " PROJECT_NAME " 容器配置文件\n");
-  fprintf(f, "# 此文件由程序自动生成 - 手动修改可能会被覆盖\n\n");
-
   /* 写入被管理的键 */
   if (!conf->rootfs_img_path.empty()) {
     fprintf(f, "rootfs_path=%s\n", conf->rootfs_img_path.c_str());

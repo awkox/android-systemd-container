@@ -131,13 +131,9 @@ int start_rootfs(cfg_t *cfg) {
   has_side_effects = true;
 
   if (!cfg->rt.config_file.empty()) {
-    bool was_new = !cfg->rt.config_file_existed;
     if (config_save(cfg->rt.config_file, cfg) < 0) {
       log_error("无法持久化配置到 '%s': %s", cfg->rt.config_file.c_str(), strerror(errno));
       goto cleanup;
-    }
-    if (was_new) {
-      log_info("配置已成功持久化至 %s", cfg->rt.config_file.c_str());
     }
   }
 
