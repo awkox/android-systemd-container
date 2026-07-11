@@ -31,7 +31,7 @@ void internal_boot(cfg_t *cfg) {
     goto boot_fail;
   }
 
-  if (cfg->conf.rootfs_img_path[0]) {
+  if (!cfg->conf.rootfs_img_path.empty()) {
     if (mount_rootfs_img(cfg->conf.rootfs_img_path, mount_point) < 0) {
       log_error("无法挂载镜像: %s", strerror(errno));
       goto boot_fail;
@@ -212,7 +212,7 @@ void internal_boot(cfg_t *cfg) {
   }
 
   {
-    const char *init_bin = cfg->conf.custom_init[0] ? cfg->conf.custom_init : DEFAULT_INIT;
+    const char *init_bin = cfg->conf.custom_init.empty() ? DEFAULT_INIT : cfg->conf.custom_init.c_str();
     const char *init_args[] = {init_bin, nullptr};
 
     if (execve(init_bin, const_cast<char *const *>(init_args), environ) < 0) {

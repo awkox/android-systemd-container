@@ -104,8 +104,8 @@ struct tty_info {
 };
 
 typedef struct {
-  char rootfs_img_path[PATH_MAX];
-  char custom_init[PATH_MAX];
+  fs::path rootfs_img_path;
+  fs::path custom_init;
 
   bool isolation_network;
   bool block_nested_ns;
@@ -119,7 +119,7 @@ typedef struct {
   bool reboot_cycle;
   bool config_file_existed;
 
-  char config_file[PATH_MAX];
+  fs::path config_file;
 
   pid_t container_pid;
 

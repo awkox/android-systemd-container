@@ -103,7 +103,7 @@ int asc_main(int argc, char **argv) {
     safe_strncpy(cfg.rt.container_name, name, sizeof(cfg.rt.container_name));
   }
   if (config_path) {
-    safe_strncpy(cfg.rt.config_file, config_path, sizeof(cfg.rt.config_file));
+    cfg.rt.config_file = config_path;
   }
   cfg.rt.foreground = foreground ? 1 : 0;
 
@@ -128,9 +128,9 @@ int asc_main(int argc, char **argv) {
   }
 
   // 尝试直接加载配置
-  if (cfg.rt.config_file[0]) {
+  if (!cfg.rt.config_file.empty()) {
     if (config_load(cfg.rt.config_file, &cfg) < 0) {
-      log_error("无法从 '%s' 加载配置: %s", cfg.rt.config_file,
+      log_error("无法从 '%s' 加载配置: %s", cfg.rt.config_file.c_str(),
                 strerror(errno));
       ret = 1;
       goto cleanup;
@@ -148,8 +148,7 @@ int asc_main(int argc, char **argv) {
   }
 
   /* 为集中式日志引擎设置全局日志上下文 */
-  safe_strncpy(log_container_name, cfg.rt.container_name,
-               sizeof(log_container_name));
+  log_container_name = cfg.rt.container_name;
 
   /* 基础信息命令 */
   if (strcmp(cmd, "help") == 0) {

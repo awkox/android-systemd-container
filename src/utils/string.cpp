@@ -70,9 +70,9 @@ static bool validate_container_name(std::string_view name, size_t max_len = 256)
     return true;
 }
 
-int reject_container_name(const char *name) {
+int reject_container_name(const std::string& name) {
   if (!validate_container_name(name)) {
-    log_error("非法的容器名称 '%s'。", name);
+    log_error("非法的容器名称 '%s'。", name.c_str());
     return -1;
   }
   return 0;

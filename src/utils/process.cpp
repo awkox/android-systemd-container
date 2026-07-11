@@ -82,7 +82,7 @@ long get_container_uptime(const pid_t pid) {
 }
 
 // 优化: O(1) 纯 CgroupV2 目录解析
-pid_t find_container_init_pid(const char *container_name) {
+pid_t find_container_init_pid(const std::string& container_name) {
   fs::path cg_root = project_cgroup_dir / container_name;
   std::error_code ec;
   

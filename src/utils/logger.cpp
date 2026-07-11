@@ -1,7 +1,7 @@
 #include "asc.h"
 
 bool log_silent = false;
-char log_container_name[256] = "";
+std::string log_container_name = "";
 int log_container_fd = -1;
 
 void rotate_log(const fs::path& path, const size_t max_size) {
@@ -13,7 +13,7 @@ void rotate_log(const fs::path& path, const size_t max_size) {
   }
 }
 
-static void write_to_log_file(const char *name, const char *component,
+static void write_to_log_file(const std::string& name, const char *component,
                               const char *raw_msg, const int pre_opened_fd) {
   struct timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
@@ -56,7 +56,7 @@ void log_internal(const char *prefix, const bool is_err, const char *fmt, ...) {
   vsnprintf(raw_msg, sizeof(raw_msg), fmt, ap);
   va_end(ap);
 
-  if (log_container_name[0]) {
+  if (!log_container_name.empty()) {
     write_to_log_file(log_container_name, "main", raw_msg, log_container_fd);
   }
 
@@ -89,7 +89,7 @@ void die_internal(const char *fmt, ...) {
   vsnprintf(raw_msg, sizeof(raw_msg), fmt, ap);
   va_end(ap);
 
-  if (log_container_name[0]) {
+  if (!log_container_name.empty()) {
     write_to_log_file(log_container_name, "fatal", raw_msg, log_container_fd);
   }
 
@@ -98,7 +98,7 @@ void die_internal(const char *fmt, ...) {
   exit(EXIT_FAILURE);
 }
 
-void write_monitor_debug_log(const char *name, const char *fmt, ...) {
+void write_monitor_debug_log(const std::string& name, const char *fmt, ...) {
   char raw_msg[8192];
   va_list ap;
   va_start(ap, fmt);
@@ -116,7 +116,7 @@ void print_privileged_warning(const int privileged_mask) {
   fflush(stdout);
 }
 
-void open_container_log(const char *container_name) {
+void open_container_log(const std::string& container_name) {
   fs::path container_log_dir = log_dir / container_name;
   create_directories_with_permission(container_log_dir);
 

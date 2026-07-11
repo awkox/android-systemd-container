@@ -4,7 +4,7 @@
 #include "common.h"
 
 extern bool log_silent;
-extern char log_container_name[256];
+extern std::string log_container_name;
 extern int log_container_fd;
 
 [[gnu::format(printf, 3, 4)]]

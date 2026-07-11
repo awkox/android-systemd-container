@@ -83,7 +83,7 @@ int config_load(const fs::path& config_path, cfg_t *cfg) {
     const char *val = trim_whitespace(equals + 1);
 
     if (strcmp(key, "rootfs_path") == 0) {
-      safe_strncpy(conf->rootfs_img_path, val, sizeof(conf->rootfs_img_path));
+      conf->rootfs_img_path = val;
     } else if (strcmp(key, "block_nested_ns") == 0) {
       conf->block_nested_ns = parse_bool(val);
     } else if (strcmp(key, "privileged") == 0) {
@@ -94,7 +94,7 @@ int config_load(const fs::path& config_path, cfg_t *cfg) {
       else if (strchr(val, ' '))
         log_warn("配置警告: 忽略包含空格的 custom_init 路径 '%s'", val);
       else
-        safe_strncpy(conf->custom_init, val, sizeof(conf->custom_init));
+        conf->custom_init = val;
     } else if (strcmp(key, "isolation_network") == 0) {
       conf->isolation_network = parse_bool(val);
     } else {
@@ -110,8 +110,8 @@ static void config_serialize_known(FILE *f, const asc_conf_t *conf) {
   fprintf(f, "# 此文件由程序自动生成 - 手动修改可能会被覆盖\n\n");
 
   /* 写入被管理的键 */
-  if (conf->rootfs_img_path[0]) {
-    fprintf(f, "rootfs_path=%s\n", conf->rootfs_img_path);
+  if (!conf->rootfs_img_path.empty()) {
+    fprintf(f, "rootfs_path=%s\n", conf->rootfs_img_path.c_str());
   }
 
   fprintf(f, "block_nested_ns=%d\n", conf->block_nested_ns);
@@ -124,8 +124,8 @@ static void config_serialize_known(FILE *f, const asc_conf_t *conf) {
 
   fprintf(f, "isolation_network=%d\n", conf->isolation_network);
 
-  if (conf->custom_init[0]) {
-    fprintf(f, "custom_init=%s\n", conf->custom_init);
+  if (!conf->custom_init.empty()) {
+    fprintf(f, "custom_init=%s\n", conf->custom_init.c_str());
   }
 }
 

@@ -114,11 +114,11 @@ int start_rootfs(cfg_t *cfg) {
     }
   }
 
-  if (cfg->conf.rootfs_img_path[0]) {
+  if (!cfg->conf.rootfs_img_path.empty()) {
     fs::path abs_path = resolve_path_arg(cfg->conf.rootfs_img_path);
     if (abs_path.empty() || !fs::exists(abs_path)) {
       log_error("无法解析 rootfs 镜像路径 '%s': %s",
-                abs_path.empty() ? cfg->conf.rootfs_img_path : abs_path.c_str(), strerror(errno));
+                abs_path.empty() ? cfg->conf.rootfs_img_path.c_str() : abs_path.c_str(), strerror(errno));
       goto cleanup;
     }
   }
@@ -130,15 +130,14 @@ int start_rootfs(cfg_t *cfg) {
 
   has_side_effects = true;
 
-  if (cfg->rt.config_file[0]) {
+  if (!cfg->rt.config_file.empty()) {
     bool was_new = !cfg->rt.config_file_existed;
     if (config_save(cfg->rt.config_file, cfg) < 0) {
-      log_error("无法持久化配置到 '%s': %s", cfg->rt.config_file,
-                strerror(errno));
+      log_error("无法持久化配置到 '%s': %s", cfg->rt.config_file.c_str(), strerror(errno));
       goto cleanup;
     }
     if (was_new) {
-      log_info("配置已成功持久化至 %s", cfg->rt.config_file);
+      log_info("配置已成功持久化至 %s", cfg->rt.config_file.c_str());
     }
   }
 
