@@ -174,7 +174,7 @@ int main(const int argc, char **argv) {
   }
 
   if (strcmp(cmd, "stop") == 0) {
-    ret = stop_rootfs(&cfg);
+    ret = stop_rootfs(&cfg.rt);
     goto cleanup;
   }
 

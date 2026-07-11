@@ -1,23 +1,23 @@
 #include "asc.h"
 
-static int stop_rootfs_with_timeout(cfg_t *cfg, int timeout_seconds) {
+static int stop_rootfs_with_timeout(const asc_rt_t *rt, int timeout_seconds) {
   if (timeout_seconds < 0)
     timeout_seconds = STOP_TIMEOUT;
 
-  if (acquire_external_lock(cfg->rt.container_name) != 0) {
+  if (acquire_external_lock(rt->container_name) != 0) {
     log_error("无法停止 '%s': 另一个命令正在管理此容器",
-              cfg->rt.container_name);
+              rt->container_name);
     return -1;
   }
 
   pid_t pid = 0;
-  if (!is_container_running(cfg->rt.container_name, &pid)) {
-    log_error("容器 '%s' 未运行或状态无效。", cfg->rt.container_name);
+  if (!is_container_running(rt->container_name, &pid)) {
+    log_error("容器 '%s' 未运行或状态无效。", rt->container_name);
     release_external_lock();
     return -1;
   }
 
-  log_info("正在停止容器 '%s' (PID %d)...", cfg->rt.container_name, pid);
+  log_info("正在停止容器 '%s' (PID %d)...", rt->container_name, pid);
 
   kill(pid, SIGRTMIN + 3);
 
@@ -55,16 +55,16 @@ static int stop_rootfs_with_timeout(cfg_t *cfg, int timeout_seconds) {
     }
   }
 
-  cleanup_container_resources(&cfg->rt, unkillable);
+  cleanup_container_resources(rt, unkillable);
 
-  if (!cfg->rt.foreground)
-    log_info("容器 '%s' 已停止。", cfg->rt.container_name);
+  if (!rt->foreground)
+    log_info("容器 '%s' 已停止。", rt->container_name);
 
   release_external_lock();
 
   return 0;
 }
 
-int stop_rootfs(cfg_t *cfg) {
-  return stop_rootfs_with_timeout(cfg, STOP_TIMEOUT);
+int stop_rootfs(const asc_rt_t *rt) {
+  return stop_rootfs_with_timeout(rt, STOP_TIMEOUT);
 }
