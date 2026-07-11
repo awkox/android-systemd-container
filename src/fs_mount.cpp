@@ -16,21 +16,6 @@ bool is_mountpoint(const fs::path& path) {
     return st1.st_dev != st2.st_dev;
 }
 
-/* 使用容器名称在 /mnt/asc/ 中查找或创建可用的挂载点 */
-static int find_available_mountpoint(const char *name, char *mount_path,
-                                     const size_t size) {
-  mkdir(mount_dir.c_str(), 0755);
-
-  snprintf(mount_path, size, "%s/%s", mount_dir.c_str(), name);
-
-  if (mkdir(mount_path, 0755) < 0) {
-    log_error("创建挂载目录 %s 失败: %s", mount_path, strerror(errno));
-    return -1;
-  }
-
-  return 0;
-}
-
 /* ---------------------------------------------------------------------------
  * 通用挂载包装器
  * ---------------------------------------------------------------------------*/
@@ -97,10 +82,9 @@ int bind_mount(const fs::path& src, const fs::path& tgt) {
  * Rootfs 镜像处理 - 纯 C 实现的 loop 设备管理
  * ---------------------------------------------------------------------------*/
 
-int mount_rootfs_img(const fs::path& img_path, char *mount_point, const size_t mp_size,
-                     const char *name) {
-  if (find_available_mountpoint(name, mount_point, mp_size) < 0) {
-    log_error("无法为 %s 找到可用的挂载点", name);
+int mount_rootfs_img(const fs::path& img_path, const fs::path& mount_point) {
+  if (!create_directories_with_permission(mount_point)) {
+    log_error("创建挂载目录 %s 失败: %s", mount_point.c_str(), strerror(errno));
     return -1;
   }
 
@@ -180,19 +164,16 @@ int mount_rootfs_img(const fs::path& img_path, char *mount_point, const size_t m
   return -1;
 }
 
-void unmount_rootfs_img(const char *mount_point, const bool silent) {
-  if (!mount_point || !mount_point[0])
-    return;
-
+void unmount_rootfs_img(const fs::path& mount_point, const bool silent) {
   /* 1. 懒卸载 (Lazy unmount)：即使文件被打开也会立即从命名空间剥离 */
   sync();
-  umount2(mount_point, MNT_DETACH);
+  umount2(mount_point.c_str(), MNT_DETACH);
 
   /* 2. 沉淀一段时间，针对老旧内核强制执行 */
   sync();
   usleep(RETRY_DELAY_US);
   if (is_mountpoint(mount_point)) {
-    umount2(mount_point, MNT_DETACH | MNT_FORCE);
+    umount2(mount_point.c_str(), MNT_DETACH | MNT_FORCE);
     usleep(RETRY_DELAY_US / 2);
   }
 
@@ -200,9 +181,9 @@ void unmount_rootfs_img(const char *mount_point, const bool silent) {
   const bool still_mounted = is_mountpoint(mount_point);
   if (fs::remove(mount_point) || !still_mounted) {
     if (!silent)
-      log_info("已成功卸载 rootfs 镜像 %s。", mount_point);
+      log_info("已成功卸载 rootfs 镜像 %s。", mount_point.c_str());
   } else if (errno != ENOENT) {
     if (!silent)
-      log_warn("清理警告: 挂载点 %s 仍然处于繁忙或被占用状态。", mount_point);
+      log_warn("清理警告: 挂载点 %s 仍然处于繁忙或被占用状态。", mount_point.c_str());
   }
 }

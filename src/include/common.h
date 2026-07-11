@@ -108,7 +108,6 @@ struct tty_info {
 
 typedef struct {
   char rootfs_img_path[PATH_MAX];
-  char img_mount_point[PATH_MAX];
   char custom_init[PATH_MAX];
 
   bool isolation_network;

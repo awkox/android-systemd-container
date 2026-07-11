@@ -3,8 +3,7 @@
 
 #include "common.h"
 
-bool is_ramfs(const char *path);
-int read_proc_environ(const pid_t pid, const char *key, char *value, const size_t size);
+bool is_ramfs(const fs::path& path);
 int get_kernel_version(int *major, int *minor);
 void oom_protect(void);
 

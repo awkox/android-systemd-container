@@ -19,11 +19,6 @@ static int stop_rootfs_with_timeout(cfg_t *cfg, int timeout_seconds) {
 
   log_info("正在停止容器 '%s' (PID %d)...", cfg->rt.container_name, pid);
 
-  if (cfg->conf.img_mount_point[0] == '\0') {
-    read_proc_environ(pid, "RUNTIME_MOUNT_PATH", cfg->conf.img_mount_point,
-                      sizeof(cfg->conf.img_mount_point));
-  }
-
   kill(pid, SIGRTMIN + 3);
 
   log_info("正在等待容器优雅关闭 (最长可能需要 %d 秒)...", timeout_seconds);

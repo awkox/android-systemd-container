@@ -48,16 +48,17 @@ void internal_boot(cfg_t *cfg) {
     goto boot_fail;
   }
 
+  fs::path mount_point = mount_dir / cfg->rt.container_name;
   /* 3. 将 rootfs 绑定挂载到其自身 (这是内核 pivot_root 调用的强制要求) */
-  if (mount(cfg->conf.img_mount_point, cfg->conf.img_mount_point, nullptr,
+  if (mount(mount_point.c_str(), mount_point.c_str(), nullptr,
             MS_BIND | MS_REC, nullptr) < 0) {
     log_error("无法执行自我绑定挂载: %s", strerror(errno));
     goto boot_fail;
   }
 
   /* 4. 设置工作目录为 rootfs */
-  if (chdir(cfg->conf.img_mount_point) < 0) {
-    log_error("无法 chdir 到 '%s': %s", cfg->conf.img_mount_point,
+  if (chdir(mount_point.c_str()) < 0) {
+    log_error("无法 chdir 到 '%s': %s", mount_point.c_str(),
               strerror(errno));
     goto boot_fail;
   }
@@ -192,8 +193,6 @@ void internal_boot(cfg_t *cfg) {
   /* 14. 清除环境变量并设置默认值 */
   clearenv();
   setenv("container", PROJECT_NAME, 1);
-  if (cfg->conf.img_mount_point[0])
-    setenv("RUNTIME_MOUNT_PATH", cfg->conf.img_mount_point, 1);
 
   /* 应用安全性防护：seccomp 策略与 capabilities 剔除 */
   seccomp_apply_minimal(cfg->conf.privileged_mask);

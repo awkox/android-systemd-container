@@ -62,14 +62,10 @@ void cleanup_container_resources(cfg_t *cfg, const bool force_cleanup) {
   if (!force_cleanup)
     sync();
 
-  char mount_point[PATH_MAX] = "";
-  if (cfg->conf.img_mount_point[0]) {
-    safe_strncpy(mount_point, cfg->conf.img_mount_point, sizeof(mount_point));
-  }
-
-  if (mount_point[0]) {
+  fs::path mount_point = mount_dir / cfg->rt.container_name;
+  if (is_mountpoint(mount_point)) {
     if (force_cleanup) {
-      umount2(mount_point, MNT_DETACH | MNT_FORCE);
+      umount2(mount_point.c_str(), MNT_DETACH | MNT_FORCE);
       fs::remove(mount_point);
     } else {
       unmount_rootfs_img(mount_point, cfg->rt.foreground);
@@ -103,7 +99,7 @@ int start_rootfs(cfg_t *cfg) {
     if (acquire_external_lock(cfg->rt.container_name) == 0) {
       lock_acquired = true;
 
-      if (cfg->conf.img_mount_point[0] && is_mountpoint(cfg->conf.img_mount_point)) {
+      if (is_mountpoint(mount_dir / cfg->rt.container_name)) {
         cgroup_cleanup_container(cfg->rt.container_name);
       } else {
         release_external_lock();
@@ -138,8 +134,7 @@ int start_rootfs(cfg_t *cfg) {
   has_side_effects = true;
 
   if (cfg->conf.rootfs_img_path[0] && !lock_acquired) {
-    if (mount_rootfs_img(cfg->conf.rootfs_img_path, cfg->conf.img_mount_point,
-                         sizeof(cfg->conf.img_mount_point), cfg->rt.container_name) < 0) {
+    if (mount_rootfs_img(cfg->conf.rootfs_img_path, mount_dir / cfg->rt.container_name) < 0) {
       goto cleanup;
     }
   }
@@ -148,7 +143,7 @@ int start_rootfs(cfg_t *cfg) {
     fs::path init_bin = cfg->conf.custom_init[0] ? 
              fs::path(cfg->conf.custom_init) : fs::path(DEFAULT_INIT);
     init_bin = init_bin.relative_path();
-    fs::path init_path = fs::path(cfg->conf.img_mount_point) / init_bin;
+    fs::path init_path = mount_dir / cfg->rt.container_name / init_bin;
 
     struct stat st;
     if (lstat(init_path.c_str(), &st) != 0) {

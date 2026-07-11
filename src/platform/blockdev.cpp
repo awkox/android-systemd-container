@@ -73,7 +73,7 @@ static int open_loop_dev(const long devnr, char *path_out, const size_t path_siz
  * 成功时返回打开的 loop_fd（调用方在 mount 之后必须手动关闭）。
  * loop_path_out 里面会填充为了调用 mount() 而准备好的设备节点路径。
  */
-int loop_attach(const char *img_path, char *loop_path_out,
+int loop_attach(const fs::path& img_path, char *loop_path_out,
                        const size_t path_size) {
   auto_close const int ctl_fd = open("/dev/loop-control", O_RDWR | O_CLOEXEC);
   if (ctl_fd < 0) {
@@ -93,9 +93,9 @@ int loop_attach(const char *img_path, char *loop_path_out,
     return -1;
   }
 
-  auto_close const int img_fd = open(img_path, O_RDWR | O_CLOEXEC);
+  auto_close const int img_fd = open(img_path.c_str(), O_RDWR | O_CLOEXEC);
   if (img_fd < 0) {
-    log_error("打开镜像文件 %s 失败: %s", img_path, strerror(errno));
+    log_error("打开镜像文件 %s 失败: %s", img_path.c_str(), strerror(errno));
     close(loop_fd);
     return -1;
   }
@@ -109,7 +109,7 @@ int loop_attach(const char *img_path, char *loop_path_out,
   /* AUTOCLEAR: 在 umount 且所有文件描述符关闭后，内核自动释放 loop 设备 */
   struct loop_info64 li = {};
   li.lo_flags = LO_FLAGS_AUTOCLEAR;
-  snprintf((char *)li.lo_file_name, LO_NAME_SIZE, "%.63s", img_path);
+  snprintf((char *)li.lo_file_name, LO_NAME_SIZE, "%.63s", img_path.c_str());
 
   if (ioctl(loop_fd, LOOP_SET_STATUS64, &li) < 0)
     log_warn("配置 loop 状态失败 (LOOP_SET_STATUS64): %s (将继续执行)", strerror(errno));
@@ -118,10 +118,8 @@ int loop_attach(const char *img_path, char *loop_path_out,
 }
 
 /* 显式通过 LOOP_CLR_FD 卸载 loop 设备（双重保险） */
-void loop_detach(const char *loop_dev) {
-  if (!loop_dev || !loop_dev[0])
-    return;
-  auto_close const int fd = open(loop_dev, O_RDONLY | O_CLOEXEC);
+void loop_detach(const fs::path& loop_dev) {
+  auto_close const int fd = open(loop_dev.c_str(), O_RDONLY | O_CLOEXEC);
   if (fd < 0)
     return;
   ioctl(fd, LOOP_CLR_FD, 0);
