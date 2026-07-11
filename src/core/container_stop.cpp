@@ -30,7 +30,7 @@ static int stop_rootfs_with_timeout(const asc_rt_t *rt, int timeout_seconds) {
     if (r > 0 && (pfd_poll.revents & POLLIN)) {
       stopped = true;
     } else {
-      log_warn("优雅关闭超时，正在发送 SIGKILL 信号...");
+      log_warn("超时，正在发送 SIGKILL 信号...");
       syscall(__NR_pidfd_send_signal, pfd, SIGKILL, nullptr, 0);
       r = poll(&pfd_poll, 1, 5000); // 5 sec max wait for SIGKILL
       if (r > 0 && (pfd_poll.revents & POLLIN)) {
@@ -55,7 +55,7 @@ static int stop_rootfs_with_timeout(const asc_rt_t *rt, int timeout_seconds) {
     }
 
     if (!stopped) {
-      log_warn("优雅关闭超时，正在发送 SIGKILL 信号...");
+      log_warn("超时，正在发送 SIGKILL 信号...");
       kill(pid, SIGKILL);
 
       bool killed = false;
