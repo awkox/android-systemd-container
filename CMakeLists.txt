@@ -53,7 +53,6 @@ add_executable(asc
 	src/platform/devices.cpp
 	src/platform/netlink.cpp
 	src/platform/pty.cpp
-	src/platform/virtual.cpp
 
 	# Utils - helpers
 	src/utils/fileio.cpp

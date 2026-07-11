@@ -8,7 +8,6 @@ int cgroup_host_bootstrap();
 int setup_cgroups();
 void cgroup_cleanup_container(const char *container_name);
 bool cg_word_in_list(const char *list, const char *name);
-int cgroup_apply_limits(cfg_t *cfg);
 int cgroup_get_usage(const char *container_name, long long *mem, long long *cpu_us, long long *pids);
 
 #endif

@@ -64,43 +64,6 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
     printf("  (无)\n");
   }
 
-  if (!trust_cfg_pid &&
-      (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit)) {
-    long long mu = -1, cu = -1, pu = -1;
-    cgroup_get_usage(cfg->rt.container_name, &mu, &cu, &pu);
-    printf("\n资源限制与使用状态:\n");
-
-    if (cfg->conf.memory_limit) {
-      char used[32] = "?", lim[32];
-      if (mu >= 0)
-        format_size(mu, used, sizeof(used));
-      format_size(cfg->conf.memory_limit, lim, sizeof(lim));
-      printf("  内存   : %s / %s\n", used, lim);
-    }
-    if (cfg->conf.cpu_quota) {
-      const long long period = cfg->conf.cpu_period > 0 ? cfg->conf.cpu_period : 100000;
-      const double cores = (double)cfg->conf.cpu_quota / period;
-      printf("  CPU    : %.2f 核心", cores);
-      if (cu >= 0) {
-        const long uptime = get_container_uptime(pid);
-        if (uptime > 0) {
-          const double usage_sec = (double)cu / 1e6;
-          const double avg_util = usage_sec / (double)uptime / cores * 100.0;
-          printf(" (平均负载: %.1f%%)", avg_util);
-        } else {
-          printf(" (已用: %.3fs)", (double)cu / 1e6);
-        }
-      }
-      printf("\n");
-    }
-    if (cfg->conf.pids_limit) {
-      printf("  PIDs   : 限制上限 %lld", cfg->conf.pids_limit);
-      if (pu >= 0)
-        printf(" (当前数量: %lld)", pu);
-      printf("\n");
-    }
-  }
-
   printf("\n");
   return 0;
 }

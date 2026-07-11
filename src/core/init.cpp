@@ -167,14 +167,6 @@ void internal_boot(cfg_t *cfg) {
   /* 在 pivot_root 后应用监狱掩码保护 */
   apply_jail_mask(cfg->conf.privileged_mask);
 
-  /* 12. 资源可见性虚拟化 */
-  if (is_mountpoint("proc")) {
-    if (virtualize_init(cfg) < 0)
-      log_warn("[VIRT] 虚拟化资源初始化失败，将以无虚拟化状态继续运行。");
-  } else {
-    log_warn("[VIRT] /proc 尚未挂载，跳过资源虚拟化阶段。");
-  }
-
   if (sethostname("(none)", 6) < 0) {
     log_warn("重置主机名失败: %s", strerror(errno));
   }
@@ -186,7 +178,7 @@ void internal_boot(cfg_t *cfg) {
   printf("\r\n");
   fflush(stdout);
 
-  /* 13. 清理卸载旧的根文件系统目录 */
+  /* 12. 清理卸载旧的根文件系统目录 */
   if (!used_ms_move) {
     if (umount2("/.old_root", MNT_DETACH) < 0)
       log_warn("卸载 /.old_root 失败: %s", strerror(errno));
@@ -196,7 +188,7 @@ void internal_boot(cfg_t *cfg) {
     fs::remove("/.old_root");
   }
 
-  /* 14. 清除环境变量并设置默认值 */
+  /* 13. 清除环境变量并设置默认值 */
   clearenv();
   setenv("container", PROJECT_NAME, 1);
 
@@ -208,7 +200,7 @@ void internal_boot(cfg_t *cfg) {
 
   apply_capability_hardening(cfg->conf.privileged_mask);
 
-  /* 15. 重定向标准输入输出至 /dev/console
+  /* 14. 重定向标准输入输出至 /dev/console
    * 使用局部代码块，防止 console_fd 触发 C++ 的 goto 跳跃错误 */
   {
     const int console_fd = open("/dev/console", O_RDWR);

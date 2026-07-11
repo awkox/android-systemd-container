@@ -25,19 +25,6 @@ static bool parse_bool(const char *val) {
   return false;
 }
 
-/* 
- * 安全的正整数解析器：使用具备完整错误检查的 strtoll。
- * 若发生任何错误（溢出、为空、非数字、负数）则返回 -1。
- */
-static long long parse_ll_positive(const char *val) {
-  char *end;
-  errno = 0;
-  const long long v = strtoll(val, &end, 10);
-  if (errno || end == val || *end != '\0' || v <= 0)
-    return -1;
-  return v;
-}
-
 static int parse_privileged(std::string_view value) {
   int mask = 0;
   if (value.empty()) return mask;
@@ -99,30 +86,6 @@ int config_load(const fs::path& config_path, cfg_t *cfg) {
       safe_strncpy(conf->rootfs_img_path, val, sizeof(conf->rootfs_img_path));
     } else if (strcmp(key, "block_nested_ns") == 0) {
       conf->block_nested_ns = parse_bool(val);
-    } else if (strcmp(key, "memory_limit") == 0) {
-      const long long v = parse_ll_positive(val);
-      if (v > 0)
-        conf->memory_limit = v;
-      else
-        log_warn("配置警告: 忽略无效的 memory_limit '%s'", val);
-    } else if (strcmp(key, "cpu_quota") == 0) {
-      const long long v = parse_ll_positive(val);
-      if (v > 0)
-        conf->cpu_quota = v;
-      else
-        log_warn("配置警告: 忽略无效的 cpu_quota '%s'", val);
-    } else if (strcmp(key, "cpu_period") == 0) {
-      const long long v = parse_ll_positive(val);
-      if (v > 0)
-        conf->cpu_period = v;
-      else
-        log_warn("配置警告: 忽略无效的 cpu_period '%s'", val);
-    } else if (strcmp(key, "pids_limit") == 0) {
-      const long long v = parse_ll_positive(val);
-      if (v > 0)
-        conf->pids_limit = v;
-      else
-        log_warn("配置警告: 忽略无效的 pids_limit '%s'", val);
     } else if (strcmp(key, "privileged") == 0) {
       conf->privileged_mask = parse_privileged(val);
     } else if (strcmp(key, "custom_init") == 0) {
@@ -152,14 +115,6 @@ static void config_serialize_known(FILE *f, const asc_conf_t *conf) {
   }
 
   fprintf(f, "block_nested_ns=%d\n", conf->block_nested_ns);
-  if (conf->memory_limit > 0)
-    fprintf(f, "memory_limit=%lld\n", conf->memory_limit);
-  if (conf->cpu_quota > 0)
-    fprintf(f, "cpu_quota=%lld\n", conf->cpu_quota);
-  if (conf->cpu_period > 0)
-    fprintf(f, "cpu_period=%lld\n", conf->cpu_period);
-  if (conf->pids_limit > 0)
-    fprintf(f, "pids_limit=%lld\n", conf->pids_limit);
 
   if (conf->privileged_mask > 0) {
     char mask_str[256];

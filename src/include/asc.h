@@ -22,7 +22,6 @@
 #include "platform/devices.h"
 #include "platform/netlink.h"
 #include "platform/pty.h"
-#include "platform/virtual.h"
 
 #include "utils/log.h"
 #include "utils/fileio.h"

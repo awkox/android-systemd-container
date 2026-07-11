@@ -112,11 +112,6 @@ typedef struct {
   bool isolation_network;
   bool block_nested_ns;
   int privileged_mask;
-
-  long long memory_limit;
-  long long pids_limit;
-  long long cpu_quota;
-  long long cpu_period;
 } asc_conf_t;
 
 typedef struct {

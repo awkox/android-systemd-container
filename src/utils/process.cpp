@@ -42,6 +42,12 @@ bool is_container_init(const pid_t pid) {
   return st_pid.st_ino != st_host.st_ino;
 }
 
+unsigned long get_pid_ns_inode(const pid_t pid) {
+  struct stat st;
+  fs::path path = proc_dir / std::to_string(pid) / "ns/pid";
+  return stat(path.c_str(), &st) == 0 ? st.st_ino : 0UL;
+}
+
 long get_container_uptime(const pid_t pid) {
   if (pid <= 0)
     return -1;

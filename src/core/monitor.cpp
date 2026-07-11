@@ -31,45 +31,8 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
 
   prctl(PR_SET_NAME, "[ds-monitor]", 0, 0, 0);
 
-  /* Cgroup V2 强制引导逻辑 */
-  if (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit) {
-    char enable[64] = "";
-    int eoff = 0;
-    if (auto content = read_file_cpp("/sys/fs/cgroup/cgroup.controllers")) {
-      const struct {
-        long long limit;
-        const char *controller;
-      } ctrl_map[] = {
-        {cfg->conf.memory_limit, "memory"},
-        {cfg->conf.cpu_quota,    "cpu"},
-        {cfg->conf.pids_limit,   "pids"},
-      };
-      for (const auto &c : ctrl_map) {
-        if (c.limit && cg_word_in_list(content->c_str(), c.controller)) {
-          const int n = snprintf(enable + eoff,
-                                 sizeof(enable) - static_cast<size_t>(eoff),
-                                 "%s+%s", eoff ? " " : "", c.controller);
-          if (n > 0)
-            eoff += n;
-        }
-      }
-    }
-    if (eoff > 0) {
-      if (write_file("/sys/fs/cgroup/cgroup.subtree_control", enable) < 0)
-        log_warn("[CGROUP] subtree_control (root): %s", strerror(errno));
-      create_directories_with_permission("/sys/fs/cgroup/asc");
-      if (write_file("/sys/fs/cgroup/asc/cgroup.subtree_control", enable) < 0)
-        log_warn("[CGROUP] subtree_control (asc): %s", strerror(errno));
-    }
-  }
-
   fs::path cg_path = project_cgroup_dir / cfg->rt.container_name;
   create_directories_with_permission(cg_path);
-
-  /* 应用资源限制 */
-  if (cgroup_apply_limits(cfg) < 0 &&
-      (cfg->conf.memory_limit || cfg->conf.cpu_quota || cfg->conf.pids_limit))
-    log_warn("[CGROUP] 部分资源限制未能成功应用。");
 
   /* 支持自动重启的引导循环机制 */
   int status = 0;
@@ -198,8 +161,6 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
                                     (int)p, cfg->rt.ns_inode);
           }
         }
-
-        virtualize_update(cfg);
 
         if (sfd >= 0) {
           struct pollfd pfd = {.fd = sfd, .events = POLLIN, .revents = 0};

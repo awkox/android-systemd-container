@@ -130,14 +130,6 @@ bool cg_word_in_list(const char *list, const char *name) {
   return ctrl_in_list(list, name);
 }
 
-static bool ctrl_supported_v2(const fs::path& cg_path, const char *name) {
-  fs::path path = cg_path / "cgroup.controllers";
-  auto content = read_file_cpp(path);
-  if (!content)
-    return false;
-  return ctrl_in_list(content->c_str(), name);
-}
-
 static long long parse_cgroup_ll(const char *buf) {
   if (strncmp(buf, "max", 3) == 0)
     return -1;
@@ -147,61 +139,6 @@ static long long parse_cgroup_ll(const char *buf) {
   if (errno || end == buf)
     return -1;
   return v;
-}
-
-int cgroup_apply_limits(cfg_t *cfg) {
-  if (!cfg->conf.memory_limit && !cfg->conf.cpu_quota && !cfg->conf.pids_limit)
-    return 0;
-
-  int err = 0;
-
-  fs::path cg = project_cgroup_dir / cfg->rt.container_name;
-  if (!fs::exists(cg)) {
-    log_warn("[CGROUP] 未找到容器的专属子组，跳过资源限制应用。");
-    return -1;
-  }
-
-  if (cfg->conf.memory_limit) {
-    if (ctrl_supported_v2(cg, "memory")) {
-      fs::path cg_memory_path = cg / "memory.max";
-      if (write_file(cg_memory_path, std::to_string(cfg->conf.memory_limit).c_str()) < 0) {
-        log_warn("[CGROUP] 写入 memory.max 失败: %s", strerror(errno));
-        cfg->conf.memory_limit = 0;
-        err++;
-      }
-    } else {
-      log_warn("[CGROUP] 宿主机不支持 'memory' 控制器，跳过内存限制。");
-      cfg->conf.memory_limit = 0;
-    }
-  }
-  if (cfg->conf.cpu_quota) {
-    if (ctrl_supported_v2(cg, "cpu")) {
-      const long long period = cfg->conf.cpu_period > 0 ? cfg->conf.cpu_period : 100000;
-      fs::path cg_cpu_path = cg / "cpu.max";
-      if (write_file(cg_cpu_path, std::format("{} {}", cfg->conf.cpu_quota, period).c_str()) < 0) {
-        log_warn("[CGROUP] 写入 cpu.max 失败: %s", strerror(errno));
-        cfg->conf.cpu_quota = 0;
-        err++;
-      }
-    } else {
-      log_warn("[CGROUP] 宿主机不支持 'cpu' 控制器，跳过 CPU 限制。");
-      cfg->conf.cpu_quota = 0;
-    }
-  }
-  if (cfg->conf.pids_limit) {
-    if (ctrl_supported_v2(cg, "pids")) {
-      fs::path cg_pids_path = cg / "pids.max";
-      if (write_file(cg_pids_path, std::to_string(cfg->conf.pids_limit).c_str()) < 0) {
-        log_warn("[CGROUP] 写入 pids.max 失败: %s", strerror(errno));
-        cfg->conf.pids_limit = 0;
-        err++;
-      }
-    } else {
-      log_warn("[CGROUP] 宿主机不支持 'pids' 控制器，跳过 PID 限制。");
-      cfg->conf.pids_limit = 0;
-    }
-  }
-  return err ? -1 : 0;
 }
 
 int cgroup_get_usage(const char *container_name, long long *mem,
