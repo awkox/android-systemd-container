@@ -37,38 +37,39 @@ static int create_devices() {
     fs::remove(device_path, ec); 
 
     if (mknod(device_path.c_str(), mode, dev) < 0) {
-      fs::path host_path = "/" / device_path; 
-      bind_mount(host_path, device_path);
-    } else {
-      chmod(device_path.c_str(), mode & 0777);
-      
-      if (name == "console" || name == "tty") {
-        if (chown(device_path.c_str(), 0, 5) < 0) {
-          // 可以记录日志，或者显式忽略警告
-        }
+      log_error("创建设备节点 %s 失败: %s", device_path.c_str(), strerror(errno));
+      return -1;
+    } 
+    
+    chmod(device_path.c_str(), mode & 0777);
+    if (name == "console" || name == "tty") {
+      if (chown(device_path.c_str(), 0, 5) < 0) {
+        // 可以记录日志，或者显式忽略警告
       }
     }
   }
 
   mkdir("dev/net", 0755);
 
+  // 【修改点 2】: 移除 /dev/net/tun 的 bind_mount 回退
   fs::remove("dev/net/tun");
-  if (mknod("dev/net/tun", S_IFCHR | 0666, makedev(10, 200)) < 0)
-    bind_mount("/dev/net/tun", "dev/net/tun");
-  else
+  if (mknod("dev/net/tun", S_IFCHR | 0666, makedev(10, 200)) < 0) {
+    log_warn("无法创建网络隧道节点 /dev/net/tun: %s", strerror(errno));
+  } else {
     chmod("dev/net/tun", 0666);
+  }
 
+  // 【修改点 3】: 移除 /dev/fuse 的 bind_mount 回退
   fs::remove("dev/fuse");
-  if (mknod("dev/fuse", S_IFCHR | 0666, makedev(10, 229)) < 0)
-    bind_mount("/dev/fuse", "dev/fuse");
-  else
+  if (mknod("dev/fuse", S_IFCHR | 0666, makedev(10, 229)) < 0) {
+    log_warn("无法创建 FUSE 节点 /dev/fuse: %s", strerror(errno));
+  } else {
     chmod("dev/fuse", 0666);
+  }
 
   for (const auto& [target, link] : symlinks) {
     std::error_code ec;
-    
     fs::create_symlink(target, link, ec);
-    
     if (ec && ec != std::errc::file_exists) {
       log_warn("建立 %s 符号链接失败: %s", link, ec.message().c_str());
     }
@@ -80,8 +81,7 @@ static int create_devices() {
 int setup_dev() {
   mkdir("dev", 0755);
 
-  if (domount("none", "dev", "tmpfs", MS_NOSUID | MS_NOEXEC,
-              "size=8M,mode=755") < 0)
+  if (domount("none", "dev", "tmpfs", MS_NOSUID | MS_NOEXEC, "size=8M,mode=755") < 0)
     return -1;
 
   return create_devices();
