@@ -1,6 +1,5 @@
 #include "asc.h"
 
-/* 探测超级块的魔数来识别文件系统类型 */
 const char *detect_fs_type(const fs::path& img_path) {
   auto_close const int fd = open(img_path.c_str(), O_RDONLY | O_CLOEXEC);
   if (fd < 0)
@@ -9,7 +8,6 @@ const char *detect_fs_type(const fs::path& img_path) {
   uint8_t buf[8];
   const char *result = nullptr;
 
-  /* 偏移 0x438: ext2/3/4 (0xEF53 LE 小端) */
   if (pread(fd, buf, 2, 0x438) == 2) {
     const uint16_t m = (uint16_t)buf[0] | (uint16_t)buf[1] << 8;
     if (m == 0xEF53) {
@@ -18,7 +16,6 @@ const char *detect_fs_type(const fs::path& img_path) {
     }
   }
 
-  /* 偏移 0x10040: btrfs ("_BHRfS_M") */
   if (pread(fd, buf, 8, 0x10040) == 8) {
     if (memcmp(buf, "_BHRfS_M", 8) == 0) {
       result = "btrfs";
@@ -30,51 +27,40 @@ out:
 }
 
 /*
- * 获取 LOOP_CTL_GET_FREE 后的 loop 设备节点路径。
- *
- * Android 用户态 (vold): /dev/block/loopN
- * Android Recovery + 桌面 Linux: /dev/loopN
- *
- * 策略: 探测环境偏好的路径，如果 ueventd/udev 有延迟则等待重试，
- * 交叉尝试另一个路径，作为最后手段自己用 mknod 创建 (主设备号 7, 次设备号=devnr)。
+ * 终极优化版 open_loop_dev: 
+ * 1. 0 毫秒延迟（不等待 ueventd）
+ * 2. 100% 设备号精准（通过 sysfs 向内核查询，完美解决 Android 乘以 8 的次设备号偏移）
  */
 static int open_loop_dev(const long devnr, char *path_out, const size_t path_size) {
-  /* Android 优先尝试: /dev/block/loopN */
-  snprintf(path_out, path_size, "/dev/block/loop%ld", devnr);
+  char sysfs_path[128];
+  snprintf(sysfs_path, sizeof(sysfs_path), "/sys/class/block/loop%ld/dev", devnr);
 
-  /* 最多等待 500ms 让 ueventd/udev 创建设备节点 */
-  for (int i = 0; i < 5; i++) {
-    const int fd = open(path_out, O_RDWR | O_CLOEXEC);
-    if (fd >= 0)
-      return fd;
-    usleep(100000);
+  // 1. 同步读取内核分配的确切设备号
+  auto_fclose FILE *f = fopen(sysfs_path, "re");
+  if (!f) {
+    log_error("无法读取 loop%ld 的 sysfs 状态", devnr);
+    return -1;
   }
 
-  /* 跨环境回退 (例如 Recovery 环境表现得像桌面 Linux) */
-  snprintf(path_out, path_size, "/dev/loop%ld", devnr);
+  int major = 0, minor = 0;
+  if (fscanf(f, "%d:%d", &major, &minor) != 2) {
+    log_error("无法解析 loop%ld 的设备号", devnr);
+    return -1;
+  }
 
-  int fd = open(path_out, O_RDWR | O_CLOEXEC);
-  if (fd >= 0)
-    return fd;
+  // 2. 在 /tmp 创建私有的临时节点，绝对避免与宿主机 udev 发生权限和竞态冲突
+  snprintf(path_out, path_size, "/tmp/asc_loop_%ld", devnr);
+  unlink(path_out); // 清理可能的残留
 
-  /* 最后的手段：我们自己创建设备节点 */
-  if (mknod(path_out, S_IFBLK | 0660, makedev(7, (int)devnr)) == 0) {
-    fd = open(path_out, O_RDWR | O_CLOEXEC);
-    if (fd >= 0)
-      return fd;
+  // 3. 使用内核告诉我们的确切设备号创建节点
+  if (mknod(path_out, S_IFBLK | 0600, makedev(major, minor)) == 0) {
+    return open(path_out, O_RDWR | O_CLOEXEC);
   }
 
   return -1;
 }
 
-/*
- * 通过 ioctl 将 img_path 附加到空闲的 loop 设备上。
- * 设定 LO_FLAGS_AUTOCLEAR 标志，让内核在 umount 后自动释放该 loop 设备。
- * 成功时返回打开的 loop_fd（调用方在 mount 之后必须手动关闭）。
- * loop_path_out 里面会填充为了调用 mount() 而准备好的设备节点路径。
- */
-int loop_attach(const fs::path& img_path, char *loop_path_out,
-                       const size_t path_size) {
+int loop_attach(const fs::path& img_path, char *loop_path_out, const size_t path_size) {
   auto_close const int ctl_fd = open("/dev/loop-control", O_RDWR | O_CLOEXEC);
   if (ctl_fd < 0) {
     log_error("打开 /dev/loop-control 失败: %s", strerror(errno));
@@ -83,13 +69,13 @@ int loop_attach(const fs::path& img_path, char *loop_path_out,
 
   const long devnr = ioctl(ctl_fd, LOOP_CTL_GET_FREE);
   if (devnr < 0) {
-    log_error("请求空闲的 loop 设备 (LOOP_CTL_GET_FREE) 失败: %s", strerror(errno));
+    log_error("请求空闲的 loop 设备失败: %s", strerror(errno));
     return -1;
   }
 
   const int loop_fd = open_loop_dev(devnr, loop_path_out, path_size);
   if (loop_fd < 0) {
-    log_error("打开 loop 设备 loop%ld 失败: %s", devnr, strerror(errno));
+    log_error("创建/打开 loop 设备节点失败: %s", strerror(errno));
     return -1;
   }
 
@@ -100,27 +86,17 @@ int loop_attach(const fs::path& img_path, char *loop_path_out,
     return -1;
   }
 
-  if (ioctl(loop_fd, LOOP_SET_FD, img_fd) < 0) {
-    log_error("分配镜像到 loop 失败 (LOOP_SET_FD): %s", strerror(errno));
+  /* 使用 LOOP_CONFIGURE 完成原子的全套挂载配置 */
+  struct loop_config config = {};
+  config.fd = img_fd;
+  config.info.lo_flags = LO_FLAGS_AUTOCLEAR; // 内核会在卸载后自动清理销毁
+  snprintf((char *)config.info.lo_file_name, LO_NAME_SIZE, "%.63s", img_path.c_str());
+
+  if (ioctl(loop_fd, LOOP_CONFIGURE, &config) < 0) {
+    log_error("LOOP_CONFIGURE 绑定失败: %s", strerror(errno));
     close(loop_fd);
     return -1;
   }
 
-  /* AUTOCLEAR: 在 umount 且所有文件描述符关闭后，内核自动释放 loop 设备 */
-  struct loop_info64 li = {};
-  li.lo_flags = LO_FLAGS_AUTOCLEAR;
-  snprintf((char *)li.lo_file_name, LO_NAME_SIZE, "%.63s", img_path.c_str());
-
-  if (ioctl(loop_fd, LOOP_SET_STATUS64, &li) < 0)
-    log_warn("配置 loop 状态失败 (LOOP_SET_STATUS64): %s (将继续执行)", strerror(errno));
-
   return loop_fd;
-}
-
-/* 显式通过 LOOP_CLR_FD 卸载 loop 设备（双重保险） */
-void loop_detach(const fs::path& loop_dev) {
-  auto_close const int fd = open(loop_dev.c_str(), O_RDONLY | O_CLOEXEC);
-  if (fd < 0)
-    return;
-  ioctl(fd, LOOP_CLR_FD, 0);
 }
