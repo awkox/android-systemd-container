@@ -14,8 +14,8 @@ static int create_devices() {
     DeviceConfig{"random",  S_IFCHR | 0666, makedev(1, 8)},
     DeviceConfig{"urandom", S_IFCHR | 0666, makedev(1, 9)},
     DeviceConfig{"tty",     S_IFCHR | 0666, makedev(5, 0)},
-    DeviceConfig{"console", S_IFCHR | 0620, makedev(5, 1)},
     DeviceConfig{"ptmx",    S_IFCHR | 0666, makedev(5, 2)},
+    DeviceConfig{"console", S_IFCHR | 0620, makedev(5, 1)},
   };
 
   for (const auto& [name, mode, dev] : devices) {
@@ -35,22 +35,6 @@ static int create_devices() {
         // 可以记录日志，或者显式忽略警告
       }
     }
-  }
-
-  mkdir("dev/net", 0755);
-
-  fs::remove("dev/net/tun");
-  if (mknod("dev/net/tun", S_IFCHR | 0666, makedev(10, 200)) < 0) {
-    log_warn("无法创建网络隧道节点 /dev/net/tun: %s", strerror(errno));
-  } else {
-    chmod("dev/net/tun", 0666);
-  }
-
-  fs::remove("dev/fuse");
-  if (mknod("dev/fuse", S_IFCHR | 0666, makedev(10, 229)) < 0) {
-    log_warn("无法创建 FUSE 节点 /dev/fuse: %s", strerror(errno));
-  } else {
-    chmod("dev/fuse", 0666);
   }
 
   return 0;
