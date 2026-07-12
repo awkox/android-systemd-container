@@ -88,11 +88,9 @@ int mount_rootfs_img(const fs::path& img_path, const fs::path& mount_point) {
     return -1;
   }
 
-  /* 探测镜像的超级块魔数以识别文件系统类型 */
   const char *fstype = detect_fs_type(img_path);
   if (!fstype) {
-    log_warn("位于 %s 的文件系统未知。仅支持 ext4 和 btrfs。",
-             img_path.c_str());
+    log_warn("位于 %s 的文件系统未知。仅支持 ext4 和 btrfs。", img_path.c_str());
     return -1;
   }
 
@@ -104,21 +102,18 @@ int mount_rootfs_img(const fs::path& img_path, const fs::path& mount_point) {
 
   if (strcmp(fstype, "ext4") == 0) {
     mnt_data = "nodelalloc,errors=remount-ro,init_itable=0";
-  } else if (strcmp(fstype, "btrfs") == 0) {
-    mnt_data = nullptr;
   }
 
   for (int attempt = 0; attempt < 3; attempt++) {
     if (attempt == 0)
-      log_info("正在挂载 %s 格式的镜像 %s 到 %s...", fstype, img_path.c_str(),
-               mount_point.c_str());
+      log_info("正在挂载 %s 格式的镜像 %s 到 %s...", fstype, img_path.c_str(), mount_point.c_str());
     else
-      log_info("正在挂载 %s 格式的镜像 %s 到 %s (第 %d/3 次尝试)...", fstype,
-               img_path.c_str(), mount_point.c_str(), attempt + 1);
+      log_info("正在重试挂载 (第 %d/3 次尝试)...", attempt + 1);
 
     struct stat st;
     const bool is_blk = stat(img_path.c_str(), &st) == 0 && S_ISBLK(st.st_mode);
-    char final_src[PATH_MAX];
+    
+    char final_src[PATH_MAX] = {0}; // 【新增初始化】
     int loop_fd = -1;
     bool success = false;
 
@@ -131,7 +126,6 @@ int mount_rootfs_img(const fs::path& img_path, const fs::path& mount_point) {
     if (is_blk || loop_fd >= 0) {
       const int ret = mount(final_src, mount_point.c_str(), fstype, mnt_flags, mnt_data);
       if (ret == 0) {
-        /* Android 修复：针对部分内核的强制 nosuid 补丁进行读写重挂载 */
         mount(nullptr, mount_point.c_str(), nullptr, MS_REMOUNT | mnt_flags, mnt_data);
         success = true;
       } else {
@@ -139,20 +133,20 @@ int mount_rootfs_img(const fs::path& img_path, const fs::path& mount_point) {
       }
     }
 
-    /* 无论成败，如果打开了 loop_fd 均需要关闭 */
+    // 【修改点】：直接关闭 loop_fd。AUTOCLEAR 机制会接管内核资源的自动释放
     if (loop_fd >= 0) {
       close(loop_fd);
-      /* 如果挂载失败，手工分离；挂载成功内核的 AUTOCLEAR 会负责 */
-      if (!success) {
-        loop_detach(final_src);
-      }
+    }
+
+    // 【修改点】：我们自己 mknod 的临时节点用完即删（无论成败，因为挂载已持有其内核对象引用）
+    if (!is_blk && final_src[0] != '\0') {
+      unlink(final_src);
     }
 
     if (success) {
       return 0;
     }
 
-    /* 准备下一次重试 */
     if (attempt < 2) {
       log_info("将在 1 秒后重试...");
       sync();

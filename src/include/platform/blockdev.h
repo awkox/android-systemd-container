@@ -3,6 +3,5 @@
 
 const char *detect_fs_type(const fs::path& img_path);
 int loop_attach(const fs::path& img_path, char *loop_path_out, const size_t path_size);
-void loop_detach(const fs::path& loop_dev);
 
 #endif
