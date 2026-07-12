@@ -132,43 +132,45 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
     {
       int pfd = syscall(__NR_pidfd_open, init_pid, 0);
       if (pfd < 0) {
-        while (waitpid(init_pid, &status, 0) < 0 && errno == EINTR);
-      } else {
-        sigset_t mask;
-        sigemptyset(&mask);
-        sigaddset(&mask, SIGCHLD);
-        sigprocmask(SIG_BLOCK, &mask, nullptr);
-        auto_close int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+        log_error("pidfd_open失败：%s", strerror(errno));
+        free(stack);
+        _exit(EXIT_FAILURE);
+      }
 
-        struct pollfd pfds[2] = {};
-        pfds[0].fd = pfd; pfds[0].events = POLLIN;
-        pfds[1].fd = sfd; pfds[1].events = POLLIN;
-        int nfds = (sfd >= 0) ? 2 : 1;
-        bool reaped = false;
+      sigset_t mask;
+      sigemptyset(&mask);
+      sigaddset(&mask, SIGCHLD);
+      sigprocmask(SIG_BLOCK, &mask, nullptr);
+      auto_close int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+
+      struct pollfd pfds[2] = {};
+      pfds[0].fd = pfd; pfds[0].events = POLLIN;
+      pfds[1].fd = sfd; pfds[1].events = POLLIN;
+      int nfds = (sfd >= 0) ? 2 : 1;
+      bool reaped = false;
 
       while (1) {
         int r = poll(pfds, nfds, -1);
-          if (r < 0 && errno == EINTR) continue;
+        if (r < 0 && errno == EINTR) continue;
 
-          if (pfds[0].revents & POLLIN) {
+        if (pfds[0].revents & POLLIN) {
+          break;
+        }
+
+        if (nfds == 2 && (pfds[1].revents & POLLIN)) {
+          struct signalfd_siginfo si;
+          while (read(sfd, &si, sizeof(si)) == static_cast<ssize_t>(sizeof(si)))
+            ;
+          pid_t rpid = waitpid(init_pid, &status, WNOHANG);
+          if (rpid == init_pid) {
+            reaped = true;
             break;
           }
-
-          if (nfds == 2 && (pfds[1].revents & POLLIN)) {
-            struct signalfd_siginfo si;
-            while (read(sfd, &si, sizeof(si)) == static_cast<ssize_t>(sizeof(si)))
-              ;
-            pid_t rpid = waitpid(init_pid, &status, WNOHANG);
-            if (rpid == init_pid) {
-              reaped = true;
-              break;
-            }
-          }
         }
-        close(pfd);
-        sigprocmask(SIG_UNBLOCK, &mask, nullptr);
-        if (!reaped) waitpid(init_pid, &status, 0);
       }
+      close(pfd);
+      sigprocmask(SIG_UNBLOCK, &mask, nullptr);
+      if (!reaped) waitpid(init_pid, &status, 0);
     }
     free(stack);
 

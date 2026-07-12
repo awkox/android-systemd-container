@@ -34,13 +34,10 @@ static bool check_pivot_root(void) {
   return true;
 }
 
-static bool check_kernel_version_supported(void) {
-  int major = 0, minor = 0;
-  if (get_kernel_version(&major, &minor) < 0)
-    return false;
-  if (major < MIN_KERNEL_MAJOR)
-    return false;
-  if (major == MIN_KERNEL_MAJOR && minor < MIN_KERNEL_MINOR)
+static bool check_pidfd_supported(void) {
+  // 传一个不存在的负数 PID 给 pidfd_open，如果是 ENOSYS 说明内核不支持
+  // 如果是 EINVAL 或 ESRCH，说明系统调用存在（支持）。
+  if (syscall(__NR_pidfd_open, -1, 0) < 0 && errno == ENOSYS)
     return false;
   return true;
 }
@@ -72,14 +69,11 @@ int check_requirements_hw() {
 
   if (!check_pivot_root()) {
     log_error("当前内核不支持 pivot_root 系统调用");
-    log_info(PROJECT_NAME " 必须在支持 pivot_root(而非 ramfs) 的根文件系统上运行。");
     missing++;
   }
 
-  if (!check_kernel_version_supported()) {
-    log_error("Linux 内核版本太老");
-    log_info(PROJECT_NAME " 至少需要 Linux %d.%d 版本的内核。", MIN_KERNEL_MAJOR,
-             MIN_KERNEL_MINOR);
+  if (!check_pidfd_supported()) {
+    log_error("当前内核不支持 pidfd 系统调用");
     missing++;
   }
 
