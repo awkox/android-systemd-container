@@ -32,11 +32,9 @@ out:
  * 2. 100% 设备号精准（通过 sysfs 向内核查询，完美解决 Android 乘以 8 的次设备号偏移）
  */
 static int open_loop_dev(const long devnr, char *path_out, const size_t path_size) {
-  char sysfs_path[128];
-  snprintf(sysfs_path, sizeof(sysfs_path), "/sys/class/block/loop%ld/dev", devnr);
-
+  const fs::path sysfs_path = std::format("/sys/class/block/loop{}/dev", devnr);
   // 1. 同步读取内核分配的确切设备号
-  auto_fclose FILE *f = fopen(sysfs_path, "re");
+  auto_fclose FILE *f = fopen(sysfs_path.c_str(), "re");
   if (!f) {
     log_error("无法读取 loop%ld 的 sysfs 状态", devnr);
     return -1;
@@ -48,7 +46,7 @@ static int open_loop_dev(const long devnr, char *path_out, const size_t path_siz
     return -1;
   }
 
-  // 2. 在 /tmp 创建私有的临时节点，绝对避免与宿主机 udev 发生权限和竞态冲突
+  // 2. 在 /dev 创建私有的临时节点，绝对避免与宿主机 udev 发生权限和竞态冲突
   snprintf(path_out, path_size, "/dev/asc_loop_%ld", devnr);
   unlink(path_out); // 清理可能的残留
 
