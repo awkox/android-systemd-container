@@ -6,11 +6,6 @@ struct DeviceConfig {
     dev_t dev;
 };
 
-struct SymlinkPair {
-    const char* target;
-    const char* link;
-};
-
 static int create_devices() {
   static const std::array devices{
     DeviceConfig{"null",    S_IFCHR | 0666, makedev(1, 3)},
@@ -21,13 +16,6 @@ static int create_devices() {
     DeviceConfig{"tty",     S_IFCHR | 0666, makedev(5, 0)},
     DeviceConfig{"console", S_IFCHR | 0620, makedev(5, 1)},
     DeviceConfig{"ptmx",    S_IFCHR | 0666, makedev(5, 2)},
-  };
-  
-  constexpr std::array symlinks{
-    SymlinkPair{"/proc/self/fd",   "dev/fd"},
-    SymlinkPair{"/proc/self/fd/0", "dev/stdin"},
-    SymlinkPair{"/proc/self/fd/1", "dev/stdout"},
-    SymlinkPair{"/proc/self/fd/2", "dev/stderr"}
   };
 
   for (const auto& [name, mode, dev] : devices) {
@@ -51,7 +39,6 @@ static int create_devices() {
 
   mkdir("dev/net", 0755);
 
-  // 【修改点 2】: 移除 /dev/net/tun 的 bind_mount 回退
   fs::remove("dev/net/tun");
   if (mknod("dev/net/tun", S_IFCHR | 0666, makedev(10, 200)) < 0) {
     log_warn("无法创建网络隧道节点 /dev/net/tun: %s", strerror(errno));
@@ -59,7 +46,6 @@ static int create_devices() {
     chmod("dev/net/tun", 0666);
   }
 
-  // 【修改点 3】: 移除 /dev/fuse 的 bind_mount 回退
   fs::remove("dev/fuse");
   if (mknod("dev/fuse", S_IFCHR | 0666, makedev(10, 229)) < 0) {
     log_warn("无法创建 FUSE 节点 /dev/fuse: %s", strerror(errno));
@@ -67,13 +53,12 @@ static int create_devices() {
     chmod("dev/fuse", 0666);
   }
 
-  for (const auto& [target, link] : symlinks) {
-    std::error_code ec;
-    fs::create_symlink(target, link, ec);
-    if (ec && ec != std::errc::file_exists) {
-      log_warn("建立 %s 符号链接失败: %s", link, ec.message().c_str());
-    }
-  }
+  /* 
+   * [移除] 遵循 systemd CONTAINER_INTERFACE.md 规范:
+   * 已移除对 /dev/fd, /dev/stdin, /dev/stdout, /dev/stderr 的手动符号链接创建。
+   * 因为作为专业的 systemd 容器引擎，应当交由 systemd 的 systemd-tmpfiles 
+   * 或 mount_setup 阶段自行接管这些标准输入输出流的链接。
+   */
 
   return 0;
 }
@@ -116,7 +101,6 @@ int setup_devpts() {
     return -1;
   }
 
-  // 3. 提取 ptmx 虚拟化逻辑为 Lambda，展平深深的 if 嵌套
   auto setup_ptmx_fallback = [&]() -> bool {
     std::error_code ec;
     // 策略 1: Bind Mount
@@ -143,7 +127,6 @@ int setup_devpts() {
     return false;
   };
 
-  // 4. 执行并检查最终状态
   if (!setup_ptmx_fallback()) {
     log_warn("无法虚拟化 /dev/ptmx，部分伪终端应用可能会失败");
   }
