@@ -93,45 +93,29 @@ int config_load(const fs::path& config_path, cfg_t *cfg) {
   return 0;
 }
 
-static void config_serialize_known(FILE *f, const asc_conf_t *conf) {
-  /* 写入被管理的键 */
-  if (!conf->rootfs_img_path.empty()) {
-    fprintf(f, "rootfs_path=%s\n", conf->rootfs_img_path.c_str());
-  }
-
-  fprintf(f, "block_nested_ns=%d\n", conf->block_nested_ns);
-
-  if (conf->privileged_mask > 0) {
-    std::string mask_str = format_privileged_mask(conf->privileged_mask);
-    fprintf(f, "privileged=%s\n", mask_str.c_str());
-  }
-
-  fprintf(f, "isolation_network=%d\n", conf->isolation_network);
-
-  if (!conf->custom_init.empty()) {
-    fprintf(f, "custom_init=%s\n", conf->custom_init.c_str());
-  }
+static void config_serialize_known(std::ostream &out, const asc_conf_t *conf) {
+  if (!conf->rootfs_img_path.empty())
+    out << "rootfs_path=" << conf->rootfs_img_path << '\n';
+  out << "block_nested_ns=" << conf->block_nested_ns << '\n';
+  if (conf->privileged_mask > 0)
+    out << "privileged=" << format_privileged_mask(conf->privileged_mask) << '\n';
+  out << "isolation_network=" << conf->isolation_network << '\n';
+  if (!conf->custom_init.empty())
+    out << "custom_init=" << conf->custom_init << '\n';
 }
 
 int config_save(const fs::path& config_path, cfg_t *cfg) {
   fs::path temp_path = config_path;
   temp_path += ".tmp";
-
-  /* 步骤 1: 将所有配置写入临时文件 */
-  FILE *f_out = fopen(temp_path.c_str(), "we");
-  if (!f_out)
-    return -1;
-
-  config_serialize_known(f_out, &cfg->conf);
-
-  fclose(f_out);
-
-  /* 步骤 2: 通过原子重命名提交修改 */
+  {
+    std::ofstream out(temp_path);
+    if (!out) return -1;
+    config_serialize_known(out, &cfg->conf);
+  }
   if (rename(temp_path.c_str(), config_path.c_str()) < 0) {
     fs::remove(temp_path);
     return -1;
   }
-
   return 0;
 }
 
