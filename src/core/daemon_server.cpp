@@ -191,7 +191,11 @@ static void handle_session(int conn, req_t *r) {
     signal(SIGHUP, SIG_DFL);
     signal(SIGPIPE, SIG_DFL);
     signal(SIGCHLD, SIG_DFL);
-    _exit(asc_main(r->argc + 1, av));
+
+    int ret = asc_main(r->argc + 1, av);
+    fflush(stdout);
+    fflush(stderr);
+    _exit(ret);
   }
 
   int epfd = epoll_create1(EPOLL_CLOEXEC);

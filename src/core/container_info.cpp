@@ -1,12 +1,5 @@
 #include "asc.h"
 
-static const char *get_architecture(void) {
-  static struct utsname uts;
-  if (uname(&uts) != 0)
-    return "unknown";
-  return uts.machine;
-}
-
 int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
   if (!trust_cfg_pid) {
     config_load_by_name(cfg->rt.container_name, cfg);
@@ -23,9 +16,6 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
     log_error("容器 '%s' 未运行或状态无效。", cfg->rt.container_name.c_str());
     return -1;
   }
-
-  const char *arch = get_architecture();
-  printf("宿主机架构: %s\n", arch);
 
   printf("\n容器: %s (运行中)\n", cfg->rt.container_name.c_str());
   printf("  PID: %d\n", pid);
