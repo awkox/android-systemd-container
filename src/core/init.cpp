@@ -4,7 +4,6 @@ void internal_boot(cfg_t *cfg) {
   /* 定义所有的局部变量以避免 C++ 的 goto 跳跃错误 */
   bool dir_creation_failed = false;
   const char *dirs_to_create[] = {".old_root", "proc", "sys", "run", "tmp"};
-  bool used_ms_move = false;
   unsigned long root_prop = MS_PRIVATE;
   fs::path mount_point = mount_dir / cfg->rt.container_name;
 
@@ -150,14 +149,10 @@ void internal_boot(cfg_t *cfg) {
   fflush(stdout);
 
   /* 12. 清理卸载旧的根文件系统目录 */
-  if (!used_ms_move) {
-    if (umount2("/.old_root", MNT_DETACH) < 0)
-      log_warn("卸载 /.old_root 失败: %s", strerror(errno));
-    else
-      fs::remove("/.old_root");
-  } else {
+  if (umount2("/.old_root", MNT_DETACH) < 0)
+    log_warn("卸载 /.old_root 失败: %s", strerror(errno));
+  else
     fs::remove("/.old_root");
-  }
 
   /* 13. 清除环境变量并设置默认值 */
   clearenv();
