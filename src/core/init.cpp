@@ -120,18 +120,7 @@ void internal_boot(cfg_t *cfg) {
              strerror(errno));
 
   /* 10. 执行根目录无缝切换 (pivot_root) */
-  if (is_ramfs("/")) {
-    log_info("检测到 rootfs/ramfs 宿主机 - 自动回退至 MS_MOVE + chroot 机制");
-    used_ms_move = true;
-    if (mount(".", "/", nullptr, MS_MOVE, nullptr) < 0) {
-      log_error("MS_MOVE 挂载移动失败: %s", strerror(errno));
-      goto boot_fail;
-    }
-    if (chroot(".") < 0) {
-      log_error("MS_MOVE 后的 chroot 失败: %s", strerror(errno));
-      goto boot_fail;
-    }
-  } else if (syscall(SYS_pivot_root, ".", ".old_root") < 0) {
+  if (syscall(SYS_pivot_root, ".", ".old_root") < 0) {
     log_error("pivot_root 系统调用失败: %s", strerror(errno));
     goto boot_fail;
   }
@@ -175,7 +164,9 @@ void internal_boot(cfg_t *cfg) {
   setenv("container", PROJECT_NAME, 1);
 
   /* 应用安全性防护：seccomp 策略与 capabilities 剔除 */
-  seccomp_apply_minimal(cfg->conf.privileged_mask);
+  if (seccomp_apply_minimal(cfg->conf.privileged_mask) < 0) {
+    log_die("Seccomp 安装失败，拒绝启动不安全的容器");
+  }
   android_seccomp_setup(cfg->conf.block_nested_ns &&
       !(cfg->conf.privileged_mask & PRIV_NOSEC),
       cfg->conf.privileged_mask);
