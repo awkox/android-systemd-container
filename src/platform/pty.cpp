@@ -96,16 +96,10 @@ int setup_tios(const int fd, struct termios *old) {
 
   /* Raw 模式 - 尽可能对齐 LXC/SSH 的设置以保证最大兼容性 */
   new_tios.c_iflag |= IGNPAR;
-  new_tios.c_iflag &=
-      static_cast<tcflag_t>(~(ISTRIP | INLCR | IGNCR | ICRNL | IXON | IXANY | IXOFF));
-#ifdef IUCLC
+  new_tios.c_iflag &= static_cast<tcflag_t>(~(ISTRIP | INLCR | IGNCR | ICRNL | IXON | IXANY | IXOFF));
   new_tios.c_iflag &= static_cast<tcflag_t>(~IUCLC);
-#endif
-  new_tios.c_lflag &=
-      static_cast<tcflag_t>(~(TOSTOP | ISIG | ICANON | ECHO | ECHOE | ECHOK | ECHONL));
-#ifdef IEXTEN
+  new_tios.c_lflag &= static_cast<tcflag_t>(~(TOSTOP | ISIG | ICANON | ECHO | ECHOE | ECHOK | ECHONL));
   new_tios.c_lflag &= static_cast<tcflag_t>(~IEXTEN);
-#endif
   /* 禁用输出处理：如果主 PTY 的 OPOST 处于 ONLCR 激活状态，\n 会被转换为 \r\n，
    * 从而破坏 tmux、vim 等终端 UI 工具的转义序列。在沙盒从 PTY 内它会自行设置，所以
    * 在此必须禁用以保证只转换一次。 */
