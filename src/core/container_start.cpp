@@ -88,9 +88,9 @@ bool is_valid_container_pid(const pid_t pid) {
 int start_rootfs(cfg_t *cfg) {
   bool has_side_effects = false;
   bool lock_acquired = false;
-  pid_t existing_pid = 0;
   int sync_pipe[2] = {-1, -1};
   pid_t monitor_pid = -1;
+  pid_t existing_pid = -1;
 
   fs::path lock_path = lock_dir / cfg->rt.container_name;
   if (fs::exists(lock_path)) {
@@ -196,9 +196,6 @@ int start_rootfs(cfg_t *cfg) {
   if (cfg->rt.foreground) {
     return console_monitor_loop(cfg->rt.console.master, monitor_pid, cfg);
   } else {
-    // 直接返回，monitor 负责后续一切
-    log_info("容器 '%s' 已提交至后台 (PID %d, Monitor %d)。",
-             cfg->rt.container_name.c_str(), cfg->rt.container_pid, monitor_pid);
     return 0;
   }
 

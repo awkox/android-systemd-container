@@ -29,17 +29,11 @@ bool create_directories_with_permission(const fs::path& target, mode_t mode) {
   return true;
 }
 
-int write_file(const fs::path& path, const char *content) {
-  const int fd =
-    open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
-  if (fd < 0)
-    return -1;
-
-  const size_t len = strlen(content);
-  const ssize_t w = write_all(fd, content, len);
-  const int close_ret = close(fd);
-
-  return w == static_cast<ssize_t>(len) && close_ret == 0 ? 0 : -1;
+int write_file(const fs::path& path, std::string_view content) {
+    std::ofstream out(path, std::ios::binary);
+    if (!out) return -1;
+    out << content;
+    return out.good() ? 0 : -1;
 }
 
 ssize_t write_all(const int fd, const void *buf, const size_t count) {

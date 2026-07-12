@@ -15,11 +15,11 @@ static char *trim_whitespace(char *str) {
 }
 
 /* 简易的布尔解析器 */
-static bool parse_bool(const char *val) {
-  if (strcasecmp(val, "1") == 0)
+static bool parse_bool(std::string_view val) {
+  if (val == "1")
     return true;
 
-  if (strcasecmp(val, "0") == 0)
+  if (val == "0")
     return false;
 
   return false;
@@ -75,24 +75,24 @@ int config_load(const fs::path& config_path, cfg_t *cfg) {
     }
 
     *equals = '\0';
-    const char *key = trim_whitespace(trimmed);
+    std::string_view key = trim_whitespace(trimmed);
     const char *val = trim_whitespace(equals + 1);
 
-    if (strcmp(key, "rootfs_path") == 0) {
+    if (key == "rootfs_path") {
       conf->rootfs_img_path = val;
-    } else if (strcmp(key, "block_nested_ns") == 0) {
+    } else if (key == "block_nested_ns") {
       conf->block_nested_ns = parse_bool(val);
-    } else if (strcmp(key, "privileged") == 0) {
+    } else if (key == "privileged") {
       conf->privileged_mask = parse_privileged(val);
-    } else if (strcmp(key, "custom_init") == 0) {
+    } else if (key == "custom_init") {
       if (strchr(val, ' '))
         log_warn("配置警告: 忽略包含空格的 custom_init 路径 '%s'", val);
       else
         conf->custom_init = val;
-    } else if (strcmp(key, "isolation_network") == 0) {
+    } else if (key == "isolation_network") {
       conf->isolation_network = parse_bool(val);
     } else {
-      log_warn("配置警告: 忽略未知的配置键 '%s'", key);
+      log_warn("配置警告: 忽略未知的配置键 '%s'", key.data());
     }
   }
   

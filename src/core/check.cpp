@@ -1,6 +1,6 @@
 #include "asc.h"
 
-static bool check_ns(const int flag, const char *name) {
+static bool check_ns(const int flag, std::string_view name) {
   /* 1. 通过 /proc 快速检查内核支持 */
   if (!fs::exists(fs::path("/proc/self/ns") / name))
     return false;

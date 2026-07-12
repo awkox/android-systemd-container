@@ -66,20 +66,12 @@ int mount_rootfs_img(const fs::path& img_path, const fs::path& mount_point) {
     else
       log_info("正在重试挂载 (第 %d/3 次尝试)...", attempt + 1);
 
-    struct stat st;
-    const bool is_blk = stat(img_path.c_str(), &st) == 0 && S_ISBLK(st.st_mode);
-    
     char final_src[PATH_MAX] = {0};
-    int loop_fd = -1;
     bool success = false;
 
-    if (is_blk) {
-      safe_strncpy(final_src, img_path.c_str(), sizeof(final_src));
-    } else {
-      loop_fd = loop_attach(img_path.c_str(), final_src, sizeof(final_src));
-    }
+    int loop_fd = loop_attach(img_path.c_str(), final_src, sizeof(final_src));
 
-    if (is_blk || loop_fd >= 0) {
+    if (loop_fd >= 0) {
       const int ret = mount(final_src, mount_point.c_str(), fstype, mnt_flags, mnt_data);
       if (ret == 0) {
         mount(nullptr, mount_point.c_str(), nullptr, MS_REMOUNT | mnt_flags, mnt_data);
