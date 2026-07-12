@@ -105,11 +105,8 @@ int safe_openat_proc(const pid_t pid, const fs::path& subpath, const int flags, 
   if (dirfd < 0)
     return -1;
 
-  char tmp[PATH_MAX];
-  safe_strncpy(tmp, subpath.c_str(), sizeof(tmp));
-
   char *save = nullptr;
-  const char *comp = strtok_r(tmp, "/", &save);
+  const char *comp = strtok_r(subpath.c_str(), "/", &save);
   const char *next = strtok_r(nullptr, "/", &save);
 
   while (comp && next) {
