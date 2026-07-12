@@ -28,8 +28,7 @@ static void rotate_daemon_log_if_needed(void) {
       }
     }
   } else {
-    const int lfd = open(g_daemon_log_path.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC,
-                   0644);
+    const int lfd = open(g_daemon_log_path.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0644);
     if (lfd >= 0) {
       dup2(lfd, STDOUT_FILENO);
       dup2(lfd, STDERR_FILENO);
