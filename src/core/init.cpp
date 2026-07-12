@@ -4,7 +4,6 @@ void internal_boot(cfg_t *cfg) {
   /* 定义所有的局部变量以避免 C++ 的 goto 跳跃错误 */
   bool dir_creation_failed = false;
   const char *dirs_to_create[] = {".old_root", "proc", "sys", "run", "tmp"};
-  unsigned long root_prop = MS_PRIVATE;
   fs::path mount_point = mount_dir / cfg->rt.container_name;
 
   /* 在隔离挂载命名空间 / 执行 pivot_root 之前，预先打开容器日志文件。
@@ -22,13 +21,8 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* 2. 挂载传播隔离 */
-  if (cfg->conf.privileged_mask & PRIV_SHARED) {
-    /* 开启时：容器内与宿主双向传播 */
-    root_prop = MS_SHARED;
-  }
-  /* 关闭时：默认 root_prop 初始化为 MS_PRIVATE，实现双向隔离 */
-  if (mount(nullptr, "/", nullptr, MS_REC | root_prop, nullptr) < 0) {
-    log_error("无法设置根目录挂载传播模式 (prop=%lu): %s", root_prop, strerror(errno));
+  if (mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) < 0) {
+    log_error("无法设置根目录挂载传播模式 (MS_PRIVATE): %s", strerror(errno));
     goto boot_fail;
   }
 

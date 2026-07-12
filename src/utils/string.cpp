@@ -87,7 +87,6 @@ std::string format_privileged_mask(const int mask) {
         {PRIV_NOMASK, "nomask"},
         {PRIV_NOCAPS, "nocaps"},
         {PRIV_NOSEC,  "noseccomp"},
-        {PRIV_SHARED, "shared"},
     };
 
     for (const auto &[flag, name] : flags) {
