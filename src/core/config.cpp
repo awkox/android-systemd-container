@@ -15,14 +15,8 @@ static char *trim_whitespace(char *str) {
 }
 
 /* 简易的布尔解析器 */
-static bool parse_bool(std::string_view val) {
-  if (val == "1")
-    return true;
-
-  if (val == "0")
-    return false;
-
-  return false;
+static constexpr bool parse_bool(std::string_view val) {
+  return val == "1";
 }
 
 static int parse_privileged(std::string_view value) {
@@ -38,7 +32,7 @@ static int parse_privileged(std::string_view value) {
     // 去除两端空格 (代替原来的 trim_whitespace)
     token.remove_prefix(std::min(token.find_first_not_of(" \t"), token.size()));
     if (!token.empty()) {
-        token.remove_suffix(token.size() - token.find_last_not_of(" \t") - 1);
+      token.remove_suffix(token.size() - token.find_last_not_of(" \t") - 1);
     }
 
     // 无需 strcmp，直接进行 == 对比
