@@ -49,7 +49,7 @@ static int open_loop_dev(const long devnr, char *path_out, const size_t path_siz
   }
 
   // 2. 在 /tmp 创建私有的临时节点，绝对避免与宿主机 udev 发生权限和竞态冲突
-  snprintf(path_out, path_size, "/tmp/asc_loop_%ld", devnr);
+  snprintf(path_out, path_size, "/dev/asc_loop_%ld", devnr);
   unlink(path_out); // 清理可能的残留
 
   // 3. 使用内核告诉我们的确切设备号创建节点
