@@ -143,7 +143,6 @@ void internal_boot(cfg_t *cfg) {
 
   if (cfg->rt.foreground) {
     printf("\r\n(按下 CTRL+ALT+Q 以脱离前台并退出)\r\n");
-    fflush(stdout);
   }
   printf("\r\n");
   fflush(stdout);
