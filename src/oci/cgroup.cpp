@@ -46,25 +46,6 @@ int cgroup_host_bootstrap() {
   return 0;
 }
 
-int setup_cgroups() {
-  // cwd: /mnt/asc/<name>/
-  // 处理系统cgroup
-  if (cgroup_host_bootstrap() < 0) return -1;
-
-  // 处理容器cgroup
-  if (domount("none", "sys/fs/cgroup", "tmpfs",
-              MS_NOSUID | MS_NODEV | MS_NOEXEC, "mode=755,size=16M") < 0)
-    return -1;
-
-  if (mount("cgroup2", "sys/fs/cgroup", "cgroup2",
-            MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) == 0) {
-    return 0;
-  } else {
-    log_error("挂载 cgroup2 失败: %s", strerror(errno));
-    return -1;
-  }
-}
-
 static void rmdir_cgroup_tree(const fs::path& path) {
   std::error_code ec;
   if (!fs::exists(path, ec)) return;

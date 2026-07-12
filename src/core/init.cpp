@@ -99,12 +99,6 @@ void internal_boot(cfg_t *cfg) {
     log_warn("无法将 /sys 重新挂载为只读模式: %s", strerror(errno));
   }
 
-  /* 8. 在锁定 /sys 之后设置 Cgroups */
-  if (setup_cgroups() < 0) {
-    log_error("容器 Cgroups 配置失败。");
-    goto boot_fail;
-  }
-
   if (domount("tmpfs", "run", "tmpfs", MS_NOSUID | MS_NODEV, "mode=755") < 0) {
     log_error("挂载 /run (tmpfs) 失败: %s", strerror(errno));
     goto boot_fail;
@@ -198,7 +192,7 @@ void internal_boot(cfg_t *cfg) {
 
   {
     const char *init_bin = cfg->conf.custom_init.empty() ? DEFAULT_INIT : cfg->conf.custom_init.c_str();
-    const char *init_args[] = {init_bin, nullptr};
+    const char *init_args[] = {init_bin, "systemd.unified_cgroup_hierarchy=1", nullptr};
 
     if (execve(init_bin, const_cast<char *const *>(init_args), environ) < 0) {
       log_error("执行 %s 失败: %s", init_bin, strerror(errno));
