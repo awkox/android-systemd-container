@@ -53,13 +53,6 @@ static int create_devices() {
     chmod("dev/fuse", 0666);
   }
 
-  /* 
-   * [移除] 遵循 systemd CONTAINER_INTERFACE.md 规范:
-   * 已移除对 /dev/fd, /dev/stdin, /dev/stdout, /dev/stderr 的手动符号链接创建。
-   * 因为作为专业的 systemd 容器引擎，应当交由 systemd 的 systemd-tmpfiles 
-   * 或 mount_setup 阶段自行接管这些标准输入输出流的链接。
-   */
-
   return 0;
 }
 
