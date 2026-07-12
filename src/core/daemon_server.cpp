@@ -634,9 +634,6 @@ int daemon_run(const bool foreground) {
   const socklen_t alen = make_addr(&addr);
   if (bind(srv, reinterpret_cast<struct sockaddr *>(&addr), alen) < 0) {
     log_error("daemon 绑定失败 (@%s): %s", SOCK_NAME, strerror(errno));
-    if (errno == EADDRINUSE) {
-      log_info("可能有另一个失效的 " PROJECT_NAME " daemon 残留，请使用 'ps' 检查。");
-    }
     return 1;
   }
 
@@ -673,19 +670,17 @@ int daemon_run(const bool foreground) {
       continue;
     }
 
-    {
-      struct ucred cred;
-      socklen_t clen = sizeof(cred);
-      if (getsockopt(conn, SOL_SOCKET, SO_PEERCRED, &cred, &clen) < 0) {
-        continue;
-      }
+    struct ucred cred;
+    socklen_t clen = sizeof(cred);
+    if (getsockopt(conn, SOL_SOCKET, SO_PEERCRED, &cred, &clen) < 0) {
+      continue;
+    }
 
-      if (cred.uid != 0) {
-        const char *msg = "权限拒绝：仅允许 Root 用户 (uid 0) 连接通信。";
-        send_frame(conn, MSG_ERR, msg, static_cast<uint32_t>(strlen(msg)));
-        send_exit(conn, 1);
-        continue;
-      }
+    if (cred.uid != 0) {
+      const char *msg = "权限拒绝：仅允许 Root 用户 (uid 0) 连接通信。";
+      send_frame(conn, MSG_ERR, msg, static_cast<uint32_t>(strlen(msg)));
+      send_exit(conn, 1);
+      continue;
     }
 
     const pid_t h = fork();
