@@ -23,8 +23,10 @@ void internal_boot(cfg_t *cfg) {
 
   /* 2. 挂载传播隔离 */
   if (cfg->conf.privileged_mask & PRIV_SHARED) {
-    root_prop = MS_SLAVE;
+    /* 开启时：容器内与宿主双向传播 */
+    root_prop = MS_SHARED;
   }
+  /* 关闭时：默认 root_prop 初始化为 MS_PRIVATE，实现双向隔离 */
   if (mount(nullptr, "/", nullptr, MS_REC | root_prop, nullptr) < 0) {
     log_error("无法设置根目录挂载传播模式 (prop=%lu): %s", root_prop, strerror(errno));
     goto boot_fail;
@@ -122,8 +124,16 @@ void internal_boot(cfg_t *cfg) {
     log_error("pivot_root 后的 chdir(\"/\") 失败: %s", strerror(errno));
     goto boot_fail;
   }
-  
+
   // 目前处于根目录
+
+  /* 符合 systemd 的要求：在调用 systemd 作为 PID 1 之前，容器的挂载层级必须是 MS_SHARED。
+   * 如果之前是 MS_PRIVATE（双向隔离），这里会创建一个独立的共享 peer group 供容器内使用。
+   * 如果之前是 MS_SHARED（双向传播），这里会再次确认共享状态。 */
+  if (mount(nullptr, "/", nullptr, MS_REC | MS_SHARED, nullptr) < 0) {
+    log_error("无法将根目录重新挂载为 MS_SHARED (systemd 依赖): %s", strerror(errno));
+    goto boot_fail;
+  }
 
   /* 11. 设置 devpts */
   setup_devpts();
