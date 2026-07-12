@@ -1,5 +1,51 @@
 #include "asc.h"
 
+namespace {
+
+class BpfBuilder {
+public:
+    std::vector<sock_filter> filter;
+
+    void stmt(uint16_t code, uint32_t k) {
+        filter.push_back(BPF_STMT(code, k));
+    }
+
+    void jump(uint16_t code, uint32_t k, uint8_t jt, uint8_t jf) {
+        filter.push_back(BPF_JUMP(code, k, jt, jf));
+    }
+
+    void deny_syscall(uint32_t nr, uint32_t ret = SECCOMP_RET_KILL_PROCESS) {
+        jump(BPF_JMP | BPF_JEQ | BPF_K, nr, 0, 1);
+        stmt(BPF_RET | BPF_K, ret);
+    }
+
+    void validate_arch() {
+        stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch));
+#ifdef __aarch64__
+        jump(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_AARCH64, 1, 0);
+#elifdef __x86_64__
+        jump(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_X86_64, 1, 0);
+#else
+#error "Unsupported architecture"
+#endif
+        stmt(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
+    }
+
+    void load_syscall_nr() {
+        stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
+    }
+
+    int apply() {
+        struct sock_fprog prog = {
+            .len = static_cast<unsigned short>(filter.size()),
+            .filter = filter.data(),
+        };
+        return prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog);
+    }
+};
+
+} // namespace
+
 /**
  * seccomp_apply_minimal()
  *
@@ -10,92 +56,69 @@ int seccomp_apply_minimal(const int privileged_mask) {
   if (privileged_mask & PRIV_NOSEC)
     return 0;
 
-  struct sock_filter filter[78];
-  int curr = 0;
+  BpfBuilder bpf;
 
   /* 1. 验证运行架构 */
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch));
-#ifdef __aarch64__
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_AARCH64, 1, 0);
-#elifdef __x86_64__
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_X86_64, 1, 0);
-#endif
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
+  bpf.validate_arch();
 
   /* 2. 载入 syscall 调用号 */
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
+  bpf.load_syscall_nr();
 
 #ifdef __x86_64__
   /* 3. 阻塞 x32 ABI 兼容层 */
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JGE | BPF_K, 0x40000000, 0, 1);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
+  bpf.jump(BPF_JMP | BPF_JGE | BPF_K, 0x40000000, 0, 1);
+  bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
 #endif
 
   /* 4. 阻止内核模块加载 */
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_init_module, 0, 1);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_finit_module, 0, 1);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_delete_module, 0, 1);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
+  bpf.deny_syscall(SYS_init_module);
+  bpf.deny_syscall(SYS_finit_module);
+  bpf.deny_syscall(SYS_delete_module);
 
   /* 5. 阻止 kexec 热重启内核 */
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_kexec_load, 0, 1);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_kexec_file_load, 0, 1);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS);
+  bpf.deny_syscall(SYS_kexec_load);
+  bpf.deny_syscall(SYS_kexec_file_load);
 
   /* 6. 阻塞 clone3 (防穿透) */
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_clone3, 0, 1);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (ENOSYS & SECCOMP_RET_DATA));
+  bpf.deny_syscall(SYS_clone3, SECCOMP_RET_ERRNO | (ENOSYS & SECCOMP_RET_DATA));
 
   /* 7. unshare(CLONE_NEWUSER) */
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_unshare, 0, 4);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0]));
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, 0x10000000, 0, 1);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
+  bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_unshare, 0, 4);
+  bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0]));
+  bpf.jump(BPF_JMP | BPF_JSET | BPF_K, 0x10000000, 0, 1);
+  bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
+  bpf.load_syscall_nr();
 
   /* 8. clone(CLONE_NEWUSER) */
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_clone, 0, 3);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0]));
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, 0x10000000, 0, 1);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
+  bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_clone, 0, 3);
+  bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0]));
+  bpf.jump(BPF_JMP | BPF_JSET | BPF_K, 0x10000000, 0, 1);
+  bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
 
   /*
    * 9. CVE-2026-31431 ("Copy Fail") - 缓解漏洞的强制性第二层。
    */
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_socket, 0, 4);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0]));
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AF_ALG, 0, 1);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
+  bpf.load_syscall_nr();
+  bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_socket, 0, 4);
+  bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0]));
+  bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, AF_ALG, 0, 1);
+  bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
+  bpf.load_syscall_nr();
 
   /*
    * 10. 阻止宿主机时钟修改
    */
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_settimeofday, 0, 1);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_adjtimex, 0, 1);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_clock_settime, 0, 1);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_clock_adjtime, 0, 1);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
+  bpf.deny_syscall(SYS_settimeofday, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
+  bpf.deny_syscall(SYS_adjtimex, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
+  bpf.deny_syscall(SYS_clock_settime, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
+  bpf.deny_syscall(SYS_clock_adjtime, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
 
   /* 10b. 阻止内核日志的越权读取 */
-  filter[curr++] = (struct sock_filter)BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_syslog, 0, 1);
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
+  bpf.deny_syscall(SYS_syslog, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
 
-  filter[curr++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
+  bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
 
-  struct sock_fprog prog = {
-    .len = (unsigned short)curr,
-    .filter = filter,
-  };
-
-  if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) < 0) {
+  if (bpf.apply() < 0) {
     log_error("[SEC] 无法应用基础的 Seccomp 内核隔离机制: %s", strerror(errno));
     return -1;
   }
@@ -118,69 +141,27 @@ int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask)
   if (!block_nested_ns && major >= 5)
     return 0;
 
-  const struct sock_filter filter_base[] = {
-      BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch)),
-#ifdef __aarch64__
-      BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_AARCH64, 1, 0),
-#elifdef __x86_64__
-      BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_X86_64, 1, 0),
-#endif
-      BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS),
-      BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr)),
-  };
+  BpfBuilder bpf;
 
-  const struct sock_filter filter_keyring[] = {
-      BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_keyctl, 0, 1),
-      BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (ENOSYS & SECCOMP_RET_DATA))
-  };
-
-  const struct sock_filter filter_ns[] = {
-      BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_unshare, 1, 0),
-      BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, SYS_clone, 0, 3),
-      BPF_STMT(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0])),
-      BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, ns_mask, 0, 1),
-      BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA))
-  };
-
-  const struct sock_filter filter_allow[] = {
-      BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW)
-  };
-
-  int filter_len = sizeof(filter_base) / sizeof(struct sock_filter);
-  if (major < 5)
-    filter_len += sizeof(filter_keyring) / sizeof(struct sock_filter);
-  if (block_nested_ns)
-    filter_len += sizeof(filter_ns) / sizeof(struct sock_filter);
-  filter_len += sizeof(filter_allow) / sizeof(struct sock_filter);
-
-  auto_free struct sock_filter *final_filter =
-    static_cast<struct sock_filter *>(malloc(filter_len * sizeof(struct sock_filter)));
-  if (!final_filter)
-    return -1;
-
-  int curr = 0;
-  memcpy(final_filter + curr, filter_base, sizeof(filter_base));
-  curr += sizeof(filter_base) / sizeof(struct sock_filter);
+  bpf.validate_arch();
+  bpf.load_syscall_nr();
 
   if (major < 5) {
-    memcpy(final_filter + curr, filter_keyring, sizeof(filter_keyring));
-    curr += sizeof(filter_keyring) / sizeof(struct sock_filter);
+    bpf.deny_syscall(SYS_keyctl, SECCOMP_RET_ERRNO | (ENOSYS & SECCOMP_RET_DATA));
   }
 
   if (block_nested_ns) {
     log_info("[SEC] 激活 block-nested-namespaces: 已强制拦截后续的命名空间系统调用。");
-    memcpy(final_filter + curr, filter_ns, sizeof(filter_ns));
-    curr += sizeof(filter_ns) / sizeof(struct sock_filter);
+    bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_unshare, 1, 0);
+    bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_clone, 0, 3);
+    bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0]));
+    bpf.jump(BPF_JMP | BPF_JSET | BPF_K, ns_mask, 0, 1);
+    bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
   }
 
-  memcpy(final_filter + curr, filter_allow, sizeof(filter_allow));
+  bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
 
-  struct sock_fprog prog = {
-      .len = (unsigned short)filter_len,
-      .filter = final_filter,
-  };
-
-  if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) < 0) {
+  if (bpf.apply() < 0) {
     log_error("由于未知错误无法应用 Android 附加 Seccomp 滤网: %s", strerror(errno));
     return -1;
   }
