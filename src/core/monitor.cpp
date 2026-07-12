@@ -130,7 +130,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
 
     /* 利用 pidfd (无轮询事件驱动) 高效等待容器退出 */
     {
-      int pfd = syscall(__NR_pidfd_open, init_pid, 0);
+      int pfd = syscall(SYS_pidfd_open, init_pid, 0);
       if (pfd < 0) {
         log_error("pidfd_open失败：%s", strerror(errno));
         free(stack);

@@ -29,7 +29,7 @@ static bool check_pivot_root(void) {
    * 我们通过传递无效指针 (nullptr) 检查该系统调用是否已实现；
    * 如果返回 ENOSYS，说明内核未提供。如果返回 EFAULT 或 EINVAL，说明其存在。 
    */
-  if (syscall(__NR_pivot_root, nullptr, nullptr) < 0 && errno == ENOSYS)
+  if (syscall(SYS_pivot_root, nullptr, nullptr) < 0 && errno == ENOSYS)
     return false;
   return true;
 }
@@ -37,7 +37,7 @@ static bool check_pivot_root(void) {
 static bool check_pidfd_supported(void) {
   // 传一个不存在的负数 PID 给 pidfd_open，如果是 ENOSYS 说明内核不支持
   // 如果是 EINVAL 或 ESRCH，说明系统调用存在（支持）。
-  if (syscall(__NR_pidfd_open, -1, 0) < 0 && errno == ENOSYS)
+  if (syscall(SYS_pidfd_open, -1, 0) < 0 && errno == ENOSYS)
     return false;
   return true;
 }

@@ -19,7 +19,7 @@ static int stop_rootfs_with_timeout(const asc_rt_t *rt, int timeout_seconds) {
 
   log_info("正在停止容器 '%s' (PID %d)...", rt->container_name.c_str(), pid);
 
-  int pfd = syscall(__NR_pidfd_open, pid, 0);
+  int pfd = syscall(SYS_pidfd_open, pid, 0);
   if (pfd < 0) {
     log_error("pidfd_open失败：%s", strerror(errno));
     release_external_lock();
@@ -27,14 +27,13 @@ static int stop_rootfs_with_timeout(const asc_rt_t *rt, int timeout_seconds) {
   }
 
   bool unkillable = false;
-  syscall(__NR_pidfd_send_signal, pfd, SIGRTMIN + 3, nullptr, 0);
+  syscall(SYS_pidfd_send_signal, pfd, SIGRTMIN + 3, nullptr, 0);
 
   struct pollfd pfd_poll = {.fd = pfd, .events = POLLIN, .revents = 0};
   int r = poll(&pfd_poll, 1, timeout_seconds * 1000);
-  if (r > 0 && (pfd_poll.revents & POLLIN)) {
-  } else {
+  if (!(r > 0 && (pfd_poll.revents & POLLIN))) {
     log_warn("超时，正在发送 SIGKILL 信号...");
-    syscall(__NR_pidfd_send_signal, pfd, SIGKILL, nullptr, 0);
+    syscall(SYS_pidfd_send_signal, pfd, SIGKILL, nullptr, 0);
     r = poll(&pfd_poll, 1, 5000); // 5 sec max wait for SIGKILL
     if (!(r > 0 && (pfd_poll.revents & POLLIN))) {
       unkillable = true;
