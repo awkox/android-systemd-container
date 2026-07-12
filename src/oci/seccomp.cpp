@@ -166,11 +166,6 @@ int seccomp_apply_minimal(const int privileged_mask) {
       .filter = filter,
   };
 
-  /* 安全基线：在应用 Seccomp 前必须锁死新特权获取，防止通过恶意 filter 进行 setuid 逃逸 */
-  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) < 0) {
-    log_warn("[SEC] 警告: 无法设置 PR_SET_NO_NEW_PRIVS: %s", strerror(errno));
-  }
-
   if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) < 0) {
     log_warn("[SEC] 无法应用基础的 Seccomp 内核隔离机制: %s", strerror(errno));
     return -1;
@@ -261,11 +256,6 @@ int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask)
       .len = (unsigned short)filter_len,
       .filter = final_filter,
   };
-
-  /* 安全基线：应用 Android 附加 Seccomp 前同样确保 NO_NEW_PRIVS */
-  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) < 0) {
-    // 忽略错误，交由上游或之前的策略处理
-  }
 
   if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog) < 0) {
     log_warn("由于未知错误无法应用 Android 附加 Seccomp 滤网: %s", strerror(errno));
