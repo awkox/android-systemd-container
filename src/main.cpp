@@ -74,10 +74,6 @@ int asc_main(int argc, char **argv) {
     if (argc != 3) goto usage_error;
     name = argv[2];
     is_stateful = true;
-  } else if (strcmp(cmd, "info") == 0) {
-    if (argc != 3) goto usage_error;
-    name = argv[2];
-    is_stateful = true;
   } else if (strcmp(cmd, "help") == 0) {
     if (argc != 2) goto usage_error;
     is_no_root_cmd = true;
@@ -174,11 +170,6 @@ int asc_main(int argc, char **argv) {
 
   if (strcmp(cmd, "stop") == 0) {
     ret = stop_rootfs(&cfg.rt);
-    goto cleanup;
-  }
-
-  if (strcmp(cmd, "info") == 0) {
-    ret = show_info(&cfg, false);
     goto cleanup;
   }
 
