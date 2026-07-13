@@ -41,8 +41,6 @@ static int create_devices() {
 }
 
 int setup_dev() {
-  mkdir("dev", 0755);
-
   if (domount("none", "dev", "tmpfs", MS_NOSUID | MS_NOEXEC, "size=8M,mode=755") < 0)
     return -1;
 

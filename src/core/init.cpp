@@ -4,7 +4,7 @@ void internal_boot(cfg_t *cfg) {
   /* 定义所有的局部变量以避免 C++ 的 goto 跳跃错误 */
   bool dir_creation_failed = false;
   static constexpr auto dirs_to_create = std::to_array<const char*>({
-    ".old_root", "proc", "sys", "run", "tmp"
+    ".old_root", "proc", "sys", "run", "tmp", "dev"
   });
   fs::path mount_point = mount_dir / cfg->rt.container_name;
 
@@ -52,14 +52,8 @@ void internal_boot(cfg_t *cfg) {
   for (const auto dir : dirs_to_create) {
     if (mkdir(dir, 0755) < 0 && errno != EEXIST) {
       log_error("无法创建目录 '%s': %s", dir, strerror(errno));
-      if (strcmp(dir, ".old_root") == 0) {
-        dir_creation_failed = true;
-      }
+      goto boot_fail
     }
-  }
-  if (dir_creation_failed) {
-    log_error("无法创建关键目录 .old_root");
-    goto boot_fail;
   }
 
   /* 6. 配置 /dev (设备节点，或 devtmpfs) */
