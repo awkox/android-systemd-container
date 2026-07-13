@@ -3,7 +3,7 @@
 /* 不依赖 /dev/ptmx 符号链接直接打开 master 与 slave。
  * 对于 4.13+ 内核，使用 TIOCGPTPEER 直接从 master 文件描述符派生打开 slave。
  * 对于 3.x 内核，回退使用 TIOCGPTN + 路径打开的方式。*/
-int asc_openpty(int *master, int *slave, char *name) {
+int asc_openpty(int *master, int *slave, fs::path *name) {
   const int m = open("/dev/ptmx", O_RDWR | O_NOCTTY | O_CLOEXEC);
   if (m < 0)
     return -1;
@@ -18,7 +18,7 @@ int asc_openpty(int *master, int *slave, char *name) {
     if (name) {
       unsigned int ptyno;
       if (ioctl(m, TIOCGPTN, &ptyno) == 0) {
-        snprintf(name, PATH_MAX, "/dev/pts/%u", ptyno);
+        *name = std::format("/dev/pts/{}", ptyno);
       }
     }
   } else {
@@ -28,7 +28,7 @@ int asc_openpty(int *master, int *slave, char *name) {
       goto err;
     fs::path pts_path = fs::path("/dev/pts") / std::to_string(ptyno);
     if (name)
-      snprintf(name, PATH_MAX, "%s", pts_path.c_str());
+      *name = pts_path;
     s = open(pts_path.c_str(), O_RDWR | O_NOCTTY | O_CLOEXEC);
     if (s < 0)
       goto err;
@@ -43,7 +43,7 @@ err:
 }
 
 int terminal_create(struct tty_info *tty) {
-  if (asc_openpty(&tty->master, &tty->slave, tty->name) < 0) {
+  if (asc_openpty(&tty->master, &tty->slave, &tty->name) < 0) {
     log_error("openpty 获取伪终端失败: %s", strerror(errno));
     return -1;
   }

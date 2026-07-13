@@ -96,8 +96,8 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* 9. 在 pivot_root 前绑定挂载控制台 */
-  if (mount(cfg->rt.console.name, "dev/console", nullptr, MS_BIND, nullptr) < 0)
-    log_warn("无法绑定挂载 Console '%s': %s", cfg->rt.console.name,
+  if (mount(cfg->rt.console.name.c_str(), "dev/console", nullptr, MS_BIND, nullptr) < 0)
+    log_warn("无法绑定挂载 Console '%s': %s", cfg->rt.console.name.c_str(),
              strerror(errno));
 
   /* 10. 执行根目录无缝切换 (pivot_root) */

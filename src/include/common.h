@@ -98,7 +98,7 @@ typedef struct {
 struct tty_info {
   int master = -1;
   int slave  = -1;
-  char name[PATH_MAX];
+  fs::path name;
 };
 
 typedef struct {
