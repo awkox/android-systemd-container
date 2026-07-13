@@ -35,11 +35,6 @@ add_executable(asc
 	src/core/state.cpp
 	src/core/check.cpp
 
-	# Core - daemon
-	src/core/daemon_protocol.cpp
-	src/core/daemon_server.cpp
-	src/core/daemon_client.cpp
-
 	# OCI - security & resource control
 	src/oci/caps.cpp
 	src/oci/cgroup.cpp

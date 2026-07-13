@@ -7,8 +7,6 @@
 #include "core/container.h"
 #include "core/init.h"
 #include "core/monitor.h"
-#include "core/daemon_protocol.h"
-#include "core/daemon.h"
 #include "core/check.h"
 #include "core/state.h"
 
