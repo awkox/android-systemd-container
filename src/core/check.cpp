@@ -42,28 +42,26 @@ static bool check_pidfd_supported(void) {
   return true;
 }
 
-// 优化后：一张表搞定
 struct NsCheck {
     int flag;
     std::string_view name;
     std::string_view label;
-    std::string_view desc;
 };
 
 static constexpr auto ns_checks = std::to_array<NsCheck>({
-    {CLONE_NEWNS,  "mnt", "MNT 命名空间", "文件系统隔离"},
-    {CLONE_NEWPID, "pid", "PID 命名空间", "进程环境隔离"},
-    {CLONE_NEWUTS, "uts", "UTS 命名空间", "主机名隔离"},
-    {CLONE_NEWIPC, "ipc", "IPC 命名空间", "IPC 隔离"},
+    {CLONE_NEWNS,     "mnt",    "MNT 命名空间"},
+    {CLONE_NEWPID,    "pid",    "PID 命名空间"},
+    {CLONE_NEWUTS,    "uts",    "UTS 命名空间"},
+    {CLONE_NEWIPC,    "ipc",    "IPC 命名空间"},
+    {CLONE_NEWCGROUP, "cgroup", "CGROUP 命名空间"},
 });
 
 int check_requirements_hw() {
   int missing = 0;
 
-  for (const auto& [flag, name, label, desc] : ns_checks) {
+  for (const auto& [flag, name, label] : ns_checks) {
     if (!check_ns(flag, name)) {
       log_error("当前内核不支持 %s", std::string(label).c_str());
-      log_info("这是实现%s的一项【必须】功能。", std::string(desc).c_str());
       missing++;
     }
   }
