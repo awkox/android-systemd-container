@@ -89,37 +89,3 @@ bool path_has_symlink(const fs::path& path) {
     }
     return false;
 }
-
-int safe_openat_proc(const pid_t pid, const fs::path& subpath, const int flags, const mode_t mode) {
-  if (pid <= 0)
-    return -1;
-
-  fs::path proc_root = proc_dir / std::to_string(pid) / "root";
-  auto_close int dirfd = open(proc_root.c_str(), O_PATH | O_DIRECTORY | O_CLOEXEC);
-  if (dirfd < 0)
-    return -1;
-
-  char tmp[PATH_MAX];
-  safe_strncpy(tmp, subpath.c_str(), sizeof(tmp));
-
-  char *save = nullptr;
-  const char *comp = strtok_r(tmp, "/", &save);
-  const char *next = strtok_r(nullptr, "/", &save);
-
-  while (comp && next) {
-    const int nextfd =
-        openat(dirfd, comp, O_PATH | O_NOFOLLOW | O_DIRECTORY | O_CLOEXEC);
-    if (nextfd < 0)
-      return -1;
-    close(dirfd);
-    dirfd = nextfd;
-    comp = next;
-    next = strtok_r(nullptr, "/", &save);
-  }
-
-  int fd = -1;
-  if (comp)
-    fd = openat(dirfd, comp, flags | O_NOFOLLOW | O_CLOEXEC, mode);
-
-  return fd;
-}
