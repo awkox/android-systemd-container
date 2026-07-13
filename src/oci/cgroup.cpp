@@ -72,7 +72,7 @@ static void rmdir_cgroup_tree(const fs::path& path) {
   }
 
   fs::path events_path = path / "cgroup.events";
-  for (int i = 0; i < 50; i++) {
+  for (auto _ : std::views::iota(0, 50)) {
     if (auto content = read_file_cpp(events_path)) {
       if (strstr(content->c_str(), "populated 0"))
         break;
@@ -81,7 +81,7 @@ static void rmdir_cgroup_tree(const fs::path& path) {
   }
 
   // 原有的不断重试 rmdir 逻辑
-  for (int attempt = 0; attempt < 10; attempt++) {
+  for (auto _ : std::views::iota(0, 10)) {
     if (rmdir(path.string().c_str()) == 0 || errno == ENOENT) return;
     if (errno != EBUSY) return;
     usleep(20000);

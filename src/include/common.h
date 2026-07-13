@@ -20,6 +20,7 @@
 #include <optional>
 #include <vector>
 #include <stdexcept>
+#include <ranges>
 
 #include <sys/epoll.h>
 #include <sys/ioctl.h>

@@ -3,7 +3,9 @@
 void internal_boot(cfg_t *cfg) {
   /* 定义所有的局部变量以避免 C++ 的 goto 跳跃错误 */
   bool dir_creation_failed = false;
-  const char *dirs_to_create[] = {".old_root", "proc", "sys", "run", "tmp"};
+  static constexpr auto dirs_to_create = std::to_array<const char*>({
+    ".old_root", "proc", "sys", "run", "tmp"
+  });
   fs::path mount_point = mount_dir / cfg->rt.container_name;
 
   /* 在隔离挂载命名空间 / 执行 pivot_root 之前，预先打开容器日志文件。
@@ -47,11 +49,10 @@ void internal_boot(cfg_t *cfg) {
   }
 
   /* 5. 预创建标准的系统目录结构 */
-  for (size_t i = 0; i < std::size(dirs_to_create); i++) {
-    if (mkdir(dirs_to_create[i], 0755) < 0 && errno != EEXIST) {
-      log_error("无法创建目录 '%s': %s", dirs_to_create[i],
-                strerror(errno));
-      if (strcmp(dirs_to_create[i], ".old_root") == 0) {
+  for (const auto dir : dirs_to_create) {
+    if (mkdir(dir, 0755) < 0 && errno != EEXIST) {
+      log_error("无法创建目录 '%s': %s", dir, strerror(errno));
+      if (strcmp(dir, ".old_root") == 0) {
         dir_creation_failed = true;
       }
     }

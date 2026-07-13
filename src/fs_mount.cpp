@@ -60,7 +60,8 @@ int mount_rootfs_img(const fs::path& img_path, const fs::path& mount_point) {
   constexpr unsigned long mnt_flags = MS_NOATIME | MS_NODIRATIME;
   const char *mnt_data = (strcmp(fstype, "ext4") == 0) ? "nodelalloc,errors=remount-ro,init_itable=0" : nullptr;
 
-  for (int attempt = 0; attempt < 3; attempt++) {
+  
+  for (int attempt : std::views::iota(0, 3)) {
     if (attempt == 0)
       log_info("正在挂载 %s 格式的镜像 %s 到 %s...", fstype, img_path.c_str(), mount_point.c_str());
     else
