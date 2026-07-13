@@ -95,13 +95,13 @@ int config_load(const fs::path& config_path, cfg_t *cfg) {
 
 static void config_serialize_known(std::ostream &out, const asc_conf_t *conf) {
   if (!conf->rootfs_img_path.empty())
-    out << "rootfs_path=" << conf->rootfs_img_path << '\n';
+    out << "rootfs_path=" << conf->rootfs_img_path.string() << '\n';
   out << "block_nested_ns=" << conf->block_nested_ns << '\n';
   if (conf->privileged_mask > 0)
     out << "privileged=" << format_privileged_mask(conf->privileged_mask) << '\n';
   out << "isolation_network=" << conf->isolation_network << '\n';
   if (!conf->custom_init.empty())
-    out << "custom_init=" << conf->custom_init << '\n';
+    out << "custom_init=" << conf->custom_init.string() << '\n';
 }
 
 int config_save(const fs::path& config_path, cfg_t *cfg) {
