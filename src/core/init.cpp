@@ -1,26 +1,15 @@
 #include "asc.h"
 
+static constexpr auto dirs_to_create = std::to_array<const char*>({
+  ".old_root", "proc", "sys", "dev", "run", "tmp"
+});
+
 void internal_boot(cfg_t *cfg) {
-  /* 定义所有的局部变量以避免 C++ 的 goto 跳跃错误 */
-  bool dir_creation_failed = false;
-  static constexpr auto dirs_to_create = std::to_array<const char*>({
-    ".old_root", "proc", "sys", "run", "tmp", "dev"
-  });
   fs::path mount_point = mount_dir / cfg->rt.container_name;
 
   /* 在隔离挂载命名空间 / 执行 pivot_root 之前，预先打开容器日志文件。
    * 这个文件描述符将在挂载命名空间变更中存活，确保能够捕获所有的底层日志。 */
   open_container_log(cfg->rt.container_name);
-
-  /* 对于启用网络隔离的情况：在隔离的网络命名空间中启动 loopback 回环网卡 */
-  if (cfg->conf.isolation_network) {
-    auto_free nl_ctx_t *nlctx = nl_open();
-    if (nlctx) {
-      nl_link_up(nlctx, "lo");
-      close(nlctx->fd);
-      log_info("[NET] 隔离网络命名空间：loopback 已启动");
-    }
-  }
 
   /* 2. 挂载传播隔离 */
   if (mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) < 0) {
@@ -35,16 +24,14 @@ void internal_boot(cfg_t *cfg) {
     }
   }
   /* 3. 将 rootfs 绑定挂载到其自身 (这是内核 pivot_root 调用的强制要求) */
-  if (mount(mount_point.c_str(), mount_point.c_str(), nullptr,
-            MS_BIND | MS_REC, nullptr) < 0) {
+  if (mount(mount_point.c_str(), mount_point.c_str(), nullptr, MS_BIND | MS_REC, nullptr) < 0) {
     log_error("无法执行自我绑定挂载: %s", strerror(errno));
     goto boot_fail;
   }
 
   /* 4. 设置工作目录为 rootfs */
   if (chdir(mount_point.c_str()) < 0) {
-    log_error("无法 chdir 到 '%s': %s", mount_point.c_str(),
-              strerror(errno));
+    log_error("无法 chdir 到 '%s': %s", mount_point.c_str(), strerror(errno));
     goto boot_fail;
   }
 
@@ -110,7 +97,7 @@ void internal_boot(cfg_t *cfg) {
 
   /* 符合 systemd 的要求：在调用 systemd 作为 PID 1 之前，容器的挂载层级必须是 MS_SHARED。
    * 如果之前是 MS_PRIVATE（双向隔离），这里会创建一个独立的共享 peer group 供容器内使用。
-   * 如果之前是 MS_SHARED（双向传播），这里会再次确认共享状态。 */
+   */
   if (mount(nullptr, "/", nullptr, MS_REC | MS_SHARED, nullptr) < 0) {
     log_error("无法将根目录重新挂载为 MS_SHARED (systemd 依赖): %s", strerror(errno));
     goto boot_fail;
@@ -124,6 +111,16 @@ void internal_boot(cfg_t *cfg) {
 
   if (sethostname("(none)", 6) < 0) {
     log_warn("重置主机名失败: %s", strerror(errno));
+  }
+
+  /* 对于启用网络隔离的情况：在隔离的网络命名空间中启动 loopback 回环网卡 */
+  if (cfg->conf.isolation_network) {
+    auto_free nl_ctx_t *nlctx = nl_open();
+    if (nlctx) {
+      nl_link_up(nlctx, "lo");
+      close(nlctx->fd);
+      log_info("[NET] 隔离网络命名空间：loopback 已启动");
+    }
   }
 
   if (cfg->rt.foreground) {
