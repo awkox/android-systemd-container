@@ -178,7 +178,7 @@ void internal_boot(cfg_t *cfg) {
         }
 
         fchmod(console_fd, 0620);
-        if (fchown(console_fd, 0, DEFAULT_TTY_GID) < 0) {
+        if (fchown(console_fd, 0, 5) < 0) {
         }
         if (console_fd > 2)
           close(console_fd);

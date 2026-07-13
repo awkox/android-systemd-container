@@ -35,11 +35,8 @@ fs::path resolve_path_arg(const fs::path& path) {
     return abs_path.lexically_normal();
 }
 
-void format_uptime(const long uptime_sec, char *buf, const size_t size) {
-  if (uptime_sec < 0) {
-    safe_strncpy(buf, "未知", size);
-    return;
-  }
+std::string format_uptime(const long uptime_sec) {
+  if (uptime_sec < 0) return "未知";
 
   const long d = uptime_sec / 86400;
   const long h = (uptime_sec % 86400) / 3600;
@@ -47,12 +44,12 @@ void format_uptime(const long uptime_sec, char *buf, const size_t size) {
   const long s = uptime_sec % 60;
 
   std::string res;
-  if (d > 0) res += std::to_string(d) + "d ";
-  if (h > 0 || d > 0) res += std::to_string(h) + "h ";
-  if (m > 0 || h > 0 || d > 0) res += std::to_string(m) + "m ";
-  res += std::to_string(s) + "s";
+  if (d > 0) res += std::format("{}d ", d);
+  if (h > 0 || d > 0) res += std::format("{}h ", h);
+  if (m > 0 || h > 0 || d > 0) res += std::format("{}m ", m);
+  res += std::format("{}s", s);
 
-  safe_strncpy(buf, res.c_str(), size);
+  return res;
 }
 
 static bool validate_container_name(std::string_view name, size_t max_len = 256) {

@@ -515,18 +515,15 @@ static void handle_conn(const int conn) {
     }
   }
 
-  {
-    char cmdline[512];
-    size_t off = 0;
-    for (int i = 0; i < req.argc && off < sizeof(cmdline) - 1; i++) {
-      const int n = snprintf(cmdline + off, sizeof(cmdline) - off, "%s%s",
-                       i > 0 ? " " : "", req.argv[i]);
-      if (n > 0)
-        off += static_cast<size_t>(n);
-    }
-    log_info("客户端已连接。 模式: %s",
+  log_info("客户端已连接。 模式: %s",
              (req.flags & REQ_FLAG_PTY) ? "PTY" : "PIPE");
-    log_info("即将执行: %s", cmdline);
+  {
+    std::string cmdline;
+    for (int i = 0; i < req.argc; i++) {
+      if (i > 0) cmdline += " ";
+      cmdline += req.argv[i];
+    }
+    log_info("即将执行: %s", cmdline.c_str());
   }
 
   handle_session(conn, &req);

@@ -23,9 +23,7 @@ int show_info(cfg_t *cfg, const bool trust_cfg_pid) {
   if (!trust_cfg_pid) {
     const long uptime_sec = get_container_uptime(pid);
     if (uptime_sec >= 0) {
-      char uptime_str[128];
-      format_uptime(uptime_sec, uptime_str, sizeof(uptime_str));
-      printf("  运行时长: %s\n", uptime_str);
+      printf("  运行时长: %s\n", format_uptime(uptime_sec).c_str());
     }
   }
 

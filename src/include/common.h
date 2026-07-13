@@ -78,7 +78,6 @@ constexpr int STOP_TIMEOUT = 15;
 constexpr unsigned int RETRY_DELAY_US = 200000;
 constexpr int REBOOT_EXIT = 249;
 constexpr int NL_BUFSIZE = 8192;
-constexpr int DEFAULT_TTY_GID = 5;
 
 // 运行时路径
 #define DEFAULT_INIT "/sbin/init"

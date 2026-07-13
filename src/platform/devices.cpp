@@ -56,18 +56,17 @@ int setup_devpts() {
   
   create_directories_with_permission(pts_path);
 
-  std::string gid_opt = "gid=" + std::to_string(DEFAULT_TTY_GID);
-  std::array<std::string, 5> mount_opts = {
-    gid_opt + ",newinstance,ptmxmode=0666,mode=0620",
+  static constexpr auto mount_opts = std::to_array<const char*>({
+    "gid=5,newinstance,ptmxmode=0666,mode=0620",
     "newinstance,ptmxmode=0666,mode=0620",
-    gid_opt + ",newinstance,mode=0620",
+    "gid=5,newinstance,mode=0620",
     "newinstance,ptmxmode=0666",
     "newinstance"
-  };
+  });
 
   bool mount_success = false;
   for (const auto& opt : mount_opts) {
-    if (domount("devpts", pts_path, "devpts", MS_NOSUID | MS_NOEXEC, opt.c_str()) == 0) {
+    if (domount("devpts", pts_path, "devpts", MS_NOSUID | MS_NOEXEC, opt) == 0) {
       mount_success = true;
       break;
     }
