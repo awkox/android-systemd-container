@@ -7,8 +7,9 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
-
+    runs-on: ubuntu-latest
+    container:
+      image: arm64v8/alpine:latest
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -17,12 +18,11 @@ jobs:
 
       - name: 配置交叉编译环境
         run: |
-          sudo apt update
-          sudo apt install -y gcc g++ cmake
+          apk add --no-cache build-base cmake git
 
       - name: 生成配置文件 (Configuration)
         run: |
-          cmake -S . build
+          cmake -S . build -DCMAKE_BUILD_TYPE=Release
 
       - name: 提取版本号
         id: extract

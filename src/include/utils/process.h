@@ -5,7 +5,6 @@
 
 bool is_container_init(const pid_t pid);
 pid_t find_container_init_pid(std::string_view container_name);
-long get_container_uptime(const pid_t pid);
 unsigned long get_pid_ns_inode(const pid_t pid);
 
 #endif

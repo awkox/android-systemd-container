@@ -48,39 +48,6 @@ unsigned long get_pid_ns_inode(const pid_t pid) {
   return stat(path.c_str(), &st) == 0 ? st.st_ino : 0UL;
 }
 
-long get_container_uptime(const pid_t pid) {
-  if (pid <= 0)
-    return -1;
-
-  long clk_tck = sysconf(_SC_CLK_TCK);
-  if (clk_tck <= 0)
-    clk_tck = 100;
-
-  fs::path stat_path = proc_dir / std::to_string(pid) / "stat";
-  unsigned long long start_ticks = 0;
-  {
-    if (auto content = read_file_cpp(stat_path)) {
-      const char *p = strrchr(content->c_str(), ')');
-      if (p) {
-        sscanf(p + 1, " %*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %*u %*u %*d %*d %*d %*d %*d %*d %llu", &start_ticks);
-      }
-    }
-  }
-  if (start_ticks == 0)
-    return -1;
-
-  {
-    auto_fclose FILE *f = fopen("/proc/uptime", "r");
-    if (!f)
-      return -1;
-    double host_uptime_sec = 0.0;
-    if (fscanf(f, "%lf", &host_uptime_sec) != 1)
-      host_uptime_sec = 0.0;
-    const long uptime_sec = static_cast<long>(host_uptime_sec - static_cast<double>(start_ticks) / static_cast<double>(clk_tck));
-    return uptime_sec < 0 ? 0 : uptime_sec;
-  }
-}
-
 // 优化: O(1) 纯 CgroupV2 目录解析
 pid_t find_container_init_pid(std::string_view container_name) {
   fs::path cg_root = project_cgroup_dir / container_name;
