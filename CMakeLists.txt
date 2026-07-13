@@ -30,7 +30,6 @@ add_executable(asc
 	src/core/config.cpp
 	src/core/container_start.cpp
 	src/core/container_stop.cpp
-	src/core/container_info.cpp
 	src/core/init.cpp
 	src/core/monitor.cpp
 	src/core/state.cpp
