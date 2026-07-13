@@ -94,9 +94,7 @@ void apply_jail_mask(const int privileged_mask) {
         log_warn("[SEC] 无法将安全挂载洞 %s 绑定: %s", path, strerror(errno));
         continue;
       }
-      if (mount(path, path, nullptr,
-                MS_BIND | MS_REMOUNT | MS_NOSUID | MS_NODEV | MS_NOEXEC,
-                nullptr) < 0)
+      if (mount(path, path, nullptr, MS_BIND | MS_REMOUNT | MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0)
         log_warn("[SEC] 无法重新挂载安全挂载洞 %s: %s", path, strerror(errno));
     }
     log_info("[SEC] 已开启 /proc/sys 隔离豁免洞 (保证 hostname/domainname 修改可用)。");
