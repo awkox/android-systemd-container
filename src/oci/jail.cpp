@@ -1,40 +1,36 @@
 #include "asc.h"
 
 /* 必须屏蔽的路径 - 无论在何种模式下，容器都不应访问 */
-static const char *universal_masks[] = {
+static constexpr auto universal_masks = std::to_array<const char*>({
   "/proc/sysrq-trigger",
   "/proc/kcore",
   "/proc/timer_list",
-  nullptr
-};
+});
 
 /* 必须使用 /dev/null 覆盖以屏蔽读取的路径 */
-static const char *universal_nullify[] = {
+static constexpr auto universal_nullify = std::to_array<const char*>({
   "/proc/partitions",
-  nullptr
-};
+});
 
 /* 标准模式下的只读路径 - 允许读取，禁止修改。
  * 覆盖了敏感的 proc 子树和危险的 sys 接口。 */
-static const char *standard_ro[] = {
+static constexpr auto standard_ro = std::to_array<const char*>({
   "/proc/irq",
   "/sys/firmware",
   "/sys/kernel/security",
   "/sys/kernel/debug",
   "/sys/kernel/tracing",
   "/sys/block",
-  nullptr
-};
+});
 
 /* 
  * 故意排除了 /proc/sys/net: 在 host 模式下，这是破坏宿主机网络的可怕途径。
  * 但由于我们在 none 模式下隔离了网络，所以在这里打开安全的通道。
  */
-static const char *rw_holes[] = {
+static constexpr auto rw_holes = std::to_array<const char*>({
   "/proc/sys/kernel/hostname",
   "/proc/sys/kernel/domainname",
-  nullptr
-};
+});
 
 /* 
  * 通过自我挂载并以只读方式重新挂载来屏蔽敏感路径。
@@ -68,17 +64,16 @@ static void nullify_path(const char *path) {
  */
 void apply_jail_mask(const int privileged_mask) {
   if (privileged_mask & PRIV_NOMASK) {
-    log_info(
-        "[SEC] 已激活 privileged=nomask: 跳过 /proc 与 /sys 的 Jail 路径保护。");
+    log_info("[SEC] 已激活 privileged=nomask: 跳过 /proc 与 /sys 的 Jail 路径保护。");
     return;
   }
 
-  for (int i = 0; universal_masks[i]; i++) {
-    mask_path(universal_masks[i]);
+  for (const auto path : universal_masks) {
+    mask_path(path);
   }
 
-  for (int i = 0; universal_nullify[i]; i++) {
-    nullify_path(universal_nullify[i]);
+  for (const auto path : universal_nullify) {
+    nullify_path(path);
   }
 
   /*
@@ -92,25 +87,23 @@ void apply_jail_mask(const int privileged_mask) {
       log_info("[SEC] /proc/sys 现已锁定为只读。");
     }
 
-    for (int i = 0; rw_holes[i]; i++) {
-      if (!fs::exists(rw_holes[i]))
+    for (const auto path : rw_holes) {
+      if (!fs::exists(path))
         continue;
-      if (mount(rw_holes[i], rw_holes[i], nullptr, MS_BIND, nullptr) < 0) {
-        log_warn("[SEC] 无法将安全挂载洞 %s 绑定: %s", rw_holes[i],
-                 strerror(errno));
+      if (mount(path, path, nullptr, MS_BIND, nullptr) < 0) {
+        log_warn("[SEC] 无法将安全挂载洞 %s 绑定: %s", path, strerror(errno));
         continue;
       }
-      if (mount(rw_holes[i], rw_holes[i], nullptr,
+      if (mount(path, path, nullptr,
                 MS_BIND | MS_REMOUNT | MS_NOSUID | MS_NODEV | MS_NOEXEC,
                 nullptr) < 0)
-        log_warn("[SEC] 无法重新挂载安全挂载洞 %s: %s", rw_holes[i],
-                 strerror(errno));
+        log_warn("[SEC] 无法重新挂载安全挂载洞 %s: %s", path, strerror(errno));
     }
     log_info("[SEC] 已开启 /proc/sys 隔离豁免洞 (保证 hostname/domainname 修改可用)。");
   }
 
-  for (int i = 0; standard_ro[i]; i++) {
-    mask_path(standard_ro[i]);
+  for (const auto path : standard_ro) {
+    mask_path(path);
   }
 
   log_info("[SEC] Jail 沙盒挂载限制已启用 (加固 /proc 与 /sys)。");
