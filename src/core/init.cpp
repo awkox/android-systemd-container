@@ -39,7 +39,7 @@ void internal_boot(cfg_t *cfg) {
   for (const auto dir : dirs_to_create) {
     if (mkdir(dir, 0755) < 0 && errno != EEXIST) {
       log_error("无法创建目录 '%s': %s", dir, strerror(errno));
-      goto boot_fail
+      goto boot_fail;
     }
   }
 
@@ -93,6 +93,12 @@ void internal_boot(cfg_t *cfg) {
     goto boot_fail;
   }
 
+  /* 12. 清理卸载旧的根文件系统目录 */
+  if (umount2("/.old_root", MNT_DETACH) < 0)
+    log_warn("卸载 /.old_root 失败: %s", strerror(errno));
+  else
+    unlink("/.old_root");
+
   // 目前处于根目录
 
   /* 符合 systemd 的要求：在调用 systemd 作为 PID 1 之前，容器的挂载层级必须是 MS_SHARED。
@@ -128,12 +134,6 @@ void internal_boot(cfg_t *cfg) {
   }
   printf("\r\n");
   fflush(stdout);
-
-  /* 12. 清理卸载旧的根文件系统目录 */
-  if (umount2("/.old_root", MNT_DETACH) < 0)
-    log_warn("卸载 /.old_root 失败: %s", strerror(errno));
-  else
-    fs::remove("/.old_root");
 
   /* 13. 清除环境变量并设置默认值 */
   clearenv();

@@ -107,23 +107,3 @@ int setup_devpts() {
 
   return 0;
 }
-
-int fix_host_ptys(void) {
-  const char *pts_path = "/dev/pts";
-
-  if (is_mountpoint(pts_path))
-    return 0;
-
-  mkdir(pts_path, 0755);
-
-  if (mount("devpts", pts_path, "devpts", MS_NOSUID | MS_NOEXEC,
-            "gid=5,mode=620") < 0) {
-    if (errno != EBUSY) {
-      log_warn("恢复宿主机 devpts 失败: %s", strerror(errno));
-      return -1;
-    }
-  }
-
-  log_info("宿主机 devpts 已成功恢复挂载 (Recovery 环境修复)。");
-  return 0;
-}

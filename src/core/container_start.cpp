@@ -142,8 +142,6 @@ int start_rootfs(cfg_t *cfg) {
              cfg->rt.container_name.c_str(), strerror(errno));
   }
 
-  fix_host_ptys();
-
   if (terminal_create(&cfg->rt.console) < 0) {
     log_error("无法分配容器控制台 (Console) PTY");
     goto cleanup;
