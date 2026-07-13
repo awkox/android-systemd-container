@@ -29,7 +29,7 @@ int bind_mount(const fs::path& src, const fs::path& tgt) {
 
   struct stat st_tgt;
   if (lstat(tgt.c_str(), &st_tgt) < 0) {
-    if (path_has_symlink(tgt.c_str())) { errno = ELOOP; return -1; }
+    if (path_has_symlink(tgt)) { errno = ELOOP; return -1; }
     if (S_ISDIR(st_src.st_mode)) {
       mkdir(tgt.c_str(), st_src.st_mode & 07777);
       if (chown(tgt.c_str(), st_src.st_uid, st_src.st_gid) < 0) {}

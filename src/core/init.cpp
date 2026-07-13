@@ -149,7 +149,7 @@ void internal_boot(cfg_t *cfg) {
 
   /* 应用安全性防护：seccomp 策略与 capabilities 剔除 */
   if (seccomp_apply_minimal(cfg->conf.privileged_mask) < 0) {
-    log_die("Seccomp 安装失败，拒绝启动不安全的容器");
+    log_die("Seccomp 应用失败，拒绝启动不安全的容器");
   }
   android_seccomp_setup(cfg->conf.block_nested_ns &&
       !(cfg->conf.privileged_mask & PRIV_NOSEC),
