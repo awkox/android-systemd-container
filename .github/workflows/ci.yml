@@ -16,7 +16,8 @@ jobs:
 
       - name: 配置交叉编译环境
         run: |
-          apk add --no-cache build-base cmake git
+          sudo apt update
+          sudo apt install -y gcc g++ cmake
 
       - name: 生成配置文件 (Configuration)
         run: |

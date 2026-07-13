@@ -90,7 +90,6 @@ int mount_rootfs_img(const fs::path& img_path, const fs::path& mount_point) {
     if (success) return 0;
 
     if (attempt < 2) {
-      log_info("将在 1 秒后重试...");
       sync();
       usleep(RETRY_DELAY_US * 5);
     }
