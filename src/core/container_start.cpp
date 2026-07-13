@@ -61,17 +61,8 @@ void cleanup_container_resources(const asc_rt_t *rt, const bool force_cleanup) {
   if (!force_cleanup)
     sync();
 
+  // 只需要清理全局可见的 Cgroup，挂载点和 Loop 设备内核会自动回收
   cgroup_cleanup_container(rt->container_name);
-
-  fs::path mount_point = mount_dir / rt->container_name;
-  if (is_mountpoint(mount_point)) {
-    if (force_cleanup) {
-      umount2(mount_point.c_str(), MNT_DETACH | MNT_FORCE);
-      fs::remove(mount_point);
-    } else {
-      unmount_rootfs_img(mount_point, rt->foreground);
-    }
-  }
 }
 
 bool is_valid_container_pid(const pid_t pid) {
@@ -92,17 +83,11 @@ int start_rootfs(cfg_t *cfg) {
   pid_t monitor_pid = -1;
   pid_t existing_pid = -1;
 
-  fs::path lock_path = lock_dir / cfg->rt.container_name;
-  if (fs::exists(lock_path)) {
+  if (fs::exists(lock_dir / cfg->rt.container_name)) {
     if (acquire_external_lock(cfg->rt.container_name) == 0) {
       lock_acquired = true;
-
-      if (is_mountpoint(mount_dir / cfg->rt.container_name)) {
-        cleanup_container_resources(&cfg->rt, false);
-      } else {
-        release_external_lock();
-        lock_acquired = false;
-      }
+      // 发现僵尸锁，直接清理上一轮可能残留的全局资源 (Cgroup)
+      cleanup_container_resources(&cfg->rt, false);
     }
   }
 

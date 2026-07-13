@@ -92,13 +92,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
       close(pipefd[1]);
       _exit(EXIT_FAILURE);
     }
-
-      fs::path cg_procs = project_cgroup_dir / cfg->rt.container_name / "cgroup.procs";
-      FILE *f = fopen(cg_procs.c_str(), "we");
-      if (f) {
-        fprintf(f, "%d\n", init_pid);
-        fclose(f);
-      }
+      write_file(cg_path / "cgroup.procs", std::format("{}\n", init_pid));
 
       /* 释放 Init 进程，允许它推进引导过程 */
       char wake_char = 'A';
