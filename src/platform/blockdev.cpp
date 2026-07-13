@@ -31,7 +31,7 @@ out:
  * 1. 0 毫秒延迟（不等待 ueventd）
  * 2. 100% 设备号精准（通过 sysfs 向内核查询，完美解决 Android 乘以 8 的次设备号偏移）
  */
-static int open_loop_dev(const long devnr, char *path_out, const size_t path_size) {
+static int open_loop_dev(const long devnr, fs::path& path_out) {
   const fs::path sysfs_path = std::format("/sys/class/block/loop{}/dev", devnr);
   // 1. 同步读取内核分配的确切设备号
   auto_fclose FILE *f = fopen(sysfs_path.c_str(), "re");
@@ -47,18 +47,18 @@ static int open_loop_dev(const long devnr, char *path_out, const size_t path_siz
   }
 
   // 2. 在 /dev 创建私有的临时节点，绝对避免与宿主机 udev 发生权限和竞态冲突
-  snprintf(path_out, path_size, "/dev/asc_loop_%ld", devnr);
-  unlink(path_out); // 清理可能的残留
+  path_out = std::format("/dev/asc_loop_{}", devnr);
+  unlink(path_out.c_str()); // 清理可能的残留
 
   // 3. 使用内核告诉我们的确切设备号创建节点
-  if (mknod(path_out, S_IFBLK | 0600, makedev(major, minor)) == 0) {
-    return open(path_out, O_RDWR | O_CLOEXEC);
+  if (mknod(path_out.c_str(), S_IFBLK | 0600, makedev(major, minor)) == 0) {
+    return open(path_out.c_str(), O_RDWR | O_CLOEXEC);
   }
 
   return -1;
 }
 
-int loop_attach(const fs::path& img_path, char *loop_path_out, const size_t path_size) {
+int loop_attach(const fs::path& img_path, fs::path& loop_path_out) {
   auto_close const int ctl_fd = open("/dev/loop-control", O_RDWR | O_CLOEXEC);
   if (ctl_fd < 0) {
     log_error("打开 /dev/loop-control 失败: %s", strerror(errno));
@@ -71,7 +71,7 @@ int loop_attach(const fs::path& img_path, char *loop_path_out, const size_t path
     return -1;
   }
 
-  const int loop_fd = open_loop_dev(devnr, loop_path_out, path_size);
+  const int loop_fd = open_loop_dev(devnr, loop_path_out);
   if (loop_fd < 0) {
     log_error("创建/打开 loop 设备节点失败: %s", strerror(errno));
     return -1;
