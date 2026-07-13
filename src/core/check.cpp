@@ -42,29 +42,30 @@ static bool check_pidfd_supported(void) {
   return true;
 }
 
+// 优化后：一张表搞定
+struct NsCheck {
+    int flag;
+    std::string_view name;
+    std::string_view label;
+    std::string_view desc;
+};
+
+static constexpr auto ns_checks = std::to_array<NsCheck>({
+    {CLONE_NEWNS,  "mnt", "MNT 命名空间", "文件系统隔离"},
+    {CLONE_NEWPID, "pid", "PID 命名空间", "进程环境隔离"},
+    {CLONE_NEWUTS, "uts", "UTS 命名空间", "主机名隔离"},
+    {CLONE_NEWIPC, "ipc", "IPC 命名空间", "IPC 隔离"},
+});
+
 int check_requirements_hw() {
   int missing = 0;
 
-  /* 功能性命名空间检查 */
-  if (!check_ns(CLONE_NEWNS, "mnt")) {
-    log_error("当前内核不支持 Mount 命名空间 (挂载隔离)");
-    log_info("这是实现文件系统隔离的一项【必须】功能。");
-    missing++;
-  }
-  if (!check_ns(CLONE_NEWPID, "pid")) {
-    log_error("当前内核不支持 PID 命名空间 (进程隔离)");
-    log_info("这是实现进程环境隔离的一项【必须】功能。");
-    missing++;
-  }
-  if (!check_ns(CLONE_NEWUTS, "uts")) {
-    log_error("当前内核不支持 UTS 命名空间 (主机名隔离)");
-    log_info("这是实现主机名隔离的一项【必须】功能。");
-    missing++;
-  }
-  if (!check_ns(CLONE_NEWIPC, "ipc")) {
-    log_error("当前内核不支持 IPC 命名空间 (进程间通信隔离)");
-    log_info("这是实现 IPC 隔离的一项【必须】功能。");
-    missing++;
+  for (const auto& [flag, name, label, desc] : ns_checks) {
+    if (!check_ns(flag, name)) {
+      log_error("当前内核不支持 %s", std::string(label).c_str());
+      log_info("这是实现%s的一项【必须】功能。", std::string(desc).c_str());
+      missing++;
+    }
   }
 
   if (!check_pivot_root()) {
@@ -77,11 +78,9 @@ int check_requirements_hw() {
     missing++;
   }
 
-  if (missing > 0) {
-    printf("\n");
-    log_error("缺少 %d 项【必须】功能 - 无法继续启动过程", missing);
-    return -1;
-  }
-
-  return 0;
+    if (missing > 0) {
+        log_error("缺少 %d 项【必须】功能 - 无法继续启动过程", missing);
+        return -1;
+    }
+    return 0;
 }
