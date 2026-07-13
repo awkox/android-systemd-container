@@ -20,7 +20,7 @@ int acquire_external_lock(std::string_view name) {
   if (fcntl(fd, F_SETLK, &fl) == 0) {
     std::string pid_str = std::format("{}\n", getpid());
     if (ftruncate(fd, 0) == 0) {
-      write_all(fd, pid_str.c_str(), strlen(pid_str.c_str()));
+      write_all(fd, pid_str.c_str(), pid_str.size());
     }
 
     active_lock_fd = fd;
