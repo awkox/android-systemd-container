@@ -6,7 +6,7 @@ struct DeviceConfig {
     dev_t dev;
 };
 
-static int create_devices() {
+int setup_dev() {
   static const std::array devices{
     DeviceConfig{"null",    S_IFCHR | 0666, makedev(1, 3)},
     DeviceConfig{"zero",    S_IFCHR | 0666, makedev(1, 5)},
@@ -40,31 +40,17 @@ static int create_devices() {
   return 0;
 }
 
-int setup_dev() {
-  if (domount("none", "dev", "tmpfs", MS_NOSUID | MS_NOEXEC, "size=8M,mode=755") < 0)
-    return -1;
-
-  return create_devices();
-}
-
 int setup_devpts() {
-  const fs::path pts_path = "/dev/pts";
-  const fs::path pts_ptmx = "/dev/pts/ptmx";
-  const fs::path ptmx_path = "/dev/ptmx";
-  
-  create_directories_with_permission(pts_path);
-
   static constexpr auto mount_opts = std::to_array<const char*>({
-    "gid=5,newinstance,ptmxmode=0666,mode=0620",
+    "newinstance,ptmxmode=0666,mode=0620,gid=5",
     "newinstance,ptmxmode=0666,mode=0620",
-    "gid=5,newinstance,mode=0620",
-    "newinstance,ptmxmode=0666",
     "newinstance"
   });
 
   bool mount_success = false;
+  mkdir("dev/pts", 0777);
   for (const auto& opt : mount_opts) {
-    if (domount("devpts", pts_path, "devpts", MS_NOSUID | MS_NOEXEC, opt) == 0) {
+    if (mount("devpts", "dev/pts", "devpts", MS_NOSUID | MS_NOEXEC, opt) == 0) {
       mount_success = true;
       break;
     }
@@ -78,23 +64,16 @@ int setup_devpts() {
   auto setup_ptmx_fallback = [&]() -> bool {
     std::error_code ec;
     // 策略 1: Bind Mount
-    fs::remove(ptmx_path, ec);
-    if (write_file(ptmx_path, "") == 0) {
-      if (mount(pts_ptmx.c_str(), ptmx_path.c_str(), nullptr, MS_BIND, nullptr) == 0) {
+    fs::remove("dev/ptmx", ec);
+    if (write_file("dev/ptmx", "") == 0) {
+      if (mount("dev/pts/ptmx", "dev/ptmx", nullptr, MS_BIND, nullptr) == 0) {
         return true;
       }
     }
 
     // 策略 2: Symlink
-    fs::remove(ptmx_path, ec);
-    if (symlink("pts/ptmx", ptmx_path.c_str()) == 0 && fs::exists(pts_ptmx, ec)) {
-      return true;
-    }
-
-    // 策略 3: mknod 兜底
-    fs::remove(ptmx_path, ec);
-    if (mknod(ptmx_path.c_str(), S_IFCHR | 0666, makedev(5, 2)) == 0) {
-      chmod(ptmx_path.c_str(), 0666);
+    fs::remove("dev/ptmx", ec);
+    if (symlink("dev/pts/ptmx", "dev/ptmx") == 0 && fs::exists("dev/pts/ptmx", ec)) {
       return true;
     }
 
