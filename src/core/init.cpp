@@ -52,18 +52,10 @@ void internal_boot(cfg_t *cfg) {
       goto boot_fail;
     }
 
-    create_directories_with_permission("sys/fs/cgroup");
+    /* 必须先将 sys 转换为 bind 挂载，切断与全局 superblock 的强绑定，防止影响宿主机 */
+    mount("sys", "sys", nullptr, MS_BIND, nullptr);
 
-    /* 系统级 sysfs 漏洞屏蔽策略 */
-    create_directories_with_permission("sys/devices/virtual/net");
-    if (mount("sys/devices/virtual/net", "sys/devices/virtual/net", nullptr, MS_BIND | MS_REC, nullptr) < 0) {
-      log_warn("无法绑定挂载网络设备路径 (网络功能可能受限)");
-    }
-
-    /* 必须先将 sys 转换为 bind 挂载，切断与全局 superblock 属性的强绑定 */
-    mount("sys", "sys", nullptr, MS_BIND | MS_REC, nullptr);
-
-    /* 在 remount 时必须带上 MS_BIND 标志，明确告诉内核只修改当前挂载点的属性 */
+    /* 明确告诉内核只修改当前顶层挂载点的属性，设为 RO */
     if (mount(nullptr, "sys", nullptr, MS_BIND | MS_REMOUNT | MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
       log_warn("无法将 /sys 重新挂载为只读模式: %s", strerror(errno));
     }
@@ -109,7 +101,10 @@ void internal_boot(cfg_t *cfg) {
 
   // 目前处于根目录
 
-  /* 9. 符合 systemd 的要求：在调用 systemd 作为 PID 1 之前，容器的挂载层级必须是 MS_SHARED。
+  /* 9. 在 pivot_root 后应用监狱掩码保护 */
+  apply_jail_mask(cfg->conf.privileged_mask);
+
+  /* 10. 符合 systemd 的要求：在调用 systemd 作为 PID 1 之前，容器的挂载层级必须是 MS_SHARED。
    * 如果之前是 MS_PRIVATE（双向隔离），这里会创建一个独立的共享 peer group 供容器内使用。
    */
   if (mount(nullptr, "/", nullptr, MS_REC | MS_SHARED, nullptr) < 0) {
@@ -117,22 +112,21 @@ void internal_boot(cfg_t *cfg) {
     goto boot_fail;
   }
 
-  /* 11. 在 pivot_root 后应用监狱掩码保护 */
-  apply_jail_mask(cfg->conf.privileged_mask);
-
-  // 12. hostname
+  // 11. hostname
   if (sethostname("(none)", 6) < 0) {
     log_warn("重置主机名失败: %s", strerror(errno));
   }
 
-  /* 应用安全性防护：seccomp 策略与 capabilities 剔除 */
+  /* 12 应用安全性防护：seccomp 策略与 capabilities 剔除 */
   if (seccomp_apply_minimal(cfg->conf.privileged_mask) < 0) {
     log_die("Seccomp 应用失败，拒绝启动不安全的容器");
   }
+  // 13
   android_seccomp_setup(cfg->conf.block_nested_ns &&
       !(cfg->conf.privileged_mask & PRIV_NOSEC),
       cfg->conf.privileged_mask);
 
+  // 14
   apply_capability_hardening(cfg->conf.privileged_mask);
 
   /* 15. 重定向标准输入输出至 /dev/console
@@ -164,7 +158,7 @@ void internal_boot(cfg_t *cfg) {
     }
   }
 
-  /* 13. 对于启用网络隔离的情况：在隔离的网络命名空间中启动 loopback 回环网卡 */
+  /* 16. 对于启用网络隔离的情况：在隔离的网络命名空间中启动 loopback 回环网卡 */
   if (cfg->conf.isolation_network) {
     auto_free nl_ctx_t *nlctx = nl_open();
     if (nlctx) {
@@ -180,6 +174,7 @@ void internal_boot(cfg_t *cfg) {
   printf("\r\n");
   fflush(stdout);
 
+  // 17
   {
     const char *init_bin = cfg->conf.custom_init.empty() ? DEFAULT_INIT : cfg->conf.custom_init.c_str();
     const char *init_args[] = {init_bin, "systemd.unified_cgroup_hierarchy=1", nullptr};

@@ -51,8 +51,6 @@ static void mask_path(const char *path) {
 static void nullify_path(const char *path) {
   if (!fs::exists(path))
     return;
-  if (!fs::exists("/dev/null"))
-    return;
   mount("/dev/null", path, nullptr, MS_BIND, nullptr);
 }
 
@@ -80,12 +78,7 @@ void apply_jail_mask(const int privileged_mask) {
    * 大规模 /proc/sys 锁定 - 无论是在标准模式还是硬件模式均适用。
    */
   {
-    if (fs::exists("/proc/sys")) {
-      mount("/proc/sys", "/proc/sys", nullptr, MS_BIND, nullptr);
-      mount("/proc/sys", "/proc/sys", nullptr, MS_BIND | MS_REMOUNT | MS_RDONLY,
-            nullptr);
-      log_info("[SEC] /proc/sys 现已锁定为只读。");
-    }
+    mask_path("/proc/sys");
 
     for (const auto path : rw_holes) {
       if (!fs::exists(path))
