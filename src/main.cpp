@@ -98,9 +98,6 @@ int asc_main(int argc, char **argv) {
     }
   }
 
-  /* 为集中式日志引擎设置全局日志上下文 */
-  log_container_name = cfg.rt.container_name;
-
   /* 基础信息命令 */
   if (strcmp(cmd, "help") == 0) {
     print_usage();

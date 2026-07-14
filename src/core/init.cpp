@@ -19,10 +19,6 @@ static constexpr auto proc_universal_masks = std::to_array<const char*>({
 void internal_boot(cfg_t *cfg) {
   fs::path mount_point = mount_dir / cfg->rt.container_name;
 
-  /* 在隔离挂载命名空间 / 执行 pivot_root 之前，预先打开容器日志文件。
-   * 这个文件描述符将在挂载命名空间变更中存活，确保能够捕获所有的底层日志。 */
-  open_container_log(cfg->rt.container_name);
-
   /* 1. 挂载传播隔离 */
   if (mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) < 0) {
     log_error("无法设置根目录挂载传播模式 (MS_PRIVATE): %s", strerror(errno));
@@ -199,5 +195,4 @@ void internal_boot(cfg_t *cfg) {
   }
 
 boot_fail:
-  close_container_log();
 }

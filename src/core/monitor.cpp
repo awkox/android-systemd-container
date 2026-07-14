@@ -69,6 +69,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
         dup2(devnull, 0);
         close(devnull);
       }
+      stdio_redirected = true;
     }
 
     const size_t stack_size = 2 * 1024 * 1024;
@@ -111,17 +112,6 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
 
     if (chdir("/") < 0) {
       log_warn("无法 chdir 到 /: %s", strerror(errno));
-    }
-
-    if (!cfg->rt.foreground && !stdio_redirected) {
-      int devnull = open("/dev/null", O_RDWR);
-      if (devnull >= 0) {
-        dup2(devnull, 0);
-        dup2(devnull, 1);
-        dup2(devnull, 2);
-        close(devnull);
-      }
-      stdio_redirected = true;
     }
 
     /* 利用 pidfd (无轮询事件驱动) 高效等待容器退出 */
@@ -175,24 +165,20 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
     if (WIFEXITED(status)) {
       int code = WEXITSTATUS(status);
       if (code == REBOOT_EXIT) {
-        write_monitor_debug_log(cfg->rt.container_name, "检测到容器内部发起了重启请求");
+        log_info("[MONITOR] 检测到容器内部发起了重启请求");
       } else {
-        write_monitor_debug_log(cfg->rt.container_name,
-                                "检测到容器正常关机 (退出码: %d)", code);
+        log_info("[MONITOR] 检测到容器正常关机 (退出码: %d)", code);
       }
     } else if (WIFSIGNALED(status)) {
-      write_monitor_debug_log(cfg->rt.container_name,
-                              "Init 进程被信号异常终止: %d (%s)",
-                              WTERMSIG(status), strsignal(WTERMSIG(status)));
+      log_warn("[MONITOR] Init 进程被信号异常终止: %d (%s)",
+               WTERMSIG(status), strsignal(WTERMSIG(status)));
     }
 
     /* 重启检测：若为重启请求且无外部锁竞争，则准备下一轮引导 */
     should_reboot = false;
     if (WIFEXITED(status) && WEXITSTATUS(status) == REBOOT_EXIT) {
       if (is_external_lock_active(cfg->rt.container_name)) {
-        write_monitor_debug_log(
-            cfg->rt.container_name,
-            "检测到外部命令锁 - 中止内部重启，移交控制权给 CLI");
+        log_warn("[MONITOR] 检测到外部命令锁 - 中止内部重启，移交控制权给 CLI");
       } else {
         if (cfg->rt.foreground) {
           printf("\n容器 %s 正在重启\n", cfg->rt.container_name.c_str());
@@ -222,14 +208,13 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
   /* 非重启路径：检查外部锁是否已介入 */
   if (!WIFEXITED(status) || WEXITSTATUS(status) != REBOOT_EXIT) {
     if (is_external_lock_active(cfg->rt.container_name)) {
-      write_monitor_debug_log(cfg->rt.container_name,
-                              "检测到外部命令锁 - 将资源清理交由 CLI 完成");
+      log_info("[MONITOR] 检测到外部命令锁 - 将资源清理交由 CLI 完成");
       _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 0);
     }
   }
 
   /* 正常退出清理 */
-  write_monitor_debug_log(cfg->rt.container_name, "监控器正在执行退出清理工作");
+  log_info("[MONITOR] 正在执行退出清理工作");
   cleanup_container_resources(&cfg->rt, false);
 
   _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 0);
