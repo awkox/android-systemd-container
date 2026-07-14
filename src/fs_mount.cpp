@@ -40,6 +40,8 @@ int mount_rootfs_img(const fs::path& img_path, const fs::path& mount_point) {
       }
     }
 
+    unlink(final_src.c_str());
+
     /* 优化重点：直接 close。依托内核 AUTOCLEAR，再也不用手动去管销毁 */
     if (loop_fd >= 0) {
       close(loop_fd);
