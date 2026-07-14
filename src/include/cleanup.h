@@ -16,13 +16,6 @@ extern "C" {
  * 同时解决了 const 变量传递时丢失 const 限定符的警告。
  */
 
-[[maybe_unused]] static void cfree(const void *p) {
-    void **pp = (void **)p;
-    if (pp && *pp) {
-        free(*pp);
-    }
-}
-
 [[maybe_unused]] static void cfclose(const void *p) {
     FILE **f = (FILE **)p;
     if (f && *f) {
@@ -37,19 +30,10 @@ extern "C" {
     }
 }
 
-[[maybe_unused]] static void cclosedir(const void *p) {
-    DIR **d = (DIR **)p;
-    if (d && *d) {
-        closedir(*d);
-    }
-}
-
 }
 
 #define _cleanup_(x)  [[gnu::cleanup(x)]]
-#define auto_free     _cleanup_(cfree)
 #define auto_fclose   _cleanup_(cfclose)
 #define auto_close    _cleanup_(cclose)
-#define auto_closedir _cleanup_(cclosedir)
 
 #endif // ASC_CLEANUP_H

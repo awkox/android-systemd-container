@@ -39,13 +39,14 @@ static void write_to_log_file(std::string_view name, const char *component,
   fs::path log_path = container_log_dir / "log";
   rotate_log(log_path, 2 * 1024 * 1024);
 
-  auto_fclose FILE *f = fopen(log_path.c_str(), "ae");
+  FILE *f = fopen(log_path.c_str(), "ae");
   if (!f)
     return;
 
   fprintf(f, "[%04d-%02d-%02d %02d:%02d:%02d.%03ld] [%s] %s\n",
           tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
           tm.tm_sec, ts.tv_nsec / 1000000, component, raw_msg);
+  fclose(f);
 }
 
 [[gnu::format(printf, 3, 4)]]

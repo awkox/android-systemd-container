@@ -64,9 +64,10 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
   do {
     /* 后台模式的标准输入输出重定向 */
     if (!cfg->rt.foreground && !stdio_redirected) {
-      auto_close int devnull = open("/dev/null", O_RDWR);
+      int devnull = open("/dev/null", O_RDWR);
       if (devnull >= 0) {
         dup2(devnull, 0);
+        close(devnull);
       }
     }
 
@@ -113,11 +114,12 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
     }
 
     if (!cfg->rt.foreground && !stdio_redirected) {
-      auto_close int devnull = open("/dev/null", O_RDWR);
+      int devnull = open("/dev/null", O_RDWR);
       if (devnull >= 0) {
         dup2(devnull, 0);
         dup2(devnull, 1);
         dup2(devnull, 2);
+        close(devnull);
       }
       stdio_redirected = true;
     }
@@ -135,7 +137,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
       sigemptyset(&mask);
       sigaddset(&mask, SIGCHLD);
       sigprocmask(SIG_BLOCK, &mask, nullptr);
-      auto_close int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+      int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
 
       struct pollfd pfds[2] = {};
       pfds[0].fd = pfd; pfds[0].events = POLLIN;
@@ -162,6 +164,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
           }
         }
       }
+      close(sfd);
       close(pfd);
       sigprocmask(SIG_UNBLOCK, &mask, nullptr);
       if (!reaped) waitpid(init_pid, &status, 0);

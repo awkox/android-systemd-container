@@ -2,7 +2,7 @@
 
 bool is_container_init(const pid_t pid) {
   fs::path path = proc_dir / std::to_string(pid) / "status";
-  auto_fclose FILE *f = fopen(path.c_str(), "re");
+  FILE *f = fopen(path.c_str(), "re");
   if (!f)
     return false;
 
@@ -26,6 +26,7 @@ bool is_container_init(const pid_t pid) {
       break;
     }
   }
+  fclose(f);
 
   if (nspid_found)
     return is_init;

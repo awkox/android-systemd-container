@@ -45,7 +45,7 @@ static int parse_privileged(std::string_view value) {
 }
 
 int config_load(const fs::path& config_path, cfg_t *cfg) {
-  auto_fclose FILE *f = fopen(config_path.c_str(), "re");
+  FILE *f = fopen(config_path.c_str(), "re");
   if (!f) {
     if (errno == ENOENT) {
       return 0; /* 配置是可选的 */
@@ -89,7 +89,8 @@ int config_load(const fs::path& config_path, cfg_t *cfg) {
       log_warn("配置警告: 忽略未知的配置键 '%s'", key.data());
     }
   }
-  
+
+  fclose(f);
   return 0;
 }
 

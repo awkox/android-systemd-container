@@ -12,7 +12,9 @@ int get_kernel_version(int *major, int *minor) {
 }
 
 void oom_protect(void) {
-  auto_fclose FILE *f = fopen("/proc/self/oom_score_adj", "w");
-  if (f)
+  FILE *f = fopen("/proc/self/oom_score_adj", "w");
+  if (f) {
     fprintf(f, "-1000\n");
+    fclose(f);
+  }
 }
