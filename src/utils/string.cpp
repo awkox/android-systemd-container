@@ -1,20 +1,5 @@
 #include "asc.h"
 
-void safe_strncpy(char *dst, const char *src, const size_t size) {
-  if (!dst || size == 0)
-    return;
-  if (!src) {
-    dst[0] = '\0';
-    return;
-  }
-  const size_t len = strlen(src);
-  if (len >= size) {
-    log_warn("字符串截断警告: src='%s' (len=%zu) 至 size=%zu", src, len,
-             size);
-  }
-  snprintf(dst, size, "%s", src);
-}
-
 fs::path resolve_path_arg(const fs::path& path) {
     if (path.empty()) return "";
 
