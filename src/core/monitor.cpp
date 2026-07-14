@@ -73,7 +73,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
       stdio_redirected = true;
     }
 
-    const size_t stack_size = 2 * 1024 * 1024;
+    constexpr size_t stack_size = 2 * 1024 * 1024;
     void *stack = malloc(stack_size);
     if (!stack) _exit(EXIT_FAILURE);
     void *stack_top = static_cast<char *>(stack) + stack_size;
@@ -131,13 +131,13 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
       sigprocmask(SIG_BLOCK, &mask, nullptr);
       int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
 
-      struct pollfd pfds[2] = {};
+      pollfd pfds[2] = {};
       pfds[0].fd = pfd; pfds[0].events = POLLIN;
       pfds[1].fd = sfd; pfds[1].events = POLLIN;
       int nfds = (sfd >= 0) ? 2 : 1;
       bool reaped = false;
 
-      while (1) {
+      while (true) {
         int r = poll(pfds, nfds, -1);
         if (r < 0 && errno == EINTR) continue;
 
@@ -146,7 +146,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
         }
 
         if (nfds == 2 && (pfds[1].revents & POLLIN)) {
-          struct signalfd_siginfo si;
+          signalfd_siginfo si;
           while (read(sfd, &si, sizeof(si)) == static_cast<ssize_t>(sizeof(si)))
             ;
           pid_t rpid = waitpid(init_pid, &status, WNOHANG);

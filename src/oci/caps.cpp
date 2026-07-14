@@ -30,8 +30,8 @@ void apply_capability_hardening(const int privileged_mask) {
   }
 
   // 获取当前进程的 Capabilities 集合
-  struct __user_cap_header_struct hdr = {_LINUX_CAPABILITY_VERSION_3, 0};
-  struct __user_cap_data_struct data[2] = {};
+  __user_cap_header_struct hdr = {_LINUX_CAPABILITY_VERSION_3, 0};
+  __user_cap_data_struct data[2] = {};
 
   if (syscall(SYS_capget, &hdr, data) < 0) {
     log_warn("[SEC] 无法获取当前进程 Capabilities: %s", strerror(errno));

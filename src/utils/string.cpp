@@ -65,7 +65,7 @@ std::string format_privileged_mask(const int mask) {
 
     std::string result;
     // 按需调整标志列表即可
-    const std::pair<int, std::string_view> flags[] = {
+    constexpr std::pair<int, std::string_view> flags[] = {
         {PRIV_NOMASK, "nomask"},
         {PRIV_NOCAPS, "nocaps"},
         {PRIV_NOSEC,  "noseccomp"},

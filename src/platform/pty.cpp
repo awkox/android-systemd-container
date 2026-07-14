@@ -42,7 +42,7 @@ err:
   return -1;
 }
 
-int terminal_create(struct tty_info *tty) {
+int terminal_create(tty_info *tty) {
   if (asc_openpty(&tty->master, &tty->slave, &tty->name) < 0) {
     log_error("openpty 获取伪终端失败: %s", strerror(errno));
     return -1;
@@ -80,8 +80,8 @@ int terminal_make_controlling(const int fd) {
  * Termios 终端设置
  * ---------------------------------------------------------------------------*/
 
-int setup_tios(const int fd, struct termios *old) {
-  struct termios new_tios;
+int setup_tios(const int fd, termios *old) {
+  termios new_tios;
 
   if (!isatty(fd))
     return -1;

@@ -84,14 +84,14 @@ int seccomp_apply_minimal(const int privileged_mask) {
 
   /* 7. unshare(CLONE_NEWUSER) */
   bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_unshare, 0, 4);
-  bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0]));
+  bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(seccomp_data, args[0]));
   bpf.jump(BPF_JMP | BPF_JSET | BPF_K, 0x10000000, 0, 1);
   bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
   bpf.load_syscall_nr();
 
   /* 8. clone(CLONE_NEWUSER) */
   bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_clone, 0, 3);
-  bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0]));
+  bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(seccomp_data, args[0]));
   bpf.jump(BPF_JMP | BPF_JSET | BPF_K, 0x10000000, 0, 1);
   bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
 
@@ -100,7 +100,7 @@ int seccomp_apply_minimal(const int privileged_mask) {
    */
   bpf.load_syscall_nr();
   bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_socket, 0, 4);
-  bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0]));
+  bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(seccomp_data, args[0]));
   bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, AF_ALG, 0, 1);
   bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
   bpf.load_syscall_nr();

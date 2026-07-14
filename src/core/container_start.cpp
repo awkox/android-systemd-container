@@ -13,7 +13,7 @@ int acquire_external_lock(std::string_view name) {
   if (fd < 0)
     return -1;
 
-  struct flock fl = {};
+  flock fl = {};
   fl.l_type = F_WRLCK;
   fl.l_whence = SEEK_SET;
 
@@ -54,7 +54,7 @@ bool is_external_lock_active(std::string_view name) {
   fs::path lock_path = lock_dir / name;
 
   auto_close const int fd = open(lock_path.c_str(), O_RDONLY | O_CLOEXEC);
-  return !(fd < 0);
+  return fd >= 0;
 }
 
 void cleanup_container_resources(std::string_view container_name, const bool force_cleanup) {
@@ -122,7 +122,7 @@ int start_rootfs(cfg_t *cfg) {
   }
 
   if (isatty(STDIN_FILENO)) {
-    struct winsize ws;
+    winsize ws;
     if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
       ioctl(cfg->rt.console.master, TIOCSWINSZ, &ws);
   }
@@ -166,9 +166,8 @@ int start_rootfs(cfg_t *cfg) {
 
   if (cfg->rt.foreground) {
     return console_monitor_loop(cfg->rt.console.master, monitor_pid, cfg);
-  } else {
-    return 0;
   }
+  return 0;
 
 cleanup:
   if (has_side_effects) {

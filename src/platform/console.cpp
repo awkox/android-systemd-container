@@ -3,8 +3,8 @@
 int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
   auto_close int epfd = -1, sfd = -1;
   sigset_t mask;
-  struct signalfd_siginfo fdsi;
-  struct epoll_event ev = {}, events[10] = {};
+  signalfd_siginfo fdsi;
+  epoll_event ev = {}, events[10] = {};
   char buf[4096];
   ssize_t n;
   int ret = 0;
@@ -65,12 +65,12 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
   }
 
   /* 设置终端为原始(raw)模式 */
-  struct termios oldtios;
+  termios oldtios;
   int is_tty = setup_tios(STDIN_FILENO, &oldtios);
 
   /* 初始同步窗口尺寸 */
   if (is_tty == 0) {
-    struct winsize ws;
+    winsize ws;
     if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
       ioctl(console_master_fd, TIOCSWINSZ, &ws);
   }
@@ -101,7 +101,8 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
                 setsid();
                 stop_rootfs(cfg->rt.container_name);
                 _exit(0);
-              } else if (bg_pid > 0) {
+              }
+              if (bg_pid > 0) {
                 exit_detected = true;
               }
             }
@@ -181,7 +182,7 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
             running = false;
           }
         } else if (fdsi.ssi_signo == SIGWINCH) {
-          struct winsize ws;
+          winsize ws;
           if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
             ioctl(console_master_fd, TIOCSWINSZ, &ws);
         } else if (fdsi.ssi_signo == SIGINT || fdsi.ssi_signo == SIGTERM) {

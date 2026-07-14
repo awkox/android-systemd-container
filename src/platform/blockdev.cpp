@@ -9,8 +9,7 @@ const char *detect_fs_type(const fs::path& img_path) {
   const char *result = nullptr;
 
   if (pread(fd, buf, 2, 0x438) == 2) {
-    const uint16_t m = (uint16_t)buf[0] | (uint16_t)buf[1] << 8;
-    if (m == 0xEF53) {
+    if (const uint16_t m = static_cast<uint16_t>(buf[0]) | static_cast<uint16_t>(buf[1]) << 8; m == 0xEF53) {
       result = "ext4";
       goto out;
     }
@@ -85,10 +84,10 @@ int loop_attach(const fs::path& img_path, fs::path& loop_path_out) {
   }
 
   /* 使用 LOOP_CONFIGURE 完成原子的全套挂载配置 */
-  struct loop_config config = {};
+  loop_config config = {};
   config.fd = img_fd;
   config.info.lo_flags = LO_FLAGS_AUTOCLEAR; // 内核会在卸载后自动清理销毁
-  snprintf((char *)config.info.lo_file_name, LO_NAME_SIZE, "%.63s", img_path.c_str());
+  snprintf(reinterpret_cast<char *>(config.info.lo_file_name), LO_NAME_SIZE, "%.63s", img_path.c_str());
 
   if (ioctl(loop_fd, LOOP_CONFIGURE, &config) < 0) {
     log_error("LOOP_CONFIGURE 绑定失败: %s", strerror(errno));

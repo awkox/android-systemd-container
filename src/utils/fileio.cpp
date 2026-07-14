@@ -8,11 +8,10 @@ bool create_directories_with_permission(const fs::path& target, mode_t mode) {
   for (const auto& component : normalized_target) {
     current /= component;
 
-    std::error_code ec;
     // 如果当前层级路径不存在，则尝试创建
-    if (!fs::exists(current, ec)) {
+    if (std::error_code ec; !fs::exists(current)) {
       // 调用底层 mkdir。注意：此时生成的实际权限是 (mode & ~umask)
-      if (::mkdir(current.c_str(), mode) != 0) {
+      if (mkdir(current.c_str(), mode) != 0) {
         // 处理并发场景：如果另一个线程/进程刚刚创建了它，报 EEXIST 是正常的
         if (errno != EEXIST) {
           return false;
@@ -20,7 +19,7 @@ bool create_directories_with_permission(const fs::path& target, mode_t mode) {
       }
     } else {
       // 如果路径已存在，检查它是否真的是一个目录，防止被同名文件占位
-      if (!fs::is_directory(current, ec)) {
+      if (!fs::is_directory(current)) {
         return false;
       }
     }

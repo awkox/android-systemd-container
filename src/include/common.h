@@ -95,16 +95,16 @@ struct tty_info {
   fs::path name;
 };
 
-typedef struct {
+struct asc_conf_t {
   fs::path rootfs_img_path;
   fs::path custom_init;
 
   bool isolation_network;
   bool block_nested_ns;
   int privileged_mask;
-} asc_conf_t;
+};
 
-typedef struct {
+struct asc_rt_t {
   std::string container_name;
 
   bool foreground;
@@ -115,12 +115,12 @@ typedef struct {
   tty_info console;
   timespec start_time;
   unsigned long ns_inode;
-} asc_rt_t;
+};
 
-typedef struct {
+struct cfg_t {
   asc_conf_t conf;
   asc_rt_t rt;
-} cfg_t;
+};
 
 int asc_main(int argc, char **argv);
 

@@ -167,7 +167,7 @@ void internal_boot(cfg_t *cfg) {
       } else {
         terminal_make_controlling(console_fd);
 
-        struct winsize ws;
+        winsize ws;
         if (ioctl(console_fd, TIOCGWINSZ, &ws) == 0
               && ws.ws_col == 0
               && ws.ws_row == 0) {

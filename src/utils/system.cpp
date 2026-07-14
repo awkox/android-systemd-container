@@ -1,7 +1,7 @@
 #include "asc.h"
 
 int get_kernel_version(int *major, int *minor) {
-  struct utsname uts;
+  utsname uts;
   if (uname(&uts) < 0)
     return -1;
 

@@ -26,7 +26,7 @@ static int stop_rootfs_with_timeout(std::string_view container_name, int timeout
   bool unkillable = false;
   syscall(SYS_pidfd_send_signal, pfd, SIGRTMIN + 3, nullptr, 0);
 
-  struct pollfd pfd_poll = {.fd = pfd, .events = POLLIN, .revents = 0};
+  pollfd pfd_poll = {.fd = pfd, .events = POLLIN, .revents = 0};
   int r = poll(&pfd_poll, 1, timeout_seconds * 1000);
   if (!(r > 0 && (pfd_poll.revents & POLLIN))) {
     log_warn("超时，正在发送 SIGKILL 信号...");
