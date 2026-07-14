@@ -142,6 +142,7 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
         if (events[i].events & (EPOLLHUP | EPOLLERR)) {
           /* 修复：容器断开控制台（如关机阶段），取消监听但不退出，等待 Monitor 信号 */
           epoll_ctl(epfd, EPOLL_CTL_DEL, console_master_fd, nullptr);
+          close(console_master_fd);
           console_master_fd = -1;
           continue;
         }
@@ -199,6 +200,10 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
 
   close(sfd);
   close(epfd);
+
+  if (console_master_fd >= 0) {
+    close(console_master_fd);
+  }
 
   /* 恢复原本的终端设置 */
   if (is_tty == 0) {

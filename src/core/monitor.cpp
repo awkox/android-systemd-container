@@ -68,6 +68,8 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
       int devnull = open("/dev/null", O_RDWR);
       if (devnull >= 0) {
         dup2(devnull, 0);
+        dup2(devnull, 1);
+        dup2(devnull, 2);
         close(devnull);
       }
       stdio_redirected = true;
@@ -79,7 +81,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
     void *stack_top = static_cast<char *>(stack) + stack_size;
 
     int pipefd[2];
-    if (pipe(pipefd) < 0) _exit(EXIT_FAILURE);
+    if (pipe2(pipefd, O_CLOEXEC) < 0) _exit(EXIT_FAILURE);
     InitArgs args = {cfg, pipefd[0]};
 
     int clone_flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNS | SIGCHLD;

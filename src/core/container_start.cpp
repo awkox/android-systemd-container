@@ -152,6 +152,19 @@ int start_rootfs(cfg_t *cfg) {
   if (monitor_pid == 0) {
     close(sync_pipe[0]);
     sync_pipe[0] = -1;
+
+    if (cfg->rt.console.master >= 0) {
+      close(cfg->rt.console.master);
+      cfg->rt.console.master = -1;
+    }
+    // 保留 cfg->rt.console.slave。
+    // Monitor 进程必须在后台持有一份 slave 的引用以维持 PTY 状态机存活，
+    // 从而防止前台进程收到虚假的 EPOLLHUP 过早销毁终端。Monitor 退出时会自动释放。
+    if (active_lock_fd >= 0) {
+      close(active_lock_fd);
+      active_lock_fd = -1;
+    }
+
     monitor_run(cfg, sync_pipe[1]);
     _exit(EXIT_FAILURE);
   }
@@ -159,10 +172,16 @@ int start_rootfs(cfg_t *cfg) {
   close(sync_pipe[1]);
   sync_pipe[1] = -1;
 
+  if (cfg->rt.console.slave >= 0) {
+    close(cfg->rt.console.slave);
+    cfg->rt.console.slave = -1;
+  }
+
   if (read(sync_pipe[0], &cfg->rt.container_pid, sizeof(pid_t)) != sizeof(pid_t)) {
     log_error("Monitor 监控进程未能发送容器 PID。");
     goto cleanup;
   }
+
   close(sync_pipe[0]);
   sync_pipe[0] = -1;
 
@@ -172,6 +191,12 @@ int start_rootfs(cfg_t *cfg) {
   if (cfg->rt.foreground) {
     return console_monitor_loop(cfg->rt.console.master, monitor_pid, cfg);
   }
+
+  if (cfg->rt.console.master >= 0) {
+    close(cfg->rt.console.master);
+    cfg->rt.console.master = -1;
+  }
+
   return 0;
 
 cleanup:
