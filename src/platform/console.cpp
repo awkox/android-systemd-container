@@ -1,7 +1,6 @@
 #include "asc.h"
 
 int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
-  auto_close int epfd = -1, sfd = -1;
   sigset_t mask;
   signalfd_siginfo fdsi;
   epoll_event ev = {}, events[10] = {};
@@ -30,14 +29,16 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
   if (sigprocmask(SIG_BLOCK, &mask, nullptr) < 0)
     return -1;
 
-  sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+  int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
   if (sfd < 0)
     return -1;
 
   /* 设置 epoll */
-  epfd = epoll_create1(EPOLL_CLOEXEC);
-  if (epfd < 0)
+  int epfd = epoll_create1(EPOLL_CLOEXEC);
+  if (epfd < 0) {
+    close(sfd);
     return -1;
+  }
 
   /* 1. 监控用户标准输入 (stdin) */
   ev.events = EPOLLIN;
@@ -193,6 +194,9 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
       }
     }
   }
+
+  close(sfd);
+  close(epfd);
 
   /* 恢复原本的终端设置 */
   if (is_tty == 0) {

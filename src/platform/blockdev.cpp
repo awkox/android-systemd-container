@@ -1,7 +1,7 @@
 #include "asc.h"
 
 const char *detect_fs_type(const fs::path& img_path) {
-  auto_close const int fd = open(img_path.c_str(), O_RDONLY | O_CLOEXEC);
+  const int fd = open(img_path.c_str(), O_RDONLY | O_CLOEXEC);
   if (fd < 0)
     return nullptr;
 
@@ -22,6 +22,7 @@ const char *detect_fs_type(const fs::path& img_path) {
   }
 
 out:
+  close(fd);
   return result;
 }
 
@@ -33,7 +34,7 @@ out:
 static int open_loop_dev(const long devnr, fs::path& path_out) {
   const fs::path sysfs_path = std::format("/sys/class/block/loop{}/dev", devnr);
   // 1. 同步读取内核分配的确切设备号
-  auto_fclose FILE *f = fopen(sysfs_path.c_str(), "re");
+  FILE *f = fopen(sysfs_path.c_str(), "re");
   if (!f) {
     log_error("无法读取 loop%ld 的 sysfs 状态", devnr);
     return -1;
@@ -41,9 +42,11 @@ static int open_loop_dev(const long devnr, fs::path& path_out) {
 
   int major = 0, minor = 0;
   if (fscanf(f, "%d:%d", &major, &minor) != 2) {
+    fclose(f);
     log_error("无法解析 loop%ld 的设备号", devnr);
     return -1;
   }
+  fclose(f);
 
   // 2. 在 /dev 创建私有的临时节点，绝对避免与宿主机 udev 发生权限和竞态冲突
   path_out = std::format("/dev/asc_loop_{}", devnr);
@@ -58,13 +61,14 @@ static int open_loop_dev(const long devnr, fs::path& path_out) {
 }
 
 int loop_attach(const fs::path& img_path, fs::path& loop_path_out) {
-  auto_close const int ctl_fd = open("/dev/loop-control", O_RDWR | O_CLOEXEC);
+  const int ctl_fd = open("/dev/loop-control", O_RDWR | O_CLOEXEC);
   if (ctl_fd < 0) {
     log_error("打开 /dev/loop-control 失败: %s", strerror(errno));
     return -1;
   }
 
   const long devnr = ioctl(ctl_fd, LOOP_CTL_GET_FREE);
+  close(ctl_fd);
   if (devnr < 0) {
     log_error("请求空闲的 loop 设备失败: %s", strerror(errno));
     return -1;
@@ -76,7 +80,7 @@ int loop_attach(const fs::path& img_path, fs::path& loop_path_out) {
     return -1;
   }
 
-  auto_close const int img_fd = open(img_path.c_str(), O_RDWR | O_CLOEXEC);
+  const int img_fd = open(img_path.c_str(), O_RDWR | O_CLOEXEC);
   if (img_fd < 0) {
     log_error("打开镜像文件 %s 失败: %s", img_path.c_str(), strerror(errno));
     close(loop_fd);
@@ -90,10 +94,12 @@ int loop_attach(const fs::path& img_path, fs::path& loop_path_out) {
   snprintf(reinterpret_cast<char *>(config.info.lo_file_name), LO_NAME_SIZE, "%.63s", img_path.c_str());
 
   if (ioctl(loop_fd, LOOP_CONFIGURE, &config) < 0) {
+    close(img_fd);
     log_error("LOOP_CONFIGURE 绑定失败: %s", strerror(errno));
     close(loop_fd);
     return -1;
   }
+  close(img_fd);
 
   return loop_fd;
 }
