@@ -22,28 +22,28 @@ void internal_boot(cfg_t *cfg) {
   /* 1. 挂载传播隔离 */
   if (mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) < 0) {
     log_error("无法设置根目录挂载传播模式 (MS_PRIVATE): %s", strerror(errno));
-    goto boot_fail;
+    return;
   }
 
   // 2. 挂载镜像
   if (!cfg->conf.rootfs_img_path.empty()) {
     if (mount_rootfs_img(cfg->conf.rootfs_img_path, mount_point) < 0) {
       log_error("无法挂载镜像: %s", strerror(errno));
-      goto boot_fail;
+      return;
     }
   }
 
   /* 3. 设置工作目录为 rootfs */
   if (chdir(mount_point.c_str()) < 0) {
     log_error("无法 chdir 到 '%s': %s", mount_point.c_str(), strerror(errno));
-    goto boot_fail;
+    return;
   }
 
   /* 4. 预创建标准的系统目录结构 */
   for (const auto dir : dirs_to_create) {
     if (mkdir(dir, 0755) < 0 && errno != EEXIST) {
       log_error("无法创建目录 '%s': %s", dir, strerror(errno));
-      goto boot_fail;
+      return;
     }
   }
 
@@ -51,7 +51,7 @@ void internal_boot(cfg_t *cfg) {
   {
     if (mount("proc", "proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
       log_error("挂载 procfs 失败: %s", strerror(errno));
-      goto boot_fail;
+      return;
     }
 
     if (!(cfg->conf.privileged_mask & PRIV_NOMASK)) {
@@ -62,7 +62,7 @@ void internal_boot(cfg_t *cfg) {
 
     if (mask_path("proc/sys") < 0) {
       log_error("屏蔽/proc/sys失败: %s", strerror(errno));
-      goto boot_fail;
+      return;
     }
 
     for (const auto path : proc_sys_rw_holes) {
@@ -80,21 +80,21 @@ void internal_boot(cfg_t *cfg) {
   // 6. sys
   if (mount("sysfs", "sys", "sysfs", MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
     log_error("挂载 sysfs 失败: %s", strerror(errno));
-    goto boot_fail;
+    return;
   }
 
   // 7. dev
   {
     if (mount("none", "dev", "tmpfs", MS_NOSUID | MS_NOEXEC, "size=8M,mode=755") < 0)
-      goto boot_fail;
+      return;
 
     if (setup_dev() < 0) {
       log_error("设置 /dev 环境失败。");
-      goto boot_fail;
+      return;
     }
 
     if (setup_devpts() < 0) {
-      goto boot_fail;
+      return;
     }
 
     /* 在 pivot_root 前绑定挂载控制台 */
@@ -106,12 +106,12 @@ void internal_boot(cfg_t *cfg) {
   {
     if (syscall(SYS_pivot_root, ".", ".old_root") < 0) {
       log_error("pivot_root 系统调用失败: %s", strerror(errno));
-      goto boot_fail;
+      return;
     }
 
     if (chdir("/") < 0) {
       log_error("pivot_root 后的 chdir(\"/\") 失败: %s", strerror(errno));
-      goto boot_fail;
+      return;
     }
 
     /* 清理卸载旧的根文件系统目录 */
@@ -128,7 +128,7 @@ void internal_boot(cfg_t *cfg) {
    */
   if (mount(nullptr, "/", nullptr, MS_REC | MS_SHARED, nullptr) < 0) {
     log_error("无法将根目录重新挂载为 MS_SHARED (systemd 依赖): %s", strerror(errno));
-    goto boot_fail;
+    return;
   }
 
   // 11. hostname
@@ -193,6 +193,4 @@ void internal_boot(cfg_t *cfg) {
       log_die("容器引导崩溃。请检查 rootfs 是否损坏，且存在合法的 %s 二进制程序。", init_bin);
     }
   }
-
-boot_fail:
 }
