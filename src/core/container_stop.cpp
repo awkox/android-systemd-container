@@ -1,9 +1,6 @@
 #include "asc.h"
 
 static int stop_rootfs_with_timeout(std::string_view container_name, int timeout_seconds) {
-  if (timeout_seconds < 0)
-    timeout_seconds = STOP_TIMEOUT;
-
   if (acquire_external_lock(container_name) != 0) {
     log_error("无法停止 '%s': 另一个命令正在管理此容器",
               container_name.data());
