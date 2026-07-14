@@ -97,9 +97,24 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
           if (n >= 2 && buf[0] == '\x1b' && buf[1] == '\x11') {
             static bool exit_detected = false;
             if (!exit_detected) {
+              log_info("正在停止容器 '%s'...", cfg->rt.container_name.c_str());
               pid_t bg_pid = fork();
               if (bg_pid == 0) {
                 setsid();
+
+                close(epfd);
+                close(sfd);
+                if (console_master_fd >= 0) close(console_master_fd);
+    
+                // 断开宿主机终端 IO
+                int devnull = open("/dev/null", O_RDWR);
+                if (devnull >= 0) {
+                  dup2(devnull, STDIN_FILENO);
+                  dup2(devnull, STDOUT_FILENO);
+                  dup2(devnull, STDERR_FILENO);
+                  close(devnull);
+                }
+
                 stop_rootfs(cfg->rt.container_name);
                 _exit(0);
               }

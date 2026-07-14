@@ -42,8 +42,6 @@ static int stop_rootfs_with_timeout(std::string_view container_name, int timeout
 
   cleanup_container_resources(container_name, unkillable);
 
-  log_info("容器 '%s' 已停止。", container_name.data());
-
   release_external_lock();
 
   return 0;

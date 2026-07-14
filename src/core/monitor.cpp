@@ -2,15 +2,25 @@
 
 struct InitArgs {
   cfg_t *cfg;
-  int sync_fd;
+  int sync_fd;          // pipefd[0]: 当前 Init 用来接收唤醒信号的读端
+  int wake_write_fd;    // pipefd[1]: 属于 Monitor 的唤醒写端（应关闭）
+  int sync_pipe_write;  // sync_fd: 属于 Monitor 向 CLI 通信的写端（应关闭）
 };
 
 static int init_trampoline(void *arg) {
   InitArgs *args = static_cast<InitArgs *>(arg);
   
-  /* 阻塞等待父进程(Monitor)将我们安全迁入 Cgroup 树 */
+  // 1. 修复 FD 泄漏：显式关闭继承自父进程但属于父进程的管道写端
+  if (args->wake_write_fd >= 0) close(args->wake_write_fd);
+  if (args->sync_pipe_write >= 0) close(args->sync_pipe_write);
+
+  /* 2. 阻塞等待父进程(Monitor)将我们安全迁入 Cgroup 树 */
   char c;
-  if (read(args->sync_fd, &c, 1) < 0) {}
+  if (read(args->sync_fd, &c, 1) < 0) {
+    // 顺手修复：安全隐患（读失败不应静默忽略，否则会引发竞争条件）
+    log_error("Init 进程读取同步信号失败: %s", strerror(errno));
+    return -1;
+  }
   close(args->sync_fd);
 
   /* 现在我们在正确的 Cgroup 中，执行 Cgroup 命名空间隔离锁定 */
@@ -82,7 +92,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
 
     int pipefd[2];
     if (pipe2(pipefd, O_CLOEXEC) < 0) _exit(EXIT_FAILURE);
-    InitArgs args = {cfg, pipefd[0]};
+    InitArgs args = {cfg, pipefd[0], pipefd[1], sync_fd};
 
     int clone_flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNS | SIGCHLD;
     if (cfg->conf.isolation_network) clone_flags |= CLONE_NEWNET;
