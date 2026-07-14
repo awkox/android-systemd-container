@@ -161,9 +161,6 @@ int start_rootfs(cfg_t *cfg) {
   close(sync_pipe[0]);
   sync_pipe[0] = -1;
 
-  log_info("容器启动成功，主 PID 为 %d (Monitor PID: %d)", cfg->rt.container_pid,
-           monitor_pid);
-
   if (lock_acquired)
     release_external_lock();
 

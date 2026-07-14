@@ -74,11 +74,9 @@ namespace fs = std::filesystem;
 // 常量定义
 constexpr int MIN_KERNEL_MAJOR = 4;
 constexpr int MIN_KERNEL_MINOR = 9;
-constexpr int MAX_CONTAINERS = 1024;
 constexpr int STOP_TIMEOUT = 15;
 constexpr unsigned int RETRY_DELAY_US = 200000;
 constexpr int REBOOT_EXIT = 249;
-constexpr int NL_BUFSIZE = 8192;
 
 // 运行时路径
 #define DEFAULT_INIT "/sbin/init"
@@ -90,11 +88,6 @@ constexpr int PRIV_NOCAPS = 1 << 1;
 constexpr int PRIV_NOSEC  = 1 << 2;
 constexpr int PRIV_FULL   = 0xFF;
 
-typedef struct {
-  int fd;
-  uint32_t seq;
-  pid_t pid;
-} nl_ctx_t;
 
 struct tty_info {
   int master = -1;

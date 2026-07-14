@@ -30,7 +30,7 @@ static int init_trampoline(void *arg) {
  * 会调用 _exit() 退出。sync_pipe_write 用于首次引导时向父进程发送 init PID。
  * ---------------------------------------------------------------------------*/
 void monitor_run(cfg_t *cfg, int sync_pipe_write) {
-  int sync_pipe[2] = {-1, sync_pipe_write};
+  int sync_fd = sync_pipe_write;
   bool stdio_redirected = false;
 
   if (setsid() < 0 && errno != EPERM) {
@@ -95,21 +95,22 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
       close(pipefd[1]);
       _exit(EXIT_FAILURE);
     }
-      write_file(cg_path / "cgroup.procs", std::format("{}\n", init_pid));
+    write_file(cg_path / "cgroup.procs", std::format("{}\n", init_pid));
 
-      /* 释放 Init 进程，允许它推进引导过程 */
-      char wake_char = 'A';
-      if (write(pipefd[1], &wake_char, 1) < 0) {}
-      close(pipefd[1]);
-      if (sync_pipe[1] >= 0) {
-        if (write(sync_pipe[1], &init_pid, sizeof(pid_t)) != sizeof(pid_t)) {
-        }
-        close(sync_pipe[1]);
-        sync_pipe[1] = -1;
-      }
+    /* 释放 Init 进程，允许它推进引导过程 */
+    char wake_char = 'A';
+    if (write(pipefd[1], &wake_char, 1) < 0) {}
+    close(pipefd[1]);
+    if (sync_fd >= 0) {
+      if (write(sync_fd, &init_pid, sizeof(pid_t)) != sizeof(pid_t)) {}
+      close(sync_fd);
+      sync_fd = -1;
+    }
 
     cfg->rt.container_pid = init_pid;
     cfg->rt.ns_inode = get_pid_ns_inode(cfg->rt.container_pid);
+
+    log_info("容器启动成功，主 PID 为 %d (Monitor PID: %d)", init_pid, getpid());
 
     if (chdir("/") < 0) {
       log_warn("无法 chdir 到 /: %s", strerror(errno));
@@ -194,7 +195,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
         log_warn("[MONITOR] 检测到外部命令锁 - 中止内部重启，移交控制权给 CLI");
       } else {
         if (cfg->rt.foreground) {
-          printf("\n容器 %s 正在重启\r\n", cfg->rt.container_name.c_str());
+          log_info("容器 %s 正在重启", cfg->rt.container_name.c_str());
           fflush(stdout);
         }
 

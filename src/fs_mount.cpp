@@ -33,7 +33,7 @@ int mount_rootfs_img(const fs::path& img_path, const fs::path& mount_point) {
     if (loop_fd >= 0) {
       const int ret = mount(final_src.c_str(), mount_point.c_str(), fstype, mnt_flags, mnt_data);
       if (ret == 0) {
-        mount(nullptr, mount_point.c_str(), nullptr, MS_REMOUNT | mnt_flags, mnt_data);
+      //  mount(nullptr, mount_point.c_str(), nullptr, MS_REMOUNT | mnt_flags, mnt_data);
         success = true;
       } else {
         log_warn("挂载 mount(%s, %s) 失败: %s", final_src.c_str(), fstype, strerror(errno));

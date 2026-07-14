@@ -13,19 +13,6 @@ void log_internal(const char *prefix, const bool is_err, const char *fmt, ...) {
   fflush(out);
 }
 
-[[gnu::format(printf, 1, 2)]]
-void die_internal(const char *fmt, ...) {
-  char raw_msg[8192];
-  va_list ap;
-  va_start(ap, fmt);
-  vsnprintf(raw_msg, sizeof(raw_msg), fmt, ap);
-  va_end(ap);
-
-  fprintf(stderr, "[-] %s\r\n", raw_msg);
-  fflush(stderr);
-  exit(EXIT_FAILURE);
-}
-
 void print_privileged_warning(const int privileged_mask) {
   if (privileged_mask <= 0)
     return;

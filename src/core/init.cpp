@@ -146,7 +146,8 @@ void internal_boot(cfg_t *cfg) {
 
   /* 12 应用安全性防护：seccomp 策略与 capabilities 剔除 */
   if (seccomp_apply_minimal(cfg->conf.privileged_mask) < 0) {
-    log_die("Seccomp 应用失败，拒绝启动不安全的容器");
+    log_error("Seccomp 应用失败，拒绝启动不安全的容器");
+    return;
   }
   // 13
   android_seccomp_setup(cfg->conf.block_nested_ns &&
@@ -183,12 +184,6 @@ void internal_boot(cfg_t *cfg) {
     }
   }
 
-  if (cfg->rt.foreground) {
-    printf("\r\n(按下 CTRL+ALT+Q 以脱离前台并退出)\r\n");
-  }
-  printf("\r\n");
-  fflush(stdout);
-
   // 17
   {
     const char *init_bin = cfg->conf.custom_init.empty() ? DEFAULT_INIT : cfg->conf.custom_init.c_str();
@@ -197,9 +192,14 @@ void internal_boot(cfg_t *cfg) {
 
     log_info("[BOOT] 容器引导环境搭建完毕，移交控制权至 PID 1 (%s)...", init_bin);
 
+    if (cfg->rt.foreground) {
+      printf("\r\n(按下 CTRL+ALT+Q 以脱离前台并退出)\r\n");
+    }
+    printf("\r\n");
+    fflush(stdout);
+
     if (execve(init_bin, const_cast<char *const *>(init_args), const_cast<char *const *>(environment)) < 0) {
       log_error("执行 %s 失败: %s", init_bin, strerror(errno));
-      log_die("容器引导崩溃。请检查 rootfs 是否损坏，且存在合法的 %s 二进制程序。", init_bin);
     }
   }
 }
