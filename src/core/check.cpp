@@ -76,9 +76,9 @@ int check_requirements_hw() {
     missing++;
   }
 
-    if (missing > 0) {
-        log_error("缺少 %d 项【必须】功能 - 无法继续启动过程", missing);
-        return -1;
-    }
-    return 0;
+  if (missing > 0) {
+    log_error("缺少 %d 项【必须】功能 - 无法继续启动过程", missing);
+    return -1;
+  }
+  return 0;
 }
