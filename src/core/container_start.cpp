@@ -83,6 +83,7 @@ int start_rootfs(cfg_t *cfg) {
   pid_t monitor_pid = -1;
   pid_t existing_pid = -1;
 
+  log_info("正在获取容器独占锁与资源...");
   if (acquire_external_lock(cfg->rt.container_name) == 0) {
     lock_acquired = true;
     // 发现僵尸锁，直接清理上一轮可能残留的全局资源 (Cgroup)
@@ -98,6 +99,7 @@ int start_rootfs(cfg_t *cfg) {
   }
 
   if (!cfg->conf.rootfs_img_path.empty()) {
+    log_info("校验并解析 Rootfs 路径配置...");
     fs::path abs_path = resolve_path_arg(cfg->conf.rootfs_img_path);
     if (abs_path.empty() || !fs::exists(abs_path)) {
       log_error("无法解析 rootfs 镜像路径 '%s': %s",
@@ -125,6 +127,7 @@ int start_rootfs(cfg_t *cfg) {
              cfg->rt.container_name.c_str(), strerror(errno));
   }
 
+  log_info("正在分配并设置容器虚拟控制台 (PTY Console)...");
   if (terminal_create(&cfg->rt.console) < 0) {
     log_error("无法分配容器控制台 (Console) PTY");
     goto cleanup;
@@ -146,6 +149,7 @@ int start_rootfs(cfg_t *cfg) {
 
   clock_gettime(CLOCK_BOOTTIME, &cfg->rt.start_time);
 
+  log_info("正在孵化 Monitor 监控守护进程...");
   monitor_pid = fork();
   if (monitor_pid < 0) {
     close(sync_pipe[0]);

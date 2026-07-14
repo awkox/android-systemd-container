@@ -19,6 +19,8 @@ static constexpr auto proc_universal_masks = std::to_array<const char*>({
 void internal_boot(cfg_t *cfg) {
   fs::path mount_point = mount_dir / cfg->rt.container_name;
 
+  log_info("[BOOT] 正在初始化容器内部运行环境...");
+
   /* 1. 挂载传播隔离 */
   if (mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) < 0) {
     log_error("无法设置根目录挂载传播模式 (MS_PRIVATE): %s", strerror(errno));
@@ -27,6 +29,7 @@ void internal_boot(cfg_t *cfg) {
 
   // 2. 挂载镜像
   if (!cfg->conf.rootfs_img_path.empty()) {
+    log_info("[BOOT] 准备挂载 Rootfs 镜像...");
     if (mount_rootfs_img(cfg->conf.rootfs_img_path, mount_point) < 0) {
       log_error("无法挂载镜像: %s", strerror(errno));
       return;
@@ -38,6 +41,8 @@ void internal_boot(cfg_t *cfg) {
     log_error("无法 chdir 到 '%s': %s", mount_point.c_str(), strerror(errno));
     return;
   }
+
+  log_info("[BOOT] 正在挂载并配置虚拟文件系统 (proc, sys, dev)...");
 
   /* 4. 预创建标准的系统目录结构 */
   for (const auto dir : dirs_to_create) {
@@ -102,6 +107,8 @@ void internal_boot(cfg_t *cfg) {
       log_warn("无法绑定挂载 Console '%s': %s", cfg->rt.console.name.c_str(), strerror(errno));
   }
 
+  log_info("[BOOT] 正在执行 pivot_root (无缝切换系统根目录)...");
+
   /* 8. 执行根目录无缝切换 (pivot_root) */
   {
     if (syscall(SYS_pivot_root, ".", ".old_root") < 0) {
@@ -123,9 +130,7 @@ void internal_boot(cfg_t *cfg) {
 
   // 目前处于根目录
 
-  /* 10. 符合 systemd 的要求：在调用 systemd 作为 PID 1 之前，容器的挂载层级必须是 MS_SHARED。
-   * 如果之前是 MS_PRIVATE（双向隔离），这里会创建一个独立的共享 peer group 供容器内使用。
-   */
+  /* 10. 符合 systemd 的要求：在调用 systemd 作为 PID 1 之前，容器的挂载层级必须是 MS_SHARED。 */
   if (mount(nullptr, "/", nullptr, MS_REC | MS_SHARED, nullptr) < 0) {
     log_error("无法将根目录重新挂载为 MS_SHARED (systemd 依赖): %s", strerror(errno));
     return;
@@ -135,6 +140,8 @@ void internal_boot(cfg_t *cfg) {
   if (sethostname("(none)", 6) < 0) {
     log_warn("重置主机名失败: %s", strerror(errno));
   }
+
+  log_info("[BOOT] 正在应用系统安全加固与沙箱隔离策略...");
 
   /* 12 应用安全性防护：seccomp 策略与 capabilities 剔除 */
   if (seccomp_apply_minimal(cfg->conf.privileged_mask) < 0) {
@@ -148,8 +155,7 @@ void internal_boot(cfg_t *cfg) {
   // 14
   apply_capability_hardening(cfg->conf.privileged_mask);
 
-  /* 15. 重定向标准输入输出至 /dev/console
-   * 使用局部代码块，防止 console_fd 触发 C++ 的 goto 跳跃错误 */
+  /* 15. 重定向标准输入输出至 /dev/console */
   {
     const int console_fd = open("dev/console", O_RDWR);
     if (console_fd >= 0) {
@@ -187,6 +193,8 @@ void internal_boot(cfg_t *cfg) {
     const char *init_bin = cfg->conf.custom_init.empty() ? DEFAULT_INIT : cfg->conf.custom_init.c_str();
     const char *init_args[] = {init_bin, "systemd.unified_cgroup_hierarchy=1", nullptr};
     const char *environment[] = {"container=asc", nullptr};
+
+    log_info("[BOOT] 容器引导环境搭建完毕，移交控制权至 PID 1 (%s)...", init_bin);
 
     if (execve(init_bin, const_cast<char *const *>(init_args), const_cast<char *const *>(environment)) < 0) {
       log_error("执行 %s 失败: %s", init_bin, strerror(errno));
