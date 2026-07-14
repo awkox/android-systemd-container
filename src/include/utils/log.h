@@ -3,8 +3,6 @@
 
 #include "common.h"
 
-extern bool log_silent;
-
 [[gnu::format(printf, 3, 4)]]
 void log_internal(const char *prefix, bool is_err, const char *fmt, ...);
 

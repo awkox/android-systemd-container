@@ -99,7 +99,6 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
               pid_t bg_pid = fork();
               if (bg_pid == 0) {
                 setsid();
-                log_silent = 1;
                 stop_rootfs(cfg->rt.container_name);
                 _exit(0);
               } else if (bg_pid > 0) {

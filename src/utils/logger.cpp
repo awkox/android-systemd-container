@@ -1,7 +1,5 @@
 #include "asc.h"
 
-bool log_silent = false;
-
 [[gnu::format(printf, 3, 4)]]
 void log_internal(const char *prefix, const bool is_err, const char *fmt, ...) {
   char raw_msg[8192];
@@ -9,9 +7,6 @@ void log_internal(const char *prefix, const bool is_err, const char *fmt, ...) {
   va_start(ap, fmt);
   vsnprintf(raw_msg, sizeof(raw_msg), fmt, ap);
   va_end(ap);
-
-  if (log_silent && !is_err)
-    return;
 
   FILE *out = is_err ? stderr : stdout;
   fprintf(out, "[%s] %s\r\n", prefix, raw_msg);

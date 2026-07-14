@@ -161,9 +161,6 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
       if (!reaped) waitpid(init_pid, &status, 0);
     }
     free(stack);
-
-    /* 取消全局静默模式，确保能够看到最终退出状态的日志 */
-    log_silent = 0;
     
     /* 记录监控器捕获的退出状态与重启信号判定 */
     is_reboot_request = false;
@@ -197,7 +194,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
         log_warn("[MONITOR] 检测到外部命令锁 - 中止内部重启，移交控制权给 CLI");
       } else {
         if (cfg->rt.foreground) {
-          printf("\n容器 %s 正在重启\n", cfg->rt.container_name.c_str());
+          printf("\n容器 %s 正在重启\r\n", cfg->rt.container_name.c_str());
           fflush(stdout);
         }
 
@@ -208,7 +205,6 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
         cfg->rt.container_pid = 0;
         cfg->rt.ns_inode = 0;
         if (cfg->rt.foreground)
-          log_silent = 1;
 
         should_reboot = true;
       }
