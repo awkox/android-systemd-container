@@ -44,7 +44,6 @@ add_executable(asc
 	src/platform/blockdev.cpp
 	src/platform/console.cpp
 	src/platform/devices.cpp
-	src/platform/netlink.cpp
 	src/platform/pty.cpp
 
 	# Utils - helpers

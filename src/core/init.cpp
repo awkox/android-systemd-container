@@ -155,7 +155,7 @@ void internal_boot(cfg_t *cfg) {
   /* 15. 重定向标准输入输出至 /dev/console
    * 使用局部代码块，防止 console_fd 触发 C++ 的 goto 跳跃错误 */
   {
-    const int console_fd = open("/dev/console", O_RDWR);
+    const int console_fd = open("dev/console", O_RDWR);
     if (console_fd >= 0) {
       if (terminal_set_stdfds(console_fd) < 0) {
         log_warn("无法将标准 I/O 重定向到 /dev/console");
@@ -177,16 +177,6 @@ void internal_boot(cfg_t *cfg) {
         if (console_fd > 2)
           close(console_fd);
       }
-    }
-  }
-
-  /* 16. 对于启用网络隔离的情况：在隔离的网络命名空间中启动 loopback 回环网卡 */
-  if (cfg->conf.isolation_network) {
-    auto_free nl_ctx_t *nlctx = nl_open();
-    if (nlctx) {
-      nl_link_up(nlctx, "lo");
-      close(nlctx->fd);
-      log_info("[NET] 隔离网络命名空间：loopback 已启动");
     }
   }
 

@@ -17,7 +17,6 @@
 #include "platform/blockdev.h"
 #include "platform/console.h"
 #include "platform/devices.h"
-#include "platform/netlink.h"
 #include "platform/pty.h"
 
 #include "utils/log.h"
