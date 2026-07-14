@@ -4,6 +4,18 @@ static constexpr auto dirs_to_create = std::to_array<const char*>({
   ".old_root", "proc", "sys", "dev", "run", "tmp"
 });
 
+static constexpr auto proc_sys_rw_holes = std::to_array<const char*>({
+  "proc/sys/kernel/hostname",
+  "proc/sys/kernel/domainname",
+});
+
+static constexpr auto proc_universal_masks = std::to_array<const char*>({
+  "proc/sysrq-trigger",
+  "proc/kcore",
+  "proc/timer_list",
+  "proc/irq",
+});
+
 void internal_boot(cfg_t *cfg) {
   fs::path mount_point = mount_dir / cfg->rt.container_name;
 
@@ -40,25 +52,39 @@ void internal_boot(cfg_t *cfg) {
   }
 
   // 5. proc
-  if (mount("proc", "proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
-    log_error("挂载 procfs 失败: %s", strerror(errno));
-    goto boot_fail;
-  }
-
-  // 6. sys
   {
-    if (mount("sysfs", "sys", "sysfs", MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
-      log_error("挂载 sysfs 失败: %s", strerror(errno));
+    if (mount("proc", "proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
+      log_error("挂载 procfs 失败: %s", strerror(errno));
       goto boot_fail;
     }
 
-    /* 必须先将 sys 转换为 bind 挂载，切断与全局 superblock 的强绑定，防止影响宿主机 */
-    mount("sys", "sys", nullptr, MS_BIND, nullptr);
-
-    /* 明确告诉内核只修改当前顶层挂载点的属性，设为 RO */
-    if (mount(nullptr, "sys", nullptr, MS_BIND | MS_REMOUNT | MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
-      log_warn("无法将 /sys 重新挂载为只读模式: %s", strerror(errno));
+    if (!(cfg->conf.privileged_mask & PRIV_NOMASK)) {
+      for (const auto path : proc_universal_masks) {
+        mask_path(path);
+      }
     }
+
+    if (mask_path("proc/sys") < 0) {
+      log_error("屏蔽/proc/sys失败: %s", strerror(errno));
+      goto boot_fail;
+    }
+
+    for (const auto path : proc_sys_rw_holes) {
+      if (!fs::exists(path))
+        continue;
+      if (mount(path, path, nullptr, MS_BIND, nullptr) < 0) {
+        log_warn("[SEC] 无法将安全挂载洞 %s 绑定: %s", path, strerror(errno));
+        continue;
+      }
+      if (mount(path, path, nullptr, MS_BIND | MS_REMOUNT | MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0)
+        log_warn("[SEC] 无法重新挂载安全挂载洞 %s: %s", path, strerror(errno));
+    }
+  }
+
+  // 6. sys
+  if (mount("sysfs", "sys", "sysfs", MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
+    log_error("挂载 sysfs 失败: %s", strerror(errno));
+    goto boot_fail;
   }
 
   // 7. dev
@@ -100,9 +126,6 @@ void internal_boot(cfg_t *cfg) {
   }
 
   // 目前处于根目录
-
-  /* 9. 在 pivot_root 后应用监狱掩码保护 */
-  apply_jail_mask(cfg->conf.privileged_mask);
 
   /* 10. 符合 systemd 的要求：在调用 systemd 作为 PID 1 之前，容器的挂载层级必须是 MS_SHARED。
    * 如果之前是 MS_PRIVATE（双向隔离），这里会创建一个独立的共享 peer group 供容器内使用。
@@ -150,8 +173,7 @@ void internal_boot(cfg_t *cfg) {
         }
 
         fchmod(console_fd, 0620);
-        if (fchown(console_fd, 0, 5) < 0) {
-        }
+        if (fchown(console_fd, 0, 5) < 0) {}
         if (console_fd > 2)
           close(console_fd);
       }

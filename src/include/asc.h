@@ -12,7 +12,6 @@
 
 #include "oci/caps.h"
 #include "oci/cgroup.h"
-#include "oci/jail.h"
 #include "oci/seccomp.h"
 
 #include "platform/blockdev.h"

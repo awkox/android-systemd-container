@@ -83,12 +83,10 @@ int start_rootfs(cfg_t *cfg) {
   pid_t monitor_pid = -1;
   pid_t existing_pid = -1;
 
-  if (fs::exists(lock_dir / cfg->rt.container_name)) {
-    if (acquire_external_lock(cfg->rt.container_name) == 0) {
-      lock_acquired = true;
-      // 发现僵尸锁，直接清理上一轮可能残留的全局资源 (Cgroup)
-      cleanup_container_resources(&cfg->rt, false);
-    }
+  if (acquire_external_lock(cfg->rt.container_name) == 0) {
+    lock_acquired = true;
+    // 发现僵尸锁，直接清理上一轮可能残留的全局资源 (Cgroup)
+    cleanup_container_resources(&cfg->rt, false);
   }
 
   if (!lock_acquired) {
@@ -174,7 +172,8 @@ int start_rootfs(cfg_t *cfg) {
   log_info("容器启动成功，主 PID 为 %d (Monitor PID: %d)", cfg->rt.container_pid,
            monitor_pid);
 
-  if (lock_acquired) release_external_lock();
+  if (lock_acquired)
+    release_external_lock();
 
   if (cfg->rt.foreground) {
     return console_monitor_loop(cfg->rt.console.master, monitor_pid, cfg);

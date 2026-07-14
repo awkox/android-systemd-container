@@ -38,7 +38,6 @@ add_executable(asc
 	# OCI - security & resource control
 	src/oci/caps.cpp
 	src/oci/cgroup.cpp
-	src/oci/jail.cpp
 	src/oci/seccomp.cpp
 
 	# Platform - system interaction

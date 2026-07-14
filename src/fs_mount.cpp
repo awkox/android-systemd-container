@@ -54,3 +54,11 @@ int mount_rootfs_img(const fs::path& img_path, const fs::path& mount_point) {
   }
   return -1;
 }
+
+int mask_path(const char *path) {
+  if (!fs::exists(path))
+    return 0;
+  if (mount(path, path, nullptr, MS_BIND, nullptr) < 0)
+    return -1;
+  return mount(path, path, nullptr, MS_BIND | MS_REMOUNT | MS_RDONLY, nullptr);
+}
