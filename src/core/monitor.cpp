@@ -60,6 +60,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
   /* 支持自动重启的引导循环机制 */
   int status = 0;
   bool should_reboot = false;
+  bool is_reboot_request = false;
 
   do {
     /* 后台模式的标准输入输出重定向 */
@@ -161,22 +162,37 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
     }
     free(stack);
 
-    /* 记录监控器捕获的退出状态 */
+    /* 取消全局静默模式，确保能够看到最终退出状态的日志 */
+    log_silent = 0;
+    
+    /* 记录监控器捕获的退出状态与重启信号判定 */
+    is_reboot_request = false;
+
     if (WIFEXITED(status)) {
       int code = WEXITSTATUS(status);
       if (code == REBOOT_EXIT) {
-        log_info("[MONITOR] 检测到容器内部发起了重启请求");
+        is_reboot_request = true;
+        log_info("[MONITOR] 检测到容器内部发起了重启请求 (退出码: %d)", code);
       } else {
         log_info("[MONITOR] 检测到容器正常关机 (退出码: %d)", code);
       }
     } else if (WIFSIGNALED(status)) {
-      log_warn("[MONITOR] Init 进程被信号异常终止: %d (%s)",
-               WTERMSIG(status), strsignal(WTERMSIG(status)));
+      int sig = WTERMSIG(status);
+      if (sig == SIGHUP) {
+        /* Systemd 约定：容器内使用 SIGHUP 触发宿主重启 */
+        is_reboot_request = true;
+        log_info("[MONITOR] 检测到容器内部发起了重启请求 (SIGHUP)");
+      } else if (sig == SIGINT || sig == (SIGRTMIN + 3) || sig == (SIGRTMIN + 4) || sig == (SIGRTMIN + 13) || sig == (SIGRTMIN + 14)) {
+        /* Systemd 约定：这些信号均代表不同层次的 Halt / Poweroff 请求 */
+        log_info("[MONITOR] 检测到容器内部发起了关机请求 (Signal %d)", sig);
+      } else {
+        log_warn("[MONITOR] Init 进程被信号异常终止: %d (%s)", sig, strsignal(sig));
+      }
     }
 
     /* 重启检测：若为重启请求且无外部锁竞争，则准备下一轮引导 */
     should_reboot = false;
-    if (WIFEXITED(status) && WEXITSTATUS(status) == REBOOT_EXIT) {
+    if (is_reboot_request) {
       if (is_external_lock_active(cfg->rt.container_name)) {
         log_warn("[MONITOR] 检测到外部命令锁 - 中止内部重启，移交控制权给 CLI");
       } else {
@@ -200,7 +216,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
   } while (should_reboot);
 
   /* 非重启路径：检查外部锁是否已介入 */
-  if (!WIFEXITED(status) || WEXITSTATUS(status) != REBOOT_EXIT) {
+  if (!is_reboot_request) {
     if (is_external_lock_active(cfg->rt.container_name)) {
       log_info("[MONITOR] 检测到外部命令锁 - 将资源清理交由 CLI 完成");
       _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 0);

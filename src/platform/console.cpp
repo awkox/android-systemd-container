@@ -109,37 +109,39 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
             continue;
           }
 
-          /* 写入 master_fd。如果 PTY 缓冲区已满，缓存数据并注册 EPOLLOUT */
-          if (pending.fd < 0) {
-            ssize_t w = write(console_master_fd, buf, static_cast<size_t>(n));
-            if (w >= 0 && static_cast<size_t>(w) < static_cast<size_t>(n)) {
-              pending.fd = console_master_fd;
-              pending.len = static_cast<size_t>(n) - static_cast<size_t>(w);
-              pending.off = 0;
-              memcpy(pending.data, buf + w, pending.len);
-              ev.events = EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLERR;
-              ev.data.fd = console_master_fd;
-              epoll_ctl(epfd, EPOLL_CTL_MOD, console_master_fd, &ev);
-            } else if (w < 0 && errno == EAGAIN) {
-              pending.fd = console_master_fd;
-              pending.len = static_cast<size_t>(n);
-              pending.off = 0;
-              memcpy(pending.data, buf, pending.len);
-              ev.events = EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLERR;
-              ev.data.fd = console_master_fd;
-              epoll_ctl(epfd, EPOLL_CTL_MOD, console_master_fd, &ev);
-            } else if (w < 0) {
-              running = false;
-              break;
+          /* 修复：只有当 console_master_fd 仍然有效时才写入 */
+          if (console_master_fd >= 0) {
+            if (pending.fd < 0) {
+              ssize_t w = write(console_master_fd, buf, static_cast<size_t>(n));
+              if (w >= 0 && static_cast<size_t>(w) < static_cast<size_t>(n)) {
+                pending.fd = console_master_fd;
+                pending.len = static_cast<size_t>(n) - static_cast<size_t>(w);
+                pending.off = 0;
+                memcpy(pending.data, buf + w, pending.len);
+                ev.events = EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLERR;
+                ev.data.fd = console_master_fd;
+                epoll_ctl(epfd, EPOLL_CTL_MOD, console_master_fd, &ev);
+              } else if (w < 0 && errno == EAGAIN) {
+                pending.fd = console_master_fd;
+                pending.len = static_cast<size_t>(n);
+                pending.off = 0;
+                memcpy(pending.data, buf, pending.len);
+                ev.events = EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLERR;
+                ev.data.fd = console_master_fd;
+                epoll_ctl(epfd, EPOLL_CTL_MOD, console_master_fd, &ev);
+              } else if (w < 0) {
+                epoll_ctl(epfd, EPOLL_CTL_DEL, console_master_fd, nullptr);
+                console_master_fd = -1;
+              }
             }
-          } else {
-            /* 如果已有挂起的数据 — 丢弃当前输入; 说明容器消耗得不够快 */
           }
         }
       } else if (fd == console_master_fd) {
         if (events[i].events & (EPOLLHUP | EPOLLERR)) {
-          running = false;
-          break;
+          /* 修复：容器断开控制台（如关机阶段），取消监听但不退出，等待 Monitor 信号 */
+          epoll_ctl(epfd, EPOLL_CTL_DEL, console_master_fd, nullptr);
+          console_master_fd = -1;
+          continue;
         }
 
         /* 优先排空挂起的写入 (EPOLLOUT) */
@@ -163,7 +165,8 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
           if (n > 0) {
             [[maybe_unused]] ssize_t w = write(STDOUT_FILENO, buf, static_cast<size_t>(n));
           } else {
-            running = false;
+            epoll_ctl(epfd, EPOLL_CTL_DEL, console_master_fd, nullptr);
+            console_master_fd = -1;
           }
         }
       } else if (fd == sfd) {
