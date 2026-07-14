@@ -143,17 +143,21 @@ int start_rootfs(cfg_t *cfg) {
   if (monitor_pid < 0) {
     close(sync_pipe[0]);
     close(sync_pipe[1]);
+    sync_pipe[0] = -1;
+    sync_pipe[1] = -1;
     log_error("fork(Monitor) 失败: %s", strerror(errno));
     goto cleanup;
   }
 
   if (monitor_pid == 0) {
     close(sync_pipe[0]);
+    sync_pipe[0] = -1;
     monitor_run(cfg, sync_pipe[1]);
     _exit(EXIT_FAILURE);
   }
 
   close(sync_pipe[1]);
+  sync_pipe[1] = -1;
 
   if (read(sync_pipe[0], &cfg->rt.container_pid, sizeof(pid_t)) != sizeof(pid_t)) {
     log_error("Monitor 监控进程未能发送容器 PID。");
@@ -181,6 +185,11 @@ cleanup:
     close(cfg->rt.console.master);
     cfg->rt.console.master = -1;
   }
+  if (cfg->rt.console.slave >= 0) {
+    close(cfg->rt.console.slave);
+    cfg->rt.console.slave = -1;
+  }
+
   if (sync_pipe[0] >= 0)
     close(sync_pipe[0]);
   if (sync_pipe[1] >= 0)

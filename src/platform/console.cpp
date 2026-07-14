@@ -132,6 +132,7 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
                 epoll_ctl(epfd, EPOLL_CTL_MOD, console_master_fd, &ev);
               } else if (w < 0) {
                 epoll_ctl(epfd, EPOLL_CTL_DEL, console_master_fd, nullptr);
+                close(console_master_fd);
                 console_master_fd = -1;
               }
             }
@@ -167,6 +168,7 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
             [[maybe_unused]] ssize_t w = write(STDOUT_FILENO, buf, static_cast<size_t>(n));
           } else {
             epoll_ctl(epfd, EPOLL_CTL_DEL, console_master_fd, nullptr);
+            close(console_master_fd);
             console_master_fd = -1;
           }
         }
