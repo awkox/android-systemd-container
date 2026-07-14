@@ -185,12 +185,6 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
           fflush(stdout);
         }
 
-        /* 重新加载工作区配置 */
-        cfg_t reboot_cfg = *cfg;
-        if (config_load_by_name(cfg->rt.container_name, &reboot_cfg) == 0) {
-          *cfg = reboot_cfg;
-        }
-
         cfg->rt.reboot_cycle = true;
         clock_gettime(CLOCK_BOOTTIME, &cfg->rt.start_time);
 

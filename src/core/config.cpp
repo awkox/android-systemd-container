@@ -41,16 +41,12 @@ static int parse_privileged(std::string_view value) {
   return mask;
 }
 
-int config_load(const fs::path& config_path, cfg_t *cfg) {
-  FILE *f = fopen(config_path.c_str(), "re");
+int config_load(const char *config_path, asc_conf_t *conf) {
+  FILE *f = fopen(config_path, "re");
   if (!f) {
-    if (errno == ENOENT) {
-      return 0; /* 配置是可选的 */
-    }
     return -1;
   }
 
-  asc_conf_t *conf = &cfg->conf;
   char line[2048];
 
   while (fgets(line, sizeof(line), f)) {
@@ -88,9 +84,4 @@ int config_load(const fs::path& config_path, cfg_t *cfg) {
 
   fclose(f);
   return 0;
-}
-
-int config_load_by_name(std::string_view name, cfg_t *cfg) {
-  fs::path config_path = config_dir / name / "container.config";
-  return config_load(config_path, cfg);
 }

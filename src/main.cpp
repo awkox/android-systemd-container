@@ -11,10 +11,22 @@ static void print_usage() {
       "用法: " PROJECT_NAME " <命令> [参数]\n\n"
       "命令列表:\n"
       "  start NAME [CONFIG]  使用 CONFIG 配置文件启动名为 NAME 的容器\n"
-      "  stop NAME            停止名为 NAME 的容器\n"
-      "  info NAME            显示详细的容器信息\n"
+      "  stop  NAME           停止名为 NAME 的容器\n"
       "  help                 显示此帮助信息\n\n");
 }
+
+static int print_usage_error(const char *prog_name) {
+  printf("无效的参数或缺失命令。");
+  printf("运行 '%s help' 获取使用帮助。", prog_name);
+  return 1;
+}
+
+enum class Command {
+  START,
+  STOP,
+  HELP,
+  UNKNOWN
+};
 
 int asc_main(int argc, char **argv) {
   if (argc < 2) {
@@ -22,114 +34,77 @@ int asc_main(int argc, char **argv) {
     return 1;
   }
 
-  int ret = 0;
-  cfg_t cfg = {};
-  bool loaded = false;
-  const char *cmd = argv[1];
+  std::string_view cmd_str = argv[1];
+  Command cmd = Command::UNKNOWN;
   const char *name = nullptr;
   const char *config_path = nullptr;
-  bool is_no_root_cmd = false;
-  bool is_stateful = false;
 
-  /* 严格的命令行匹配 */
-  if (strcmp(cmd, "start") == 0) {
-    if (argc != 4) goto usage_error;
+  /* 1. 解析命令与参数 */
+  if (cmd_str == "start" && argc == 4) {
+    cmd = Command::START;
     name = argv[2];
     config_path = argv[3];
-  } else if (strcmp(cmd, "stop") == 0) {
-    if (argc != 3) goto usage_error;
+  } else if (cmd_str == "stop" && argc == 3) {
+    cmd = Command::STOP;
     name = argv[2];
-    is_stateful = true;
-  } else if (strcmp(cmd, "help") == 0) {
-    if (argc != 2) goto usage_error;
-    is_no_root_cmd = true;
+  } else if (cmd_str == "help" && argc == 2) {
+    cmd = Command::HELP;
   } else {
-    goto usage_error;
+    return print_usage_error(argv[0]);
   }
 
-  /* 统一 root 权限卡口：在开始任何工作前拦截所有非豁免命令 */
-  if (!is_no_root_cmd && getuid() != 0) {
-    log_error("执行 '%s' 命令需要 Root 权限", cmd);
-    ret = 1;
-    goto cleanup;
-  }
-
-  /* 用解析后的参数填充 cfg */
-  if (name) {
-    // 检验容器名合规性
-    // 整个程序唯一的container_name来源
-    if (reject_container_name(name) < 0) {
-      ret = 1;
-      goto cleanup;
-    }
-    cfg.rt.container_name = name;
-  }
-  if (config_path) {
-    cfg.rt.config_file = config_path;
-  }
-  cfg.rt.foreground = true;
-
-  /* 对于有状态的命令，我们绝对需要一个容器名称。 */
-  if (is_stateful && cfg.rt.container_name[0] == '\0') {
-    log_error("执行此命令必须指定容器名称。");
-    ret = 1;
-    goto cleanup;
-  }
-
-  // 尝试直接加载配置
-  if (!cfg.rt.config_file.empty()) {
-    if (config_load(cfg.rt.config_file, &cfg) < 0) {
-      log_error("无法从 '%s' 加载配置: %s", cfg.rt.config_file.c_str(),
-                strerror(errno));
-      ret = 1;
-      goto cleanup;
-    }
-    loaded = true;
-  }
-
-  /* 如果我们有名称但尚未成功加载配置文件，按名称加载。 */
-  if (!loaded && cfg.rt.container_name[0] != '\0') {
-    if (config_load_by_name(cfg.rt.container_name, &cfg) < 0) {
-      log_error("未找到容器 '%s' 或元数据丢失。", cfg.rt.container_name.c_str());
-      ret = 1;
-      goto cleanup;
-    }
-  }
-
-  /* 基础信息命令 */
-  if (strcmp(cmd, "help") == 0) {
+  /* 2. 基础信息命令 (无需 Root 权限) */
+  if (cmd == Command::HELP) {
     print_usage();
-    ret = 0;
-    goto cleanup;
+    return 0;
   }
 
-  ensure_runtime();
+  /* 3. 统一 Root 权限安全拦截口 */
+  if (getuid() != 0) {
+    log_error("执行 '%s' 命令需要 Root 权限", cmd_str.data());
+    return 1;
+  }
 
-  /* 容器启动流程 */
-  if (strcmp(cmd, "start") == 0) {
-    if (check_requirements_hw() < 0) {
-      ret = 1;
-      goto cleanup;
+  if (reject_container_name(name) < 0) {
+    log_error("非法的容器名");
+    return 1;
+  }
+
+  /* 4. 分发至相应的生命周期管理核心 */
+  switch (cmd) {
+    case Command::START: {
+      if (check_requirements_hw() < 0) {
+        return 1;
+      }
+
+      ensure_runtime();
+
+      cfg_t cfg = {};
+      cfg.rt.foreground = true;
+      cfg.rt.container_name = name;
+
+      /* 5. 尝试加载容器配置文件 */
+      if (config_path[0]) {
+        if (config_load(config_path, &cfg.conf) < 0) {
+          log_error("无法从 '%s' 加载配置: %s", config_path, strerror(errno));
+          return 1;
+        }
+      }
+
+      print_privileged_warning(cfg.conf.privileged_mask);
+      if ((cfg.conf.privileged_mask & PRIV_NOSEC) && cfg.conf.block_nested_ns) {
+        log_warn("警告：由于启用了 privileged=noseccomp，block-nested-namespaces 已失效。");
+      }
+      return start_rootfs(&cfg);
     }
-    print_privileged_warning(cfg.conf.privileged_mask);
-    if (cfg.conf.privileged_mask & PRIV_NOSEC && cfg.conf.block_nested_ns)
-      log_warn("警告：由于启用了 privileged=noseccomp，block-nested-namespaces 已失效。");
-    ret = start_rootfs(&cfg);
-    goto cleanup;
+
+    case Command::STOP: {
+      return stop_rootfs(name);
+    }
+
+    default:
+      return 1;
   }
-
-  if (strcmp(cmd, "stop") == 0) {
-    ret = stop_rootfs(cfg.rt.container_name);
-    goto cleanup;
-  }
-
-usage_error:
-  log_error("无效的参数或缺失命令。");
-  log_info("运行 '%s help' 获取使用帮助。", argv[0]);
-  ret = 1;
-
-cleanup:
-  return ret;
 }
 
 int main(int argc, char **argv) {

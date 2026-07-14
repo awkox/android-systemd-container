@@ -117,8 +117,6 @@ typedef struct {
   bool foreground;
   bool reboot_cycle;
 
-  fs::path config_file;
-
   pid_t container_pid;
 
   tty_info console;
