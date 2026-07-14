@@ -204,7 +204,6 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
         /* 重置容器 PID 以让 Monitor 后续的 while 循环能够正确探测新生容器 */
         cfg->rt.container_pid = 0;
         cfg->rt.ns_inode = 0;
-        if (cfg->rt.foreground)
 
         should_reboot = true;
       }
