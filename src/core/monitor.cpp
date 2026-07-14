@@ -223,17 +223,9 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
     }
   } while (should_reboot);
 
-  /* 非重启路径：检查外部锁是否已介入 */
-  if (!is_reboot_request) {
-    if (is_external_lock_active(cfg->rt.container_name)) {
-      log_info("[MONITOR] 检测到外部命令锁 - 将资源清理交由 CLI 完成");
-      _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 0);
-    }
-  }
-
-  /* 正常退出清理 */
-  log_info("[MONITOR] 正在执行退出清理工作");
+  log_info("[MONITOR] 容器主进程已退出，Monitor 正在执行退出清理工作...");
   cleanup_container_resources(cfg->rt.container_name, false);
 
+  log_info("[MONITOR] 资源清理完毕，守护进程退出。");
   _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 0);
 }

@@ -40,11 +40,12 @@ static int stop_rootfs_with_timeout(std::string_view container_name, int timeout
   }
   close(pfd);
 
-  cleanup_container_resources(container_name, unkillable);
+  if (!unkillable) {
+    log_info("已成功终止容器 '%s'。资源清理已移交后台 Monitor 完成。", container_name.data());
+  }
 
   release_external_lock();
-
-  return 0;
+  return unkillable ? -1 : 0;
 }
 
 int stop_rootfs(std::string_view container_name) {

@@ -75,7 +75,6 @@ bool is_valid_container_pid(const pid_t pid) {
 }
 
 int start_rootfs(cfg_t *cfg) {
-  bool has_side_effects = false;
   bool lock_acquired = false;
   int sync_pipe[2] = {-1, -1};
   pid_t monitor_pid = -1;
@@ -84,8 +83,6 @@ int start_rootfs(cfg_t *cfg) {
   log_info("正在获取容器独占锁与资源...");
   if (acquire_external_lock(cfg->rt.container_name) == 0) {
     lock_acquired = true;
-    // 发现僵尸锁，直接清理上一轮可能残留的全局资源 (Cgroup)
-    cleanup_container_resources(cfg->rt.container_name, false);
   }
 
   if (!lock_acquired) {
@@ -110,8 +107,6 @@ int start_rootfs(cfg_t *cfg) {
     cfg->rt.foreground = false;
     log_warn("无交互式终端 - 自动转入后台运行。");
   }
-
-  has_side_effects = true;
 
   log_info("正在分配并设置容器虚拟控制台 (PTY Console)...");
   if (terminal_create(&cfg->rt.console) < 0) {
@@ -197,9 +192,6 @@ int start_rootfs(cfg_t *cfg) {
   return 0;
 
 cleanup:
-  if (has_side_effects) {
-    cleanup_container_resources(cfg->rt.container_name, true);
-  }
   if (lock_acquired)
     release_external_lock();
 
