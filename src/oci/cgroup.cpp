@@ -67,8 +67,8 @@ static void rmdir_cgroup_tree(const fs::path& path) {
   if (access(kill_path.c_str(), W_OK) == 0) {
     const int kfd = open(kill_path.c_str(), O_WRONLY | O_CLOEXEC);
     if (kfd >= 0) {
-      close(kfd);
       if (write(kfd, "1", 1) < 0) {}
+      close(kfd);
     }
   }
 
