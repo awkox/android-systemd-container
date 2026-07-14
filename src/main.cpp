@@ -119,7 +119,7 @@ int asc_main(int argc, char **argv) {
   }
 
   if (strcmp(cmd, "stop") == 0) {
-    ret = stop_rootfs(&cfg.rt);
+    ret = stop_rootfs(cfg.rt.container_name);
     goto cleanup;
   }
 

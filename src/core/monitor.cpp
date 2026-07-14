@@ -215,7 +215,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
 
   /* 正常退出清理 */
   log_info("[MONITOR] 正在执行退出清理工作");
-  cleanup_container_resources(&cfg->rt, false);
+  cleanup_container_resources(cfg->rt.container_name, false);
 
   _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 0);
 }

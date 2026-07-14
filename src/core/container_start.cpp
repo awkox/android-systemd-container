@@ -57,12 +57,12 @@ bool is_external_lock_active(std::string_view name) {
   return !(fd < 0);
 }
 
-void cleanup_container_resources(const asc_rt_t *rt, const bool force_cleanup) {
+void cleanup_container_resources(std::string_view container_name, const bool force_cleanup) {
   if (!force_cleanup)
     sync();
 
   // 只需要清理全局可见的 Cgroup，挂载点和 Loop 设备内核会自动回收
-  cgroup_cleanup_container(rt->container_name);
+  cgroup_cleanup_container(container_name);
 }
 
 bool is_valid_container_pid(const pid_t pid) {
@@ -87,7 +87,7 @@ int start_rootfs(cfg_t *cfg) {
   if (acquire_external_lock(cfg->rt.container_name) == 0) {
     lock_acquired = true;
     // 发现僵尸锁，直接清理上一轮可能残留的全局资源 (Cgroup)
-    cleanup_container_resources(&cfg->rt, false);
+    cleanup_container_resources(cfg->rt.container_name, false);
   }
 
   if (!lock_acquired) {
@@ -175,7 +175,7 @@ int start_rootfs(cfg_t *cfg) {
 
 cleanup:
   if (has_side_effects) {
-    cleanup_container_resources(&cfg->rt, true);
+    cleanup_container_resources(cfg->rt.container_name, true);
   }
   if (lock_acquired)
     release_external_lock();
