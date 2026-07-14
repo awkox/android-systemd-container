@@ -53,7 +53,8 @@ void release_external_lock(void) {
 bool is_external_lock_active(std::string_view name) {
   fs::path lock_path = lock_dir / name;
 
-  auto_close const int fd = open(lock_path.c_str(), O_RDONLY | O_CLOEXEC);
+  const int fd = open(lock_path.c_str(), O_RDONLY | O_CLOEXEC);
+  close(fd);
   return fd >= 0;
 }
 
