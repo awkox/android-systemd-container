@@ -106,9 +106,9 @@ int start_rootfs(cfg_t *cfg) {
     }
   }
 
-  if (cfg->rt.foreground && (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))) {
-    cfg->rt.foreground = 0;
-    log_warn("无交互式终端 - 已禁用前台模式，转入后台运行。");
+  if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) {
+    cfg->rt.foreground = false;
+    log_warn("无交互式终端 - 自动转入后台运行。");
   }
 
   has_side_effects = true;

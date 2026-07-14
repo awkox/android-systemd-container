@@ -10,10 +10,10 @@ static void print_usage() {
   printf(
       "用法: " PROJECT_NAME " <命令> [参数]\n\n"
       "命令列表:\n"
-      "  start NAME [CONFIG] [-f]  使用可选的 CONFIG 配置文件启动名为 NAME 的容器\n"
-      "  stop NAME                 停止名为 NAME 的容器\n"
-      "  info NAME                 显示详细的容器信息\n"
-      "  help                      显示此帮助信息\n\n");
+      "  start NAME [CONFIG]  使用可选的 CONFIG 配置文件启动名为 NAME 的容器\n"
+      "  stop NAME            停止名为 NAME 的容器\n"
+      "  info NAME            显示详细的容器信息\n"
+      "  help                 显示此帮助信息\n\n");
 }
 
 int asc_main(int argc, char **argv) {
@@ -28,27 +28,15 @@ int asc_main(int argc, char **argv) {
   const char *cmd = argv[1];
   const char *name = nullptr;
   const char *config_path = nullptr;
-  bool foreground = false;
   bool is_no_root_cmd = false;
   bool is_stateful = false;
 
   /* 严格的命令行匹配 */
   if (strcmp(cmd, "start") == 0) {
-    if (argc < 3 || argc > 5) goto usage_error;
+    if (argc < 3 || argc > 4) goto usage_error;
     name = argv[2];
     if (argc == 4) {
-      if (strcmp(argv[3], "-f") == 0) {
-        foreground = true;
-      } else {
-        config_path = argv[3];
-      }
-    } else if (argc == 5) {
       config_path = argv[3];
-      if (strcmp(argv[4], "-f") == 0) {
-        foreground = true;
-      } else {
-        goto usage_error;
-      }
     }
   } else if (strcmp(cmd, "stop") == 0) {
     if (argc != 3) goto usage_error;
@@ -81,7 +69,7 @@ int asc_main(int argc, char **argv) {
   if (config_path) {
     cfg.rt.config_file = config_path;
   }
-  cfg.rt.foreground = foreground ? 1 : 0;
+  cfg.rt.foreground = true;
 
   /* 对于有状态的命令，我们绝对需要一个容器名称。 */
   if (is_stateful && cfg.rt.container_name[0] == '\0') {
