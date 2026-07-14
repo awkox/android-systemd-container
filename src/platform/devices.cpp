@@ -73,7 +73,7 @@ int setup_devpts() {
 
     // 策略 2: Symlink
     fs::remove("dev/ptmx", ec);
-    if (symlink("dev/pts/ptmx", "dev/ptmx") == 0 && fs::exists("dev/pts/ptmx", ec)) {
+    if (symlink("pts/ptmx", "dev/ptmx") == 0 && fs::exists("dev/pts/ptmx", ec)) {
       return true;
     }
 

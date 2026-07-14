@@ -122,10 +122,11 @@ void internal_boot(cfg_t *cfg) {
     }
 
     /* 清理卸载旧的根文件系统目录 */
-    if (umount2(".old_root", MNT_DETACH) < 0)
-      log_warn("卸载 .old_root 失败: %s", strerror(errno));
-    else
-      rmdir(".old_root");
+    if (umount2(".old_root", MNT_DETACH) < 0) {
+      log_error("卸载 .old_root 失败: %s", strerror(errno));
+      return;
+    }
+    rmdir(".old_root");
   }
 
   // 目前处于根目录

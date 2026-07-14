@@ -52,7 +52,9 @@ static int open_loop_dev(const long devnr, fs::path& path_out) {
 
   // 3. 使用内核告诉我们的确切设备号创建节点
   if (mknod(path_out.c_str(), S_IFBLK | 0600, makedev(major, minor)) == 0) {
-    return open(path_out.c_str(), O_RDWR | O_CLOEXEC);
+    int fd = open(path_out.c_str(), O_RDWR | O_CLOEXEC);
+    unlink(path_out.c_str());
+    return fd;
   }
 
   return -1;
