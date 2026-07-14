@@ -115,18 +115,6 @@ int start_rootfs(cfg_t *cfg) {
 
   has_side_effects = true;
 
-  if (!cfg->rt.config_file.empty()) {
-    if (config_save(cfg->rt.config_file, cfg) < 0) {
-      log_error("无法持久化配置到 '%s': %s", cfg->rt.config_file.c_str(), strerror(errno));
-      goto cleanup;
-    }
-  }
-
-  if (config_save_by_name(cfg->rt.container_name, cfg) < 0) {
-    log_warn("无法将工作区镜像配置同步至 '%s': %s",
-             cfg->rt.container_name.c_str(), strerror(errno));
-  }
-
   log_info("正在分配并设置容器虚拟控制台 (PTY Console)...");
   if (terminal_create(&cfg->rt.console) < 0) {
     log_error("无法分配容器控制台 (Console) PTY");

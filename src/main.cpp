@@ -10,7 +10,7 @@ static void print_usage() {
   printf(
       "用法: " PROJECT_NAME " <命令> [参数]\n\n"
       "命令列表:\n"
-      "  start NAME [CONFIG]  使用可选的 CONFIG 配置文件启动名为 NAME 的容器\n"
+      "  start NAME [CONFIG]  使用 CONFIG 配置文件启动名为 NAME 的容器\n"
       "  stop NAME            停止名为 NAME 的容器\n"
       "  info NAME            显示详细的容器信息\n"
       "  help                 显示此帮助信息\n\n");
@@ -33,11 +33,9 @@ int asc_main(int argc, char **argv) {
 
   /* 严格的命令行匹配 */
   if (strcmp(cmd, "start") == 0) {
-    if (argc < 3 || argc > 4) goto usage_error;
+    if (argc != 4) goto usage_error;
     name = argv[2];
-    if (argc == 4) {
-      config_path = argv[3];
-    }
+    config_path = argv[3];
   } else if (strcmp(cmd, "stop") == 0) {
     if (argc != 3) goto usage_error;
     name = argv[2];
