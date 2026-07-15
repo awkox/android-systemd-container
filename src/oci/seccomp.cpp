@@ -82,38 +82,15 @@ int seccomp_apply_minimal(const int privileged_mask) {
   /* 6. 阻塞 clone3 (防穿透) */
   bpf.deny_syscall(SYS_clone3, SECCOMP_RET_ERRNO | (ENOSYS & SECCOMP_RET_DATA));
 
-  /* 7. unshare(CLONE_NEWUSER) */
-  bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_unshare, 0, 4);
-  bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(seccomp_data, args[0]));
-  bpf.jump(BPF_JMP | BPF_JSET | BPF_K, 0x10000000, 0, 1);
-  bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
-  bpf.load_syscall_nr();
-
-  /* 8. clone(CLONE_NEWUSER) */
-  bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_clone, 0, 3);
-  bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(seccomp_data, args[0]));
-  bpf.jump(BPF_JMP | BPF_JSET | BPF_K, 0x10000000, 0, 1);
-  bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
-
   /*
-   * 9. CVE-2026-31431 ("Copy Fail") - 缓解漏洞的强制性第二层。
-   */
-  bpf.load_syscall_nr();
-  bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_socket, 0, 4);
-  bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(seccomp_data, args[0]));
-  bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, AF_ALG, 0, 1);
-  bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
-  bpf.load_syscall_nr();
-
-  /*
-   * 10. 阻止宿主机时钟修改
+   * 9. 阻止宿主机时钟修改
    */
   bpf.deny_syscall(SYS_settimeofday, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
   bpf.deny_syscall(SYS_adjtimex, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
   bpf.deny_syscall(SYS_clock_settime, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
   bpf.deny_syscall(SYS_clock_adjtime, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
 
-  /* 10b. 阻止内核日志的越权读取 */
+  /* 10. 阻止内核日志的越权读取 */
   bpf.deny_syscall(SYS_syslog, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
 
   bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
