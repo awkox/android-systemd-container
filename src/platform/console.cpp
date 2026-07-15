@@ -1,229 +1,249 @@
 #include "asc.h"
 
-int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
-  sigset_t mask;
-  signalfd_siginfo fdsi;
-  epoll_event ev = {}, events[10] = {};
-  char buf[4096];
-  ssize_t n;
-  int ret = 0;
+/* 定义控制台上下文，避免在拆分的函数中传递大量参数 */
+struct ConsoleContext {
+  int epfd;
+  int console_master_fd;
+  int sfd;
+  pid_t monitor_pid;
+  cfg_t *cfg;
+  bool running;
 
-  /* 挂起的写入状态，用于非阻塞 PTY I/O。
-   * 当容器停止读取时，PTY 缓冲区填满，常规 write() 将永远阻塞
-   * 进而死锁包括 CTRL+ALT+Q 在内的整个事件循环。
-   * 此处我们使用非阻塞 I/O 和 EPOLLOUT 背压机制。 */
+  /* 挂起的写入状态，用于非阻塞 PTY I/O 的背压处理 */
   struct {
-    int fd; 
+    int fd;
     char data[4096];
     size_t len;
     size_t off;
-  } pending = {};
-  pending.fd = -1;
+  } pending;
+};
 
-  /* 设置 signalfd 以捕获监控进程信号 */
+/* 1. 处理来自用户标准输入 (STDIN) 的事件 */
+static void handle_stdin_event(ConsoleContext &ctx, uint32_t /* events */) {
+  char buf[4096];
+  ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
+  if (n <= 0) return;
+
+  /* 拦截检查 CTRL+ALT+Q (\x1b\x11) 逃逸序列 */
+  if (n >= 2 && buf[0] == '\x1b' && buf[1] == '\x11') {
+    static bool exit_detected = false;
+    if (!exit_detected) {
+      log_info("正在停止容器 '%s'...", ctx.cfg->rt.container_name.c_str());
+      pid_t bg_pid = fork();
+      if (bg_pid == 0) {
+        setsid();
+        
+        // 子进程安全关闭所有继承的文件描述符
+        close(ctx.epfd);
+        close(ctx.sfd);
+        if (ctx.console_master_fd >= 0) close(ctx.console_master_fd);
+
+        // 断开宿主机终端 IO
+        int devnull = open("/dev/null", O_RDWR);
+        if (devnull >= 0) {
+          dup2(devnull, STDIN_FILENO);
+          dup2(devnull, STDOUT_FILENO);
+          dup2(devnull, STDERR_FILENO);
+          close(devnull);
+        }
+
+        stop_rootfs(ctx.cfg->rt.container_name);
+        _exit(0);
+      }
+      if (bg_pid > 0) {
+        exit_detected = true;
+      }
+    }
+    return;
+  }
+
+  /* 正常输入透传至 PTY Master (带有背压处理) */
+  if (ctx.console_master_fd >= 0 && ctx.pending.fd < 0) {
+    ssize_t w = write(ctx.console_master_fd, buf, static_cast<size_t>(n));
+    epoll_event ev = {};
+    ev.data.fd = ctx.console_master_fd;
+    ev.events = EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLERR;
+
+    if (w >= 0 && static_cast<size_t>(w) < static_cast<size_t>(n)) {
+      ctx.pending.fd = ctx.console_master_fd;
+      ctx.pending.len = static_cast<size_t>(n) - static_cast<size_t>(w);
+      ctx.pending.off = 0;
+      memcpy(ctx.pending.data, buf + w, ctx.pending.len);
+      epoll_ctl(ctx.epfd, EPOLL_CTL_MOD, ctx.console_master_fd, &ev);
+    } else if (w < 0 && errno == EAGAIN) {
+      ctx.pending.fd = ctx.console_master_fd;
+      ctx.pending.len = static_cast<size_t>(n);
+      ctx.pending.off = 0;
+      memcpy(ctx.pending.data, buf, ctx.pending.len);
+      epoll_ctl(ctx.epfd, EPOLL_CTL_MOD, ctx.console_master_fd, &ev);
+    } else if (w < 0) {
+      epoll_ctl(ctx.epfd, EPOLL_CTL_DEL, ctx.console_master_fd, nullptr);
+      close(ctx.console_master_fd);
+      ctx.console_master_fd = -1;
+    }
+  }
+}
+
+/* 2. 处理容器 PTY Master 的事件 (读输出、写挂起数据、挂断) */
+static void handle_pty_event(ConsoleContext &ctx, uint32_t events) {
+  /* 容器断开控制台（如关机阶段），取消监听但不退出，等待 Monitor 信号 */
+  if (events & (EPOLLHUP | EPOLLERR)) {
+    epoll_ctl(ctx.epfd, EPOLL_CTL_DEL, ctx.console_master_fd, nullptr);
+    close(ctx.console_master_fd);
+    ctx.console_master_fd = -1;
+    return;
+  }
+
+  /* 优先排空挂起的写入 (EPOLLOUT) */
+  if ((events & EPOLLOUT) && ctx.pending.fd == ctx.console_master_fd) {
+    ssize_t w = write(ctx.console_master_fd, ctx.pending.data + ctx.pending.off, ctx.pending.len);
+    if (w > 0) {
+      ctx.pending.off += static_cast<size_t>(w);
+      ctx.pending.len -= static_cast<size_t>(w);
+    }
+    if (ctx.pending.len == 0 || (w < 0 && errno != EAGAIN)) {
+      ctx.pending.fd = -1;
+      epoll_event ev = {};
+      ev.events = EPOLLIN | EPOLLHUP | EPOLLERR;
+      ev.data.fd = ctx.console_master_fd;
+      epoll_ctl(ctx.epfd, EPOLL_CTL_MOD, ctx.console_master_fd, &ev);
+    }
+  }
+
+  /* 容器输出 -> 用户 stdout (EPOLLIN) */
+  if (events & EPOLLIN) {
+    char buf[4096];
+    ssize_t n = read(ctx.console_master_fd, buf, sizeof(buf));
+    if (n > 0) {
+      [[maybe_unused]] ssize_t w = write(STDOUT_FILENO, buf, static_cast<size_t>(n));
+    } else {
+      epoll_ctl(ctx.epfd, EPOLL_CTL_DEL, ctx.console_master_fd, nullptr);
+      close(ctx.console_master_fd);
+      ctx.console_master_fd = -1;
+    }
+  }
+}
+
+/* 3. 处理信号事件 (子进程退出、终端缩放、中断信号) */
+static void handle_signal_event(ConsoleContext &ctx, uint32_t /* events */) {
+  signalfd_siginfo fdsi;
+  ssize_t n = read(ctx.sfd, &fdsi, sizeof(fdsi));
+  if (n != sizeof(fdsi)) return;
+
+  if (fdsi.ssi_signo == SIGCHLD) {
+    int status;
+    pid_t child = waitpid(ctx.monitor_pid, &status, WNOHANG);
+    if (child == ctx.monitor_pid) {
+      ctx.running = false;
+    }
+  } else if (fdsi.ssi_signo == SIGWINCH) {
+    if (ctx.console_master_fd >= 0) {
+      winsize ws;
+      if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
+        ioctl(ctx.console_master_fd, TIOCSWINSZ, &ws);
+    }
+  } else if (fdsi.ssi_signo == SIGINT || fdsi.ssi_signo == SIGTERM) {
+    pid_t live_pid = find_container_init_pid(ctx.cfg->rt.container_name);
+    if (live_pid > 0)
+      kill(live_pid, static_cast<int>(fdsi.ssi_signo));
+  }
+}
+
+int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t *cfg) {
+  int ret = 0;
+  int is_tty = -1;
+  termios oldtios;
+  
+  ConsoleContext ctx = {};
+  ctx.console_master_fd = console_master_fd;
+  ctx.monitor_pid = monitor_pid;
+  ctx.cfg = cfg;
+  ctx.running = true;
+  ctx.pending.fd = -1;
+  ctx.sfd = -1;
+  ctx.epfd = -1;
+
+  sigset_t mask;
+  epoll_event ev = {}, events[10] = {};
+
+  /* 1. 设置 signalfd */
   sigemptyset(&mask);
   sigaddset(&mask, SIGCHLD);
   sigaddset(&mask, SIGINT);
   sigaddset(&mask, SIGTERM);
   sigaddset(&mask, SIGWINCH);
-  if (sigprocmask(SIG_BLOCK, &mask, nullptr) < 0)
-    return -1;
-
-  int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
-  if (sfd < 0)
-    return -1;
-
-  /* 设置 epoll */
-  int epfd = epoll_create1(EPOLL_CLOEXEC);
-  if (epfd < 0) {
-    close(sfd);
-    return -1;
+  if (sigprocmask(SIG_BLOCK, &mask, nullptr) < 0) {
+    ret = -1;
+    goto cleanup;
+  }
+  ctx.sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+  if (ctx.sfd < 0) {
+    ret = -1;
+    goto cleanup;
   }
 
-  /* 1. 监控用户标准输入 (stdin) */
+  /* 2. 设置 epoll */
+  ctx.epfd = epoll_create1(EPOLL_CLOEXEC);
+  if (ctx.epfd < 0) {
+    ret = -1;
+    goto cleanup;
+  }
+
+  /* 注册监听事件 */
   ev.events = EPOLLIN;
   ev.data.fd = STDIN_FILENO;
-  if (epoll_ctl(epfd, EPOLL_CTL_ADD, STDIN_FILENO, &ev) < 0)
-    log_warn("epoll_ctl(stdin) 失败: %s", strerror(errno));
+  epoll_ctl(ctx.epfd, EPOLL_CTL_ADD, STDIN_FILENO, &ev);
 
-  /* 2. 监控 PTY master (IN + HUP/ERR; 只有当有待写入数据时才添加 OUT) */
   ev.events = EPOLLIN | EPOLLHUP | EPOLLERR;
-  ev.data.fd = console_master_fd;
-  if (epoll_ctl(epfd, EPOLL_CTL_ADD, console_master_fd, &ev) < 0)
-    log_warn("epoll_ctl(master_fd) 失败: %s", strerror(errno));
+  ev.data.fd = ctx.console_master_fd;
+  epoll_ctl(ctx.epfd, EPOLL_CTL_ADD, ctx.console_master_fd, &ev);
 
-  /* 3. 监控 signalfd */
   ev.events = EPOLLIN;
-  ev.data.fd = sfd;
-  if (epoll_ctl(epfd, EPOLL_CTL_ADD, sfd, &ev) < 0)
-    log_warn("epoll_ctl(sig_fd) 失败: %s", strerror(errno));
+  ev.data.fd = ctx.sfd;
+  epoll_ctl(ctx.epfd, EPOLL_CTL_ADD, ctx.sfd, &ev);
 
-  /* 将 PTY master 设为非阻塞模式 — 这是背压修复的基础 */
-  {
-    int fl = fcntl(console_master_fd, F_GETFL);
-    if (fl >= 0)
-      fcntl(console_master_fd, F_SETFL, fl | O_NONBLOCK);
+  /* 将 PTY master 设为非阻塞模式 */
+  if (int fl = fcntl(ctx.console_master_fd, F_GETFL); fl >= 0) {
+    fcntl(ctx.console_master_fd, F_SETFL, fl | O_NONBLOCK);
   }
 
   /* 设置终端为原始(raw)模式 */
-  termios oldtios;
-  int is_tty = setup_tios(STDIN_FILENO, &oldtios);
-
-  /* 初始同步窗口尺寸 */
+  is_tty = setup_tios(STDIN_FILENO, &oldtios);
   if (is_tty == 0) {
     winsize ws;
     if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
-      ioctl(console_master_fd, TIOCSWINSZ, &ws);
+      ioctl(ctx.console_master_fd, TIOCSWINSZ, &ws);
   }
 
-  bool running = true;
-  while (running) {
-    int nfds = epoll_wait(epfd, events, 10, -1);
+  /* 3. 进入主事件分发循环 (Dispatcher) */
+  while (ctx.running) {
+    int nfds = epoll_wait(ctx.epfd, events, 10, -1);
     if (nfds < 0) {
-      if (errno == EINTR)
-        continue;
+      if (errno == EINTR) continue;
       ret = -1;
       break;
     }
 
     for (int i = 0; i < nfds; i++) {
-      int fd = events[i].data.fd;
+      const int fd = events[i].data.fd;
+      const uint32_t ev_mask = events[i].events;
 
       if (fd == STDIN_FILENO) {
-        /* 用户输入 -> 容器 PTY Master */
-        n = read(STDIN_FILENO, buf, sizeof(buf));
-        if (n > 0) {
-          /* 拦截检查 CTRL+ALT+Q (\x1b\x11) 逃逸序列 */
-          if (n >= 2 && buf[0] == '\x1b' && buf[1] == '\x11') {
-            static bool exit_detected = false;
-            if (!exit_detected) {
-              log_info("正在停止容器 '%s'...", cfg->rt.container_name.c_str());
-              pid_t bg_pid = fork();
-              if (bg_pid == 0) {
-                setsid();
-
-                close(epfd);
-                close(sfd);
-                if (console_master_fd >= 0) close(console_master_fd);
-    
-                // 断开宿主机终端 IO
-                int devnull = open("/dev/null", O_RDWR);
-                if (devnull >= 0) {
-                  dup2(devnull, STDIN_FILENO);
-                  dup2(devnull, STDOUT_FILENO);
-                  dup2(devnull, STDERR_FILENO);
-                  close(devnull);
-                }
-
-                stop_rootfs(cfg->rt.container_name);
-                _exit(0);
-              }
-              if (bg_pid > 0) {
-                exit_detected = true;
-              }
-            }
-            continue;
-          }
-
-          /* 修复：只有当 console_master_fd 仍然有效时才写入 */
-          if (console_master_fd >= 0) {
-            if (pending.fd < 0) {
-              ssize_t w = write(console_master_fd, buf, static_cast<size_t>(n));
-              if (w >= 0 && static_cast<size_t>(w) < static_cast<size_t>(n)) {
-                pending.fd = console_master_fd;
-                pending.len = static_cast<size_t>(n) - static_cast<size_t>(w);
-                pending.off = 0;
-                memcpy(pending.data, buf + w, pending.len);
-                ev.events = EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLERR;
-                ev.data.fd = console_master_fd;
-                epoll_ctl(epfd, EPOLL_CTL_MOD, console_master_fd, &ev);
-              } else if (w < 0 && errno == EAGAIN) {
-                pending.fd = console_master_fd;
-                pending.len = static_cast<size_t>(n);
-                pending.off = 0;
-                memcpy(pending.data, buf, pending.len);
-                ev.events = EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLERR;
-                ev.data.fd = console_master_fd;
-                epoll_ctl(epfd, EPOLL_CTL_MOD, console_master_fd, &ev);
-              } else if (w < 0) {
-                epoll_ctl(epfd, EPOLL_CTL_DEL, console_master_fd, nullptr);
-                close(console_master_fd);
-                console_master_fd = -1;
-              }
-            }
-          }
-        }
-      } else if (fd == console_master_fd) {
-        if (events[i].events & (EPOLLHUP | EPOLLERR)) {
-          /* 修复：容器断开控制台（如关机阶段），取消监听但不退出，等待 Monitor 信号 */
-          epoll_ctl(epfd, EPOLL_CTL_DEL, console_master_fd, nullptr);
-          close(console_master_fd);
-          console_master_fd = -1;
-          continue;
-        }
-
-        /* 优先排空挂起的写入 (EPOLLOUT) */
-        if (events[i].events & EPOLLOUT && pending.fd == console_master_fd) {
-          ssize_t w = write(console_master_fd, pending.data + pending.off, pending.len);
-          if (w > 0) {
-            pending.off += static_cast<size_t>(w);
-            pending.len -= static_cast<size_t>(w);
-          }
-          if (pending.len == 0 || (w < 0 && errno != EAGAIN)) {
-            pending.fd = -1;
-            ev.events = EPOLLIN | EPOLLHUP | EPOLLERR;
-            ev.data.fd = console_master_fd;
-            epoll_ctl(epfd, EPOLL_CTL_MOD, console_master_fd, &ev);
-          }
-        }
-
-        /* 容器输出 -> 用户 stdout (EPOLLIN) */
-        if (events[i].events & EPOLLIN) {
-          n = read(console_master_fd, buf, sizeof(buf));
-          if (n > 0) {
-            [[maybe_unused]] ssize_t w = write(STDOUT_FILENO, buf, static_cast<size_t>(n));
-          } else {
-            epoll_ctl(epfd, EPOLL_CTL_DEL, console_master_fd, nullptr);
-            close(console_master_fd);
-            console_master_fd = -1;
-          }
-        }
-      } else if (fd == sfd) {
-        /* 处理监听到的信号 */
-        n = read(sfd, &fdsi, sizeof(fdsi));
-        if (n != sizeof(fdsi))
-          continue;
-
-        if (fdsi.ssi_signo == SIGCHLD) {
-          int status;
-          pid_t child = waitpid(monitor_pid, &status, WNOHANG);
-          if (child == monitor_pid) {
-            running = false;
-          }
-        } else if (fdsi.ssi_signo == SIGWINCH) {
-          winsize ws;
-          if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
-            ioctl(console_master_fd, TIOCSWINSZ, &ws);
-        } else if (fdsi.ssi_signo == SIGINT || fdsi.ssi_signo == SIGTERM) {
-          pid_t live_pid = find_container_init_pid(cfg->rt.container_name);
-          if (live_pid > 0)
-            kill(live_pid, static_cast<int>(fdsi.ssi_signo));
-        }
+        handle_stdin_event(ctx, ev_mask);
+      } else if (fd == ctx.console_master_fd) {
+        handle_pty_event(ctx, ev_mask);
+      } else if (fd == ctx.sfd) {
+        handle_signal_event(ctx, ev_mask);
       }
     }
   }
 
-  close(sfd);
-  close(epfd);
-
-  if (console_master_fd >= 0) {
-    close(console_master_fd);
-  }
-
-  /* 恢复原本的终端设置 */
-  if (is_tty == 0) {
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &oldtios);
-  }
+  /* 4. 手动清理分配的资源 */
+cleanup:
+  if (ctx.sfd >= 0) close(ctx.sfd);
+  if (ctx.epfd >= 0) close(ctx.epfd);
+  if (ctx.console_master_fd >= 0) close(ctx.console_master_fd);
+  if (is_tty == 0) tcsetattr(STDIN_FILENO, TCSAFLUSH, &oldtios);
 
   return ret;
 }
