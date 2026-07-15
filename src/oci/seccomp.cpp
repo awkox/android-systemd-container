@@ -36,7 +36,7 @@ public:
     }
 
     int apply() {
-        struct sock_fprog prog = {
+        sock_fprog prog = {
             .len = static_cast<unsigned short>(filter.size()),
             .filter = filter.data(),
         };
