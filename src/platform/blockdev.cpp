@@ -1,31 +1,5 @@
 #include "asc.h"
 
-const char *detect_fs_type(const fs::path& img_path) {
-  const int fd = open(img_path.c_str(), O_RDONLY | O_CLOEXEC);
-  if (fd < 0)
-    return nullptr;
-
-  uint8_t buf[8];
-  const char *result = nullptr;
-
-  if (pread(fd, buf, 2, 0x438) == 2) {
-    if (const uint16_t m = static_cast<uint16_t>(buf[0]) | static_cast<uint16_t>(buf[1]) << 8; m == 0xEF53) {
-      result = "ext4";
-      goto out;
-    }
-  }
-
-  if (pread(fd, buf, 8, 0x10040) == 8) {
-    if (memcmp(buf, "_BHRfS_M", 8) == 0) {
-      result = "btrfs";
-    }
-  }
-
-out:
-  close(fd);
-  return result;
-}
-
 /*
  * 终极优化版 open_loop_dev: 
  * 1. 0 毫秒延迟（不等待 ueventd）
