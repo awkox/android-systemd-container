@@ -50,9 +50,8 @@ void release_external_lock(void) {
   }
 }
 
-bool is_external_lock_active(std::string_view name) {
-  fs::path lock_path = lock_dir / name;
-  return fs::exists(lock_path);
+inline bool is_external_lock_active(std::string_view name) {
+  return fs::exists(lock_dir / name);
 }
 
 void cleanup_container_resources(std::string_view container_name, const bool force_cleanup) {
