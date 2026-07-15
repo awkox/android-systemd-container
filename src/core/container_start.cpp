@@ -50,7 +50,7 @@ void release_external_lock(void) {
   }
 }
 
-inline bool is_external_lock_active(std::string_view name) {
+bool is_external_lock_active(std::string_view name) {
   return fs::exists(lock_dir / name);
 }
 

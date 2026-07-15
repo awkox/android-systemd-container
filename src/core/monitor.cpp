@@ -192,7 +192,11 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
         /* Systemd 约定：容器内使用 SIGHUP 触发宿主重启 */
         is_reboot_request = true;
         log_info("[MONITOR] 检测到容器内部发起了重启请求 (SIGHUP)");
-      } else if (sig == SIGINT || sig == (SIGRTMIN + 3) || sig == (SIGRTMIN + 4) || sig == (SIGRTMIN + 13) || sig == (SIGRTMIN + 14)) {
+      } else if (sig == SIGINT ||
+                 sig == (SIGRTMIN + 3) ||
+                 sig == (SIGRTMIN + 4) ||
+                 sig == (SIGRTMIN + 13) ||
+                 sig == (SIGRTMIN + 14)) {
         /* Systemd 约定：这些信号均代表不同层次的 Halt / Poweroff 请求 */
         log_info("[MONITOR] 检测到容器内部发起了关机请求 (Signal %d)", sig);
       } else {
