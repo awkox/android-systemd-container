@@ -51,21 +51,6 @@ ssize_t write_all(const int fd, const void *buf, const size_t count) {
   return static_cast<ssize_t>(count);
 }
 
-std::optional<std::string> read_file_cpp(const fs::path& path) {
-    std::ifstream file(path, std::ios::in | std::ios::binary);
-    if (!file) return std::nullopt;
-
-    // 利用迭代器一次性读取整个文件
-    std::string content((std::istreambuf_iterator<char>(file)), 
-                         std::istreambuf_iterator<char>());
-    
-    // 清理尾部换行符
-    while (!content.empty() && (content.back() == '\n' || content.back() == '\r')) {
-        content.pop_back();
-    }
-    return content;
-}
-
 bool grep_file(const fs::path& path, std::string_view pattern) {
     std::ifstream file(path);
     std::string line;

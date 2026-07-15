@@ -63,7 +63,7 @@ static void rmdir_cgroup_tree(const fs::path& path) {
     rmdir_cgroup_tree(sub);
   }
 
-  fs::path kill_path = path / "cgroup.kill";
+  const fs::path kill_path = path / "cgroup.kill";
   if (access(kill_path.c_str(), W_OK) == 0) {
     const int kfd = open(kill_path.c_str(), O_WRONLY | O_CLOEXEC);
     if (kfd >= 0) {
@@ -71,13 +71,11 @@ static void rmdir_cgroup_tree(const fs::path& path) {
       close(kfd);
     }
   }
-
-  fs::path events_path = path / "cgroup.events";
+  
+  const fs::path events_path = path / "cgroup.events";
   for (auto _ : std::views::iota(0, 50)) {
-    if (auto content = read_file_cpp(events_path)) {
-      if (strstr(content->c_str(), "populated 0"))
-        break;
-    }
+    if (grep_file(events_path, "populated 0"))
+      break;
     usleep(10000); 
   }
 
