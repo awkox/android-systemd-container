@@ -20,18 +20,6 @@ fs::path resolve_path_arg(const fs::path& path) {
     return abs_path.lexically_normal();
 }
 
-std::string format_uptime(const long uptime_sec) {
-  if (uptime_sec < 0) return "未知";
-  std::chrono::seconds d{uptime_sec};
-  auto dd = std::chrono::duration_cast<std::chrono::days>(d);
-  auto time_of_day = std::chrono::hh_mm_ss(d - dd);
-  return std::format("{}d {}h {}m {}s",
-                     dd.count(),
-                     time_of_day.hours().count(),
-                     time_of_day.minutes().count(),
-                     time_of_day.seconds().count());
-}
-
 static bool validate_container_name(std::string_view name, size_t max_len = 256) {
   if (name.empty() || name.size() > max_len) return false;
 
