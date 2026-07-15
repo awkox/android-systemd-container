@@ -112,7 +112,7 @@ int start_rootfs(cfg_t &cfg) {
   }
 
   log_info("正在分配并设置容器虚拟控制台 (PTY Console)...");
-  if (terminal_create(&cfg.rt.console) < 0) {
+  if (terminal_create(cfg.rt.console) < 0) {
     log_error("无法分配容器控制台 (Console) PTY");
     goto cleanup;
   }

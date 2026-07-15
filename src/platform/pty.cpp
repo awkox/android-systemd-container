@@ -39,14 +39,14 @@ err:
 }
 
 int terminal_create(tty_info *tty) {
-  if (asc_openpty(tty->master, tty->slave, tty->name) < 0) {
+  if (asc_openpty(tty.master, tty.slave, tty.name) < 0) {
     log_error("openpty 获取伪终端失败: %s", strerror(errno));
     return -1;
   }
 
   /* 修正 PTY 从设备的组属和权限 */
-  if (fchown(tty->slave, 0, 5) < 0) {}
-  fchmod(tty->slave, 0620);
+  if (fchown(tty.slave, 0, 5) < 0) {}
+  fchmod(tty.slave, 0620);
 
   return 0;
 }
