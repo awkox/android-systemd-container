@@ -13,17 +13,10 @@ static constexpr bool parse_bool(std::string_view val) {
   return val == "1";
 }
 
-// 保持原有的 parse_privileged，它已经部分使用了 string_view
 static int parse_privileged(std::string_view value) {
   int mask = 0;
-  if (value.empty()) return mask;
-
-  size_t start = 0, end = 0;
-  while (end != std::string_view::npos) {
-    end = value.find(',', start);
-    std::string_view token = trim_whitespace(value.substr(start, end - start));
-    start = end + 1;
-
+  for (const auto word_range : value | std::views::split(',')) {
+    std::string_view token = trim_whitespace(std::string_view(word_range));
     if (token == "nomask") mask |= PRIV_NOMASK;
     else if (token == "nocaps") mask |= PRIV_NOCAPS;
     else if (token == "noseccomp") mask |= PRIV_NOSEC;
