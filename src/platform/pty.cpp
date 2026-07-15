@@ -38,7 +38,7 @@ err:
   return -1;
 }
 
-int terminal_create(tty_info *tty) {
+int terminal_create(tty_info &tty) {
   if (asc_openpty(tty.master, tty.slave, tty.name) < 0) {
     log_error("openpty 获取伪终端失败: %s", strerror(errno));
     return -1;
@@ -61,15 +61,15 @@ int terminal_set_stdfds(const int fd) {
   return 0;
 }
 
-int setup_tios(const int fd, termios *old) {
-  if (!isatty(fd) || tcgetattr(fd, old) < 0)
+int setup_tios(const int fd, termios &old) {
+  if (!isatty(fd) || tcgetattr(fd, &old) < 0)
     return -1;
 
   // 忽略后台终端读写信号 (原代码逻辑保留)
   signal(SIGTTIN, SIG_IGN);
   signal(SIGTTOU, SIG_IGN);
 
-  termios new_tios = *old;
+  termios new_tios = old;
 
   // 【核心优化】一行代码调用系统库，完美、标准地清空所有规范模式标志
   cfmakeraw(&new_tios);

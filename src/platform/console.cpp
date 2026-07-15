@@ -209,7 +209,7 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t &cfg) {
   }
 
   /* 设置终端为原始(raw)模式 */
-  is_tty = setup_tios(STDIN_FILENO, &oldtios);
+  is_tty = setup_tios(STDIN_FILENO, oldtios);
   if (is_tty == 0) {
     winsize ws;
     if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
