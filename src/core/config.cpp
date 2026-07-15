@@ -1,23 +1,19 @@
 #include "asc.h"
 
-static char *trim_whitespace(char *str) {
-  while (isspace(static_cast<unsigned char>(*str)))
-    str++;
-  if (*str == 0)
-    return str;
-
-  char *end = str + strlen(str) - 1;
-  while (end > str && isspace(static_cast<unsigned char>(*end)))
-    end--;
-
-  *(end + 1) = 0;
-  return str;
+// 使用 std::string_view 实现零拷贝的 trim，安全且高效
+static std::string_view trim_whitespace(std::string_view sv) {
+  sv.remove_prefix(std::min(sv.find_first_not_of(" \t\r\n"), sv.size()));
+  if (!sv.empty()) {
+    sv.remove_suffix(sv.size() - sv.find_last_not_of(" \t\r\n") - 1);
+  }
+  return sv;
 }
 
 static constexpr bool parse_bool(std::string_view val) {
   return val == "1";
 }
 
+// 保持原有的 parse_privileged，它已经部分使用了 string_view
 static int parse_privileged(std::string_view value) {
   int mask = 0;
   if (value.empty()) return mask;
@@ -25,13 +21,8 @@ static int parse_privileged(std::string_view value) {
   size_t start = 0, end = 0;
   while (end != std::string_view::npos) {
     end = value.find(',', start);
-    std::string_view token = value.substr(start, end - start);
+    std::string_view token = trim_whitespace(value.substr(start, end - start));
     start = end + 1;
-
-    token.remove_prefix(std::min(token.find_first_not_of(" \t"), token.size()));
-    if (!token.empty()) {
-      token.remove_suffix(token.size() - token.find_last_not_of(" \t") - 1);
-    }
 
     if (token == "nomask") mask |= PRIV_NOMASK;
     else if (token == "nocaps") mask |= PRIV_NOCAPS;
@@ -42,27 +33,24 @@ static int parse_privileged(std::string_view value) {
 }
 
 int config_load(const char *config_path, asc_conf_t *conf) {
-  FILE *f = fopen(config_path, "re");
-  if (!f) {
-    return -1;
-  }
+  std::ifstream file(config_path);
+  if (!file) return -1;
 
-  char line[2048];
+  std::string line;
+  while (std::getline(file, line)) {
+    std::string_view trimmed = trim_whitespace(line);
 
-  while (fgets(line, sizeof(line), f)) {
-    char *trimmed = trim_whitespace(line);
-
-    if (trimmed[0] == '#' || trimmed[0] == '\0')
+    // 忽略空行和注释
+    if (trimmed.empty() || trimmed.front() == '#')
       continue;
 
-    char *equals = strchr(trimmed, '=');
-    if (!equals) {
+    auto equals = trimmed.find('=');
+    if (equals == std::string_view::npos)
       continue;
-    }
 
-    *equals = '\0';
-    std::string_view key = trim_whitespace(trimmed);
-    const char *val = trim_whitespace(equals + 1);
+    // 分割键值对，并对两边执行 trim
+    std::string_view key = trim_whitespace(trimmed.substr(0, equals));
+    std::string_view val = trim_whitespace(trimmed.substr(equals + 1));
 
     if (key == "rootfs_path") {
       conf->rootfs_img_path = val;
@@ -71,17 +59,16 @@ int config_load(const char *config_path, asc_conf_t *conf) {
     } else if (key == "privileged") {
       conf->privileged_mask = parse_privileged(val);
     } else if (key == "custom_init") {
-      if (strchr(val, ' '))
-        log_warn("配置警告: 忽略包含空格的 custom_init 路径 '%s'", val);
+      if (val.find(' ') != std::string_view::npos)
+        log_warn("配置警告: 忽略包含空格的 custom_init 路径 '%s'", std::string(val).c_str());
       else
         conf->custom_init = val;
     } else if (key == "isolation_network") {
       conf->isolation_network = parse_bool(val);
     } else {
-      log_warn("配置警告: 忽略未知的配置键 '%s'", key.data());
+      log_warn("配置警告: 忽略未知的配置键 '%s'", std::string(key).c_str());
     }
   }
 
-  fclose(f);
   return 0;
 }
