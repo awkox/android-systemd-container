@@ -95,7 +95,7 @@ int asc_main(int argc, char **argv) {
       if ((cfg.conf.privileged_mask & PRIV_NOSEC) && cfg.conf.block_nested_ns) {
         log_warn("警告：由于启用了 privileged=noseccomp，block-nested-namespaces 已失效。");
       }
-      return start_rootfs(&cfg);
+      return start_rootfs(cfg);
     }
 
     case Command::STOP: {

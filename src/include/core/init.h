@@ -3,6 +3,6 @@
 
 #include "common.h"
 
-void internal_boot(cfg_t *cfg);
+void internal_boot(cfg_t &cfg);
 
 #endif

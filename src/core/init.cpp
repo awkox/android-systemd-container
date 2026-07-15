@@ -17,16 +17,16 @@ static constexpr auto proc_universal_masks = std::to_array<const char*>({
 });
 
 /* 1. 基础挂载隔离与 Rootfs 挂载 */
-static bool setup_mount_isolation_and_rootfs(cfg_t *cfg) {
+static bool setup_mount_isolation_and_rootfs(cfg_t &cfg) {
   if (mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) < 0) {
     log_error("无法设置根目录挂载传播模式 (MS_PRIVATE): %s", strerror(errno));
     return false;
   }
 
-  if (!cfg->conf.rootfs_img_path.empty()) {
+  if (!cfg.conf.rootfs_img_path.empty()) {
     log_info("[BOOT] 准备挂载 Rootfs 镜像...");
-    fs::path mount_point = mount_dir / cfg->rt.container_name;
-    if (mount_rootfs_img(cfg->conf.rootfs_img_path, mount_point) < 0) {
+    fs::path mount_point = mount_dir / cfg.rt.container_name;
+    if (mount_rootfs_img(cfg.conf.rootfs_img_path, mount_point) < 0) {
       log_error("无法挂载镜像: %s", strerror(errno));
       return false;
     }
@@ -67,7 +67,7 @@ static bool setup_procfs(const asc_conf_t &conf) {
 }
 
 /* 3. 核心虚拟文件系统建立 */
-static bool setup_virtual_filesystems(cfg_t *cfg) {
+static bool setup_virtual_filesystems(cfg_t &cfg) {
   log_info("[BOOT] 正在挂载并配置虚拟文件系统 (proc, sys, dev)...");
 
   for (const auto dir : dirs_to_create) {
@@ -77,7 +77,7 @@ static bool setup_virtual_filesystems(cfg_t *cfg) {
     }
   }
 
-  if (!setup_procfs(cfg->conf)) return false;
+  if (!setup_procfs(cfg.conf)) return false;
 
   if (mount("sysfs", "sys", "sysfs", MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
     log_error("挂载 sysfs 失败: %s", strerror(errno));
@@ -91,8 +91,8 @@ static bool setup_virtual_filesystems(cfg_t *cfg) {
   }
   if (setup_devpts() < 0) return false;
 
-  if (mount(cfg->rt.console.name.c_str(), "dev/console", nullptr, MS_BIND, nullptr) < 0)
-    log_warn("无法绑定挂载 Console '%s': %s", cfg->rt.console.name.c_str(), strerror(errno));
+  if (mount(cfg.rt.console.name.c_str(), "dev/console", nullptr, MS_BIND, nullptr) < 0)
+    log_warn("无法绑定挂载 Console '%s': %s", cfg.rt.console.name.c_str(), strerror(errno));
 
   return true;
 }
@@ -152,14 +152,14 @@ static void setup_console_stdio() {
 }
 
 /* 7. 引导 PID 1 进程 */
-static void execute_init_process(cfg_t *cfg) {
-  const char *init_bin = cfg->conf.custom_init.empty() ? DEFAULT_INIT : cfg->conf.custom_init.c_str();
+static void execute_init_process(cfg_t &cfg) {
+  const char *init_bin = cfg.conf.custom_init.empty() ? DEFAULT_INIT : cfg.conf.custom_init.c_str();
   const char *init_args[] = {init_bin, "systemd.unified_cgroup_hierarchy=1", nullptr};
   const char *environment[] = {"container=asc", nullptr};
 
   log_info("[BOOT] 容器引导环境搭建完毕，移交控制权至 PID 1 (%s)...", init_bin);
 
-  if (cfg->rt.foreground) {
+  if (cfg.rt.foreground) {
     printf("\r\n(按下 CTRL+ALT+Q 以脱离前台并退出)\r\n");
   }
   printf("\r\n");
@@ -170,7 +170,7 @@ static void execute_init_process(cfg_t *cfg) {
   }
 }
 
-void internal_boot(cfg_t *cfg) {
+void internal_boot(cfg_t &cfg) {
   log_info("[BOOT] 正在初始化容器内部运行环境...");
 
   // 1. 挂载传播隔离与 Rootfs 挂载
@@ -187,13 +187,13 @@ void internal_boot(cfg_t *cfg) {
 
   // 5. 应用安全性防护
   log_info("[BOOT] 正在应用系统安全加固与沙箱隔离策略...");
-  if (seccomp_apply_minimal(cfg->conf.privileged_mask) < 0) {
+  if (seccomp_apply_minimal(cfg.conf.privileged_mask) < 0) {
     log_error("Seccomp 应用失败，拒绝启动不安全的容器");
     return;
   }
-  android_seccomp_setup(cfg->conf.block_nested_ns && !(cfg->conf.privileged_mask & PRIV_NOSEC), 
-                        cfg->conf.privileged_mask);
-  apply_capability_hardening(cfg->conf.privileged_mask);
+  android_seccomp_setup(cfg.conf.block_nested_ns && !(cfg.conf.privileged_mask & PRIV_NOSEC), 
+                        cfg.conf.privileged_mask);
+  apply_capability_hardening(cfg.conf.privileged_mask);
 
   // 6. 绑定控制台输入输出
   setup_console_stdio();

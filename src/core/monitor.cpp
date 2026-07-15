@@ -1,7 +1,7 @@
 #include "asc.h"
 
 struct InitArgs {
-  cfg_t *cfg;
+  cfg_t &cfg;
   int sync_fd;          // pipefd[0]: 当前 Init 用来接收唤醒信号的读端
   int wake_write_fd;    // pipefd[1]: 属于 Monitor 的唤醒写端（应关闭）
   int sync_pipe_write;  // sync_fd: 属于 Monitor 向 CLI 通信的写端（应关闭）
@@ -34,7 +34,7 @@ static int init_trampoline(void *arg) {
 }
 
 // 子模块 1: 环境与上下文初始化
-static void setup_monitor_environment(cfg_t *cfg) {
+static void setup_monitor_environment(cfg_t &cfg) {
   if (setsid() < 0 && errno != EPERM) {
     log_error("Monitor setsid 失败: %s", strerror(errno));
     _exit(EXIT_FAILURE);
@@ -52,7 +52,7 @@ static void setup_monitor_environment(cfg_t *cfg) {
   oom_protect();
   prctl(PR_SET_NAME, "[ds-monitor]", 0, 0, 0);
 
-  fs::path cg_path = project_cgroup_dir / cfg->rt.container_name;
+  fs::path cg_path = project_cgroup_dir / cfg.rt.container_name;
   create_directories_with_permission(cg_path);
 }
 
@@ -66,7 +66,7 @@ static void redirect_stdio_to_null() {
 }
 
 // 子模块 3: 孵化与唤醒容器 Init 进程
-static pid_t launch_container_init(cfg_t *cfg, void *stack_top, int *sync_fd) {
+static pid_t launch_container_init(cfg_t &cfg, void *stack_top, int *sync_fd) {
   int pipefd[2];
   if (pipe2(pipefd, O_CLOEXEC) < 0) {
     return -1;
@@ -74,7 +74,7 @@ static pid_t launch_container_init(cfg_t *cfg, void *stack_top, int *sync_fd) {
 
   InitArgs args = {cfg, pipefd[0], pipefd[1], *sync_fd};
   int clone_flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNS | SIGCHLD;
-  if (cfg->conf.isolation_network) clone_flags |= CLONE_NEWNET;
+  if (cfg.conf.isolation_network) clone_flags |= CLONE_NEWNET;
 
   pid_t init_pid = clone(init_trampoline, stack_top, clone_flags, &args);
   close(pipefd[0]); // 父进程关闭供子进程读取的管道端
@@ -86,7 +86,7 @@ static pid_t launch_container_init(cfg_t *cfg, void *stack_top, int *sync_fd) {
   }
 
   /* 将子进程迁入 Cgroup */
-  fs::path cg_path = project_cgroup_dir / cfg->rt.container_name;
+  fs::path cg_path = project_cgroup_dir / cfg.rt.container_name;
   write_file(cg_path / "cgroup.procs", std::format("{}\n", init_pid));
 
   /* 释放 Init 进程，允许其推进引导 */
@@ -155,7 +155,7 @@ static int wait_for_container_exit(pid_t init_pid) {
 }
 
 // 子模块 5: 退出状态分析与重启决策
-static bool evaluate_reboot_request(int status, cfg_t *cfg) {
+static bool evaluate_reboot_request(int status, cfg_t &cfg) {
   bool is_reboot_request = false;
 
   if (WIFEXITED(status)) {
@@ -181,21 +181,21 @@ static bool evaluate_reboot_request(int status, cfg_t *cfg) {
   }
 
   if (is_reboot_request) {
-    if (is_external_lock_active(cfg->rt.container_name)) {
+    if (is_external_lock_active(cfg.rt.container_name)) {
       log_warn("[MONITOR] 检测到外部命令锁 - 中止内部重启，移交控制权给 CLI");
       return false;
     } 
     
-    if (cfg->rt.foreground) {
-      log_info("容器 %s 正在重启", cfg->rt.container_name.c_str());
+    if (cfg.rt.foreground) {
+      log_info("容器 %s 正在重启", cfg.rt.container_name.c_str());
       fflush(stdout);
     }
-    cfg->rt.reboot_cycle = true;
-    clock_gettime(CLOCK_BOOTTIME, &cfg->rt.start_time);
+    cfg.rt.reboot_cycle = true;
+    clock_gettime(CLOCK_BOOTTIME, &cfg.rt.start_time);
 
     // 重置运行时 PID 标识以进入下一轮
-    cfg->rt.container_pid = 0;
-    cfg->rt.ns_inode = 0;
+    cfg.rt.container_pid = 0;
+    cfg.rt.ns_inode = 0;
     return true;
   }
   
@@ -203,7 +203,7 @@ static bool evaluate_reboot_request(int status, cfg_t *cfg) {
 }
 
 // 主函数: monitor_run 监督主循环
-void monitor_run(cfg_t *cfg, int sync_pipe_write) {
+void monitor_run(cfg_t &cfg, int sync_pipe_write) {
   setup_monitor_environment(cfg);
 
   int sync_fd = sync_pipe_write;
@@ -214,7 +214,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
   constexpr size_t stack_size = 2 * 1024 * 1024;
 
   do {
-    if (!cfg->rt.foreground && !stdio_redirected) {
+    if (!cfg.rt.foreground && !stdio_redirected) {
       redirect_stdio_to_null();
       stdio_redirected = true;
     }
@@ -230,8 +230,8 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
       _exit(EXIT_FAILURE);
     }
 
-    cfg->rt.container_pid = init_pid;
-    cfg->rt.ns_inode = get_pid_ns_inode(init_pid);
+    cfg.rt.container_pid = init_pid;
+    cfg.rt.ns_inode = get_pid_ns_inode(init_pid);
     log_info("容器启动成功，主 PID 为 %d (Monitor PID: %d)", init_pid, getpid());
 
     if (chdir("/") < 0) {
@@ -254,7 +254,7 @@ void monitor_run(cfg_t *cfg, int sync_pipe_write) {
   } while (should_reboot);
 
   log_info("[MONITOR] 容器主进程已退出，Monitor 正在执行退出清理工作...");
-  cleanup_container_resources(cfg->rt.container_name, false);
+  cleanup_container_resources(cfg.rt.container_name, false);
 
   log_info("[MONITOR] 资源清理完毕，守护进程退出。");
   _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 0);
