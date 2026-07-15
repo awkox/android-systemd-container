@@ -66,13 +66,13 @@ static void redirect_stdio_to_null() {
 }
 
 // 子模块 3: 孵化与唤醒容器 Init 进程
-static pid_t launch_container_init(cfg_t &cfg, void *stack_top, int *sync_fd) {
+static pid_t launch_container_init(cfg_t &cfg, void *stack_top, int &sync_fd) {
   int pipefd[2];
   if (pipe2(pipefd, O_CLOEXEC) < 0) {
     return -1;
   }
 
-  InitArgs args = {cfg, pipefd[0], pipefd[1], *sync_fd};
+  InitArgs args = {cfg, pipefd[0], pipefd[1], sync_fd};
   int clone_flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNS | SIGCHLD;
   if (cfg.conf.isolation_network) clone_flags |= CLONE_NEWNET;
 
@@ -95,10 +95,10 @@ static pid_t launch_container_init(cfg_t &cfg, void *stack_top, int *sync_fd) {
   close(pipefd[1]);
 
   /* 首次启动时通知 CLI 工具 */
-  if (*sync_fd >= 0) {
-    if (write(*sync_fd, &init_pid, sizeof(pid_t)) != sizeof(pid_t)) {}
-    close(*sync_fd);
-    *sync_fd = -1; // 标记为已消费
+  if (sync_fd >= 0) {
+    if (write(sync_fd, &init_pid, sizeof(pid_t)) != sizeof(pid_t)) {}
+    close(sync_fd);
+    sync_fd = -1; // 标记为已消费
   }
 
   return init_pid;
@@ -224,7 +224,7 @@ void monitor_run(cfg_t &cfg, int sync_pipe_write) {
     void *stack_top = static_cast<char *>(stack) + stack_size;
 
     // 1. 孵化 Init 进程
-    pid_t init_pid = launch_container_init(cfg, stack_top, &sync_fd);
+    pid_t init_pid = launch_container_init(cfg, stack_top, sync_fd);
     if (init_pid < 0) {
       free(stack);
       _exit(EXIT_FAILURE);

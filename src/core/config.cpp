@@ -25,7 +25,7 @@ static int parse_privileged(std::string_view value) {
   return mask;
 }
 
-int config_load(const char *config_path, asc_conf_t *conf) {
+int config_load(const char *config_path, asc_conf_t &conf) {
   std::ifstream file(config_path);
   if (!file) return -1;
 
@@ -46,18 +46,18 @@ int config_load(const char *config_path, asc_conf_t *conf) {
     std::string_view val = trim_whitespace(trimmed.substr(equals + 1));
 
     if (key == "rootfs_path") {
-      conf->rootfs_img_path = val;
+      conf.rootfs_img_path = val;
     } else if (key == "block_nested_ns") {
-      conf->block_nested_ns = parse_bool(val);
+      conf.block_nested_ns = parse_bool(val);
     } else if (key == "privileged") {
-      conf->privileged_mask = parse_privileged(val);
+      conf.privileged_mask = parse_privileged(val);
     } else if (key == "custom_init") {
       if (val.find(' ') != std::string_view::npos)
         log_warn("配置警告: 忽略包含空格的 custom_init 路径 '%s'", std::string(val).c_str());
       else
-        conf->custom_init = val;
+        conf.custom_init = val;
     } else if (key == "isolation_network") {
-      conf->isolation_network = parse_bool(val);
+      conf.isolation_network = parse_bool(val);
     } else {
       log_warn("配置警告: 忽略未知的配置键 '%s'", std::string(key).c_str());
     }

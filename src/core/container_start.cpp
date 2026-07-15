@@ -184,7 +184,7 @@ int start_rootfs(cfg_t &cfg) {
     release_external_lock();
 
   if (cfg.rt.foreground) {
-    return console_monitor_loop(cfg.rt.console.master, monitor_pid, &cfg);
+    return console_monitor_loop(cfg.rt.console.master, monitor_pid, cfg);
   }
 
   if (cfg.rt.console.master >= 0) {

@@ -3,6 +3,6 @@
 
 #include "common.h"
 
-int config_load(const char *config_path, asc_conf_t *conf);
+int config_load(const char *config_path, asc_conf_t &conf);
 
 #endif

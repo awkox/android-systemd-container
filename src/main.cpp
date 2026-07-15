@@ -85,7 +85,7 @@ int asc_main(int argc, char **argv) {
 
       /* 5. 尝试加载容器配置文件 */
       if (config_path[0]) {
-        if (config_load(config_path, &cfg.conf) < 0) {
+        if (config_load(config_path, cfg.conf) < 0) {
           log_error("无法从 '%s' 加载配置: %s", config_path, strerror(errno));
           return 1;
         }
