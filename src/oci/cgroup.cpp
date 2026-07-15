@@ -73,7 +73,7 @@ static void rmdir_cgroup_tree(const fs::path& path) {
   }
   
   const fs::path events_path = path / "cgroup.events";
-  for (auto _ : std::views::iota(0, 50)) {
+  for ([[maybe_unused]] auto _ : std::views::iota(0, 50)) {
     if (grep_file(events_path, "populated 0"))
       break;
     usleep(10000); 
