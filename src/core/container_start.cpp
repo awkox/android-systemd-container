@@ -80,16 +80,21 @@ int start_rootfs(cfg_t *cfg) {
   pid_t existing_pid = -1;
 
   log_info("正在获取容器独占锁与资源...");
-  if (acquire_external_lock(cfg->rt.container_name) == 0) {
-    lock_acquired = true;
-  }
-
-  if (!lock_acquired) {
+  if (acquire_external_lock(cfg->rt.container_name) != 0) {
     if (is_container_running(cfg->rt.container_name, &existing_pid)) {
       log_error("容器名称 '%s' 已被 PID %d 占用。",
                 cfg->rt.container_name.c_str(), existing_pid);
-      goto cleanup;
+    } else {
+      log_error("无法操作容器 '%s': 另一个管理命令正在执行。", cfg->rt.container_name.c_str());
     }
+    goto cleanup;
+  }
+  lock_acquired = true;
+
+  if (is_container_running(cfg->rt.container_name, &existing_pid)) {
+    log_error("容器名称 '%s' 已被 PID %d 占用。",
+              cfg->rt.container_name.c_str(), existing_pid);
+    goto cleanup;
   }
 
   if (!cfg->conf.rootfs_img_path.empty()) {
