@@ -79,18 +79,15 @@ int seccomp_apply_minimal(const int privileged_mask) {
   bpf.deny_syscall(SYS_kexec_load);
   bpf.deny_syscall(SYS_kexec_file_load);
 
-  /* 6. 阻塞 clone3 (防穿透) */
-  bpf.deny_syscall(SYS_clone3, SECCOMP_RET_ERRNO | (ENOSYS & SECCOMP_RET_DATA));
-
   /*
-   * 9. 阻止宿主机时钟修改
+   * 6. 阻止宿主机时钟修改
    */
   bpf.deny_syscall(SYS_settimeofday, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
   bpf.deny_syscall(SYS_adjtimex, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
   bpf.deny_syscall(SYS_clock_settime, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
   bpf.deny_syscall(SYS_clock_adjtime, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
 
-  /* 10. 阻止内核日志的越权读取 */
+  /* 7. 阻止内核日志的越权读取 */
   bpf.deny_syscall(SYS_syslog, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
 
   bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
