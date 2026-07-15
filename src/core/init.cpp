@@ -134,21 +134,21 @@ static void setup_console_stdio() {
   const int console_fd = open("dev/console", O_RDWR);
   if (console_fd < 0) return;
 
-  if (terminal_set_stdfds(console_fd) < 0) {
-    log_warn("无法将标准 I/O 重定向到 /dev/console");
-  } else {
-    terminal_make_controlling(console_fd);
-
-    winsize ws;
-    if (ioctl(console_fd, TIOCGWINSZ, &ws) == 0 && ws.ws_col == 0 && ws.ws_row == 0) {
-      ws.ws_row = 24;
-      ws.ws_col = 80;
-      ioctl(console_fd, TIOCSWINSZ, &ws);
-    }
-    fchmod(console_fd, 0620);
-    if (fchown(console_fd, 0, 5) < 0) {}
+  winsize ws;
+  if (ioctl(console_fd, TIOCGWINSZ, &ws) == 0 && ws.ws_col == 0 && ws.ws_row == 0) {
+    ws.ws_row = 24;
+    ws.ws_col = 80;
+    ioctl(console_fd, TIOCSWINSZ, &ws);
   }
-  if (console_fd > 2) close(console_fd);
+  
+  fchmod(console_fd, 0620);
+  if (fchown(console_fd, 0, 5) < 0) {}
+
+  // 【核心优化】使用标准库 login_tty 替代所有的 dup2、setsid 和 TIOCSCTTY
+  // 它甚至会自动帮你执行 close(console_fd)，如果它大于2的话！
+  if (login_tty(console_fd) < 0) {
+    log_warn("login_tty 失败，无法绑定终端: %s", strerror(errno));
+  }
 }
 
 /* 7. 引导 PID 1 进程 */

@@ -65,17 +65,6 @@ int terminal_set_stdfds(const int fd) {
   return 0;
 }
 
-int terminal_make_controlling(const int fd) {
-  setsid();
-
-  if (ioctl(fd, TIOCSCTTY, nullptr) < 0) {
-    log_error("TIOCSCTTY 控制终端绑定失败: %s", strerror(errno));
-    return -1;
-  }
-
-  return 0;
-}
-
 int setup_tios(const int fd, termios *old) {
   if (!isatty(fd) || tcgetattr(fd, old) < 0)
     return -1;

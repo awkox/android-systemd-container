@@ -60,9 +60,7 @@ static void setup_monitor_environment(cfg_t *cfg) {
 static void redirect_stdio_to_null() {
   int devnull = open("/dev/null", O_RDWR);
   if (devnull >= 0) {
-    dup2(devnull, 0);
-    dup2(devnull, 1);
-    dup2(devnull, 2);
+    terminal_set_stdfds(devnull);
     close(devnull);
   }
 }
