@@ -34,29 +34,28 @@ out:
 static int open_loop_dev(const long devnr, fs::path& path_out) {
   const fs::path sysfs_path = std::format("/sys/class/block/loop{}/dev", devnr);
   // 1. 同步读取内核分配的确切设备号
-  FILE *f = fopen(sysfs_path.c_str(), "re");
+  std::ifstream f(sysfs_path);
   if (!f) {
     log_error("无法读取 loop%ld 的 sysfs 状态", devnr);
     return -1;
   }
 
   int major = 0, minor = 0;
-  if (fscanf(f, "%d:%d", &major, &minor) != 2) {
-    fclose(f);
-    log_error("无法解析 loop%ld 的设备号", devnr);
-    return -1;
-  }
-  fclose(f);
+  char colon;
+  if (f >> major >> colon >> minor && colon == ':') {
+    // 2. 在 /dev 创建私有的临时节点，绝对避免与宿主机 udev 发生权限和竞态冲突
+    path_out = std::format("/dev/asc_loop_{}", devnr);
+    unlink(path_out.c_str()); // 清理可能的残留
 
-  // 2. 在 /dev 创建私有的临时节点，绝对避免与宿主机 udev 发生权限和竞态冲突
-  path_out = std::format("/dev/asc_loop_{}", devnr);
-  unlink(path_out.c_str()); // 清理可能的残留
-
-  // 3. 使用内核告诉我们的确切设备号创建节点
-  if (mknod(path_out.c_str(), S_IFBLK | 0600, makedev(major, minor)) == 0) {
+    // 3. 使用内核告诉我们的确切设备号创建节点
+    if (mknod(path_out.c_str(), S_IFBLK | 0600, makedev(major, minor)) < 0) {
+      log_error("无法创建设备节点 %s (major=%d, minor=%d)", path_out.c_str(), major, minor);
+      return -1;
+    }
     return open(path_out.c_str(), O_RDWR | O_CLOEXEC);
   }
 
+  log_error("无法解析 loop%ld 的设备号", devnr);
   return -1;
 }
 
