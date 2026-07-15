@@ -76,33 +76,20 @@ int terminal_make_controlling(const int fd) {
   return 0;
 }
 
-/* ---------------------------------------------------------------------------
- * Termios 终端设置
- * ---------------------------------------------------------------------------*/
-
 int setup_tios(const int fd, termios *old) {
-  termios new_tios;
-
-  if (!isatty(fd))
+  if (!isatty(fd) || tcgetattr(fd, old) < 0)
     return -1;
 
-  if (tcgetattr(fd, old) < 0)
-    return -1;
-
+  // 忽略后台终端读写信号 (原代码逻辑保留)
   signal(SIGTTIN, SIG_IGN);
   signal(SIGTTOU, SIG_IGN);
 
-  new_tios = *old;
+  termios new_tios = *old;
 
-  /* Raw 模式 - 尽可能对齐 LXC/SSH 的设置以保证最大兼容性 */
-  new_tios.c_iflag |= IGNPAR;
-  new_tios.c_iflag &= static_cast<tcflag_t>(~(ISTRIP | INLCR | IGNCR | ICRNL | IXON | IXANY | IXOFF));
-  new_tios.c_iflag &= static_cast<tcflag_t>(~IUCLC);
-  new_tios.c_lflag &= static_cast<tcflag_t>(~(TOSTOP | ISIG | ICANON | ECHO | ECHOE | ECHOK | ECHONL));
-  new_tios.c_lflag &= static_cast<tcflag_t>(~IEXTEN);
-  /* 禁用输出处理：如果主 PTY 的 OPOST 处于 ONLCR 激活状态，\n 会被转换为 \r\n，
-   * 从而破坏 tmux、vim 等终端 UI 工具的转义序列。在沙盒从 PTY 内它会自行设置，所以
-   * 在此必须禁用以保证只转换一次。 */
+  // 【核心优化】一行代码调用系统库，完美、标准地清空所有规范模式标志
+  cfmakeraw(&new_tios);
+
+  // 追加你特定的定制化需求（防止 \n 被转为 \r\n 破坏容器内 UI 渲染）
   new_tios.c_oflag &= static_cast<tcflag_t>(~(OPOST | ONLCR));
   new_tios.c_cc[VMIN] = 1;
   new_tios.c_cc[VTIME] = 0;
