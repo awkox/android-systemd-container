@@ -90,7 +90,7 @@ int loop_attach(const fs::path& img_path, fs::path& loop_path_out) {
   loop_config config = {};
   config.fd = img_fd;
   config.info.lo_flags = LO_FLAGS_AUTOCLEAR; // 内核会在卸载后自动清理销毁
-  snprintf(reinterpret_cast<char *>(config.info.lo_file_name), LO_NAME_SIZE, "%.63s", img_path.c_str());
+  std::ranges::copy(img_path.string() | std::views::take(LO_NAME_SIZE - 1), config.info.lo_file_name);
 
   if (ioctl(loop_fd, LOOP_CONFIGURE, &config) < 0) {
     close(img_fd);
