@@ -3,7 +3,7 @@
 
 #include "common.h"
 
-fs::path resolve_path_arg(const fs::path& path);
+fs::path resolve_path_arg(const fs::path &path);
 int reject_container_name(const std::string& name);
 std::string format_privileged_mask(const int mask);
 

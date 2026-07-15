@@ -108,7 +108,7 @@ int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask)
   if (privileged_mask & PRIV_NOSEC)
     return 0;
   int major = 0, minor = 0;
-  get_kernel_version(&major, &minor);
+  get_kernel_version(major, minor);
 
   constexpr uint32_t ns_mask = 0x7E020000;
 

@@ -5,7 +5,7 @@
  * 1. 0 毫秒延迟（不等待 ueventd）
  * 2. 100% 设备号精准（通过 sysfs 向内核查询，完美解决 Android 乘以 8 的次设备号偏移）
  */
-static int open_loop_dev(const long devnr, fs::path& path_out) {
+static int open_loop_dev(const long devnr, fs::path &path_out) {
   const fs::path sysfs_path = std::format("/sys/class/block/loop{}/dev", devnr);
   // 1. 同步读取内核分配的确切设备号
   std::ifstream f(sysfs_path);
@@ -33,7 +33,7 @@ static int open_loop_dev(const long devnr, fs::path& path_out) {
   return -1;
 }
 
-int loop_attach(const fs::path& img_path, fs::path& loop_path_out) {
+int loop_attach(const fs::path &img_path, fs::path &loop_path_out) {
   const int ctl_fd = open("/dev/loop-control", O_RDWR | O_CLOEXEC);
   if (ctl_fd < 0) {
     log_error("打开 /dev/loop-control 失败: %s", strerror(errno));

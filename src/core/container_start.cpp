@@ -80,7 +80,7 @@ int start_rootfs(cfg_t &cfg) {
 
   log_info("正在获取容器独占锁与资源...");
   if (acquire_external_lock(cfg.rt.container_name) != 0) {
-    if (is_container_running(cfg.rt.container_name, &existing_pid)) {
+    if (is_container_running(cfg.rt.container_name, existing_pid)) {
       log_error("容器名称 '%s' 已被 PID %d 占用。",
                 cfg.rt.container_name.c_str(), existing_pid);
     } else {
@@ -90,7 +90,7 @@ int start_rootfs(cfg_t &cfg) {
   }
   lock_acquired = true;
 
-  if (is_container_running(cfg.rt.container_name, &existing_pid)) {
+  if (is_container_running(cfg.rt.container_name, existing_pid)) {
     log_error("容器名称 '%s' 已被 PID %d 占用。",
               cfg.rt.container_name.c_str(), existing_pid);
     goto cleanup;

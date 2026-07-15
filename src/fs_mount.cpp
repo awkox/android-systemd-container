@@ -18,7 +18,7 @@ static std::vector<std::string> get_supported_block_fs() {
     return fs_types;
 }
 
-int mount_rootfs_img(const fs::path& img_path, const fs::path& mount_point) {
+int mount_rootfs_img(const fs::path &img_path, const fs::path &mount_point) {
     if (!create_directories_with_permission(mount_point)) {
         log_error("创建挂载目录 %s 失败: %s", mount_point.c_str(), strerror(errno));
         return -1;
@@ -44,7 +44,7 @@ int mount_rootfs_img(const fs::path& img_path, const fs::path& mount_point) {
         bool success = false;
 
         // 2. 遍历尝试内核支持的所有文件系统
-        for (const auto& fstype : supported_fs) {
+        for (const auto &fstype : supported_fs) {
             if (mount(final_src.c_str(), mount_point.c_str(), fstype.c_str(), mnt_flags, nullptr) == 0) {
                 log_info("识别到文件系统并成功挂载 (%s)", fstype.c_str());
                 success = true;

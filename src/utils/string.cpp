@@ -1,6 +1,6 @@
 #include "asc.h"
 
-fs::path resolve_path_arg(const fs::path& path) {
+fs::path resolve_path_arg(const fs::path &path) {
     if (path.empty()) return "";
 
     std::string expanded_path = path;

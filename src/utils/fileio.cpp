@@ -1,11 +1,11 @@
 #include "asc.h"
 
-bool create_directories_with_permission(const fs::path& target, mode_t mode) {
+bool create_directories_with_permission(const fs::path &target, mode_t mode) {
   // 规范化路径（解析掉多余的 / 以及 . 或 ..）
   fs::path normalized_target = target.lexically_normal();
   fs::path current;
 
-  for (const auto& component : normalized_target) {
+  for (const auto &component : normalized_target) {
     current /= component;
 
     // 如果当前层级路径不存在，则尝试创建
@@ -28,7 +28,7 @@ bool create_directories_with_permission(const fs::path& target, mode_t mode) {
   return true;
 }
 
-int write_file(const fs::path& path, std::string_view content) {
+int write_file(const fs::path &path, std::string_view content) {
     std::ofstream out(path, std::ios::binary);
     if (!out) return -1;
     out << content;
@@ -51,7 +51,7 @@ ssize_t write_all(const int fd, const void *buf, const size_t count) {
   return static_cast<ssize_t>(count);
 }
 
-bool grep_file(const fs::path& path, std::string_view pattern) {
+bool grep_file(const fs::path &path, std::string_view pattern) {
     std::ifstream file(path);
     std::string line;
     while (std::getline(file, line)) {
@@ -62,10 +62,10 @@ bool grep_file(const fs::path& path, std::string_view pattern) {
     return false;
 }
 
-bool path_has_symlink(const fs::path& path) {
+bool path_has_symlink(const fs::path &path) {
     std::error_code ec;
     fs::path current;
-    for (const auto& part : path) {
+    for (const auto &part : path) {
         current /= part;
         if (fs::is_symlink(current, ec)) {
             return true;

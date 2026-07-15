@@ -3,6 +3,6 @@
 
 #include "common.h"
 
-bool is_container_running(std::string_view container_name, pid_t *pid_out);
+bool is_container_running(std::string_view container_name, pid_t &pid_out);
 
 #endif

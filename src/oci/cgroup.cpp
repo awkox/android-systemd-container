@@ -46,20 +46,20 @@ int cgroup_host_bootstrap() {
   return 0;
 }
 
-static void rmdir_cgroup_tree(const fs::path& path) {
+static void rmdir_cgroup_tree(const fs::path &path) {
   std::error_code ec;
   if (!fs::exists(path, ec)) return;
 
   // 使用 vector 自动管理内存，彻底消灭 malloc/realloc/free
   std::vector<fs::path> subdirs;
-  for (const auto& entry : fs::directory_iterator(path, ec)) {
+  for (const auto &entry : fs::directory_iterator(path, ec)) {
     if (entry.is_directory(ec)) {
       subdirs.push_back(entry.path());
     }
   }
 
   // 递归删除子目录
-  for (const auto& sub : subdirs) {
+  for (const auto &sub : subdirs) {
     rmdir_cgroup_tree(sub);
   }
 

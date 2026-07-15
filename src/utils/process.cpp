@@ -56,7 +56,7 @@ pid_t find_container_init_pid(std::string_view container_name) {
   
   if (!fs::exists(cg_root, ec)) return 0;
 
-  for (const auto& entry : fs::recursive_directory_iterator(cg_root, fs::directory_options::skip_permission_denied, ec)) {
+  for (const auto &entry : fs::recursive_directory_iterator(cg_root, fs::directory_options::skip_permission_denied, ec)) {
     if (entry.path().filename() == "cgroup.procs") {
       std::ifstream file(entry.path());
       pid_t pid;

@@ -59,7 +59,7 @@ static constexpr auto ns_checks = std::to_array<NsCheck>({
 int check_requirements_hw() {
   int missing = 0;
 
-  for (const auto& [flag, name, label] : ns_checks) {
+  for (const auto &[flag, name, label] : ns_checks) {
     if (!check_ns(flag, name)) {
       log_error("当前内核不支持 %s", std::string(label).c_str());
       missing++;

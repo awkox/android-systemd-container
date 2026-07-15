@@ -39,7 +39,7 @@ void apply_capability_hardening(const int privileged_mask) {
   }
 
   // 定义泛型 Lambda 来处理任意容器的 Capability 丢弃逻辑
-  auto drop_caps = [&](const auto& caps) -> int {
+  auto drop_caps = [&](const auto &caps) -> int {
     int dropped_count = 0;
     for (const int cap : caps) {
       // 1. 从 Bounding Set (边界集) 中丢弃，这会影响后续的 execve 授权上限

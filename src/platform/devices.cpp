@@ -18,7 +18,7 @@ int setup_dev() {
     DeviceConfig{"console", S_IFCHR | 0620, makedev(5, 1)},
   };
 
-  for (const auto& [name, mode, dev] : devices) {
+  for (const auto &[name, mode, dev] : devices) {
     fs::path device_path = fs::path("dev") / name;
 
     std::error_code ec;
@@ -49,7 +49,7 @@ int setup_devpts() {
 
   bool mount_success = false;
   mkdir("dev/pts", 0777);
-  for (const auto& opt : mount_opts) {
+  for (const auto &opt : mount_opts) {
     if (mount("devpts", "dev/pts", "devpts", MS_NOSUID | MS_NOEXEC, opt) == 0) {
       mount_success = true;
       break;

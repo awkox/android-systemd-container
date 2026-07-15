@@ -7,8 +7,8 @@ static int stop_rootfs_with_timeout(std::string_view container_name, int timeout
     return -1;
   }
 
-  pid_t pid = 0;
-  if (!is_container_running(container_name, &pid)) {
+  pid_t pid = -1;
+  if (!is_container_running(container_name, pid)) {
     log_error("容器 '%s' 未运行或状态无效。", container_name.data());
     release_external_lock();
     return -1;
