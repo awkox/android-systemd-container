@@ -38,18 +38,11 @@ std::string format_uptime(const long uptime_sec) {
 }
 
 static bool validate_container_name(std::string_view name, size_t max_len = 256) {
-    if (name.empty() || name.size() > max_len) return false;
+  if (name.empty() || name.size() > max_len) return false;
 
-    for (char ch : name) {
-        // 严格限定在 [0-9A-Za-z_]
-        if (!((ch >= '0' && ch <= '9') ||
-              (ch >= 'A' && ch <= 'Z') ||
-              (ch >= 'a' && ch <= 'z') ||
-              ch == '_')) {
-            return false;
-        }
-    }
-    return true;
+  return std::ranges::all_of(name, [](char c) {
+    return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+  });
 }
 
 int reject_container_name(const std::string& name) {
