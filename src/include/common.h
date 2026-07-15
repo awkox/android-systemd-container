@@ -65,6 +65,7 @@
 #include <libgen.h>
 #include <ftw.h>
 #include <wordexp.h>
+#include <utmp.h>
 
 #include "version.h"
 
