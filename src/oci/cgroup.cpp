@@ -1,8 +1,16 @@
-#include "asc.h"
-#include <linux/magic.h>
+#include <cerrno>
+#include <cstring>
+#include <vector>
+#include <ranges>
+#include <unistd.h>
+#include <fcntl.h>
 #include <sys/statfs.h>
 #include <sys/mount.h>
-#include <sys/wait.h>
+#include <linux/magic.h>
+#include "oci/cgroup.h"
+#include "utils/log.h"
+#include "utils/fileio.h"
+#include "utils/path.h"
 
 static bool cgroup_kernel_supports_v2(void) {
   return grep_file("/proc/filesystems", "cgroup2");
@@ -21,7 +29,7 @@ int cgroup_host_bootstrap() {
     return -1;
   }
 
-  if (!fs::exists("/sys/fs/cgroup")) {
+  if (!std::filesystem::exists("/sys/fs/cgroup")) {
     if (!create_directories_with_permission("sys/fs/cgroup")) {
       log_error("[CGROUP] 创建 sys/fs/cgroup 失败: %s",
                 strerror(errno));
@@ -50,13 +58,13 @@ int cgroup_host_bootstrap() {
   return 0;
 }
 
-static void rmdir_cgroup_tree(const fs::path &path) {
+static void rmdir_cgroup_tree(const std::filesystem::path &path) {
   std::error_code ec;
-  if (!fs::exists(path, ec)) return;
+  if (!std::filesystem::exists(path, ec)) return;
 
   // 使用 vector 自动管理内存，彻底消灭 malloc/realloc/free
-  std::vector<fs::path> subdirs;
-  for (const auto &entry : fs::directory_iterator(path, ec)) {
+  std::vector<std::filesystem::path> subdirs;
+  for (const auto &entry : std::filesystem::directory_iterator(path, ec)) {
     if (entry.is_directory(ec)) {
       subdirs.push_back(entry.path());
     }
@@ -67,7 +75,7 @@ static void rmdir_cgroup_tree(const fs::path &path) {
     rmdir_cgroup_tree(sub);
   }
 
-  const fs::path kill_path = path / "cgroup.kill";
+  const std::filesystem::path kill_path = path / "cgroup.kill";
   if (access(kill_path.c_str(), W_OK) == 0) {
     const int kfd = open(kill_path.c_str(), O_WRONLY | O_CLOEXEC);
     if (kfd >= 0) {
@@ -76,7 +84,7 @@ static void rmdir_cgroup_tree(const fs::path &path) {
     }
   }
   
-  const fs::path events_path = path / "cgroup.events";
+  const std::filesystem::path events_path = path / "cgroup.events";
   for ([[maybe_unused]] auto _ : std::views::iota(0, 50)) {
     if (grep_file(events_path, "populated 0"))
       break;

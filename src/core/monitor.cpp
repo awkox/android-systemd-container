@@ -1,17 +1,33 @@
-#include "asc.h"
+#include <csignal>
+#include <cerrno>
+#include <cstring>
+#include <cstdlib>
+#include <format>
+#include <unistd.h>
 #include <poll.h>
+#include <sched.h>
+#include <fcntl.h>
 #include <sys/eventfd.h>
 #include <sys/prctl.h>
-#include <sys/mount.h>
 #include <sys/syscall.h>
-#include <sys/sysmacros.h>
 #include <sys/wait.h>
+#include "core/monitor.h"
+#include "core/container.h"
+#include "core/init.h"
+#include "utils/log.h"
+#include "utils/fileio.h"
+#include "utils/path.h"
+#include "utils/system.h"
+#include "utils/process.h"
+#include "platform/pty.h"
 
 struct InitArgs {
   cfg_t &cfg;
   int efd;              // 替代原有的读写管道，仅需一个 fd
   int sync_pipe_write;  // 属于 Monitor 向 CLI 通信的写端（Init应关闭）
 };
+
+constexpr int REBOOT_EXIT = 249;
 
 static int init_trampoline(void *arg) {
   InitArgs *args = static_cast<InitArgs *>(arg);
@@ -56,7 +72,7 @@ static void setup_monitor_environment(cfg_t &cfg) {
   oom_protect();
   prctl(PR_SET_NAME, "[ds-monitor]", 0, 0, 0);
 
-  fs::path cg_path = project_cgroup_dir / cfg.rt.container_name;
+  std::filesystem::path cg_path = project_cgroup_dir / cfg.rt.container_name;
   create_directories_with_permission(cg_path);
 }
 
@@ -91,7 +107,7 @@ static pid_t launch_container_init(cfg_t &cfg, void *stack_top, int &sync_fd) {
   }
 
   /* 将子进程迁入 Cgroup */
-  fs::path cg_path = project_cgroup_dir / cfg.rt.container_name;
+  std::filesystem::path cg_path = project_cgroup_dir / cfg.rt.container_name;
   write_file(cg_path / "cgroup.procs", std::format("{}\n", init_pid));
 
   /* 释放 Init 进程，允许其推进引导 */

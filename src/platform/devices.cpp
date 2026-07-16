@@ -1,8 +1,14 @@
-#include "asc.h"
+#include "platform/devices.h"
+#include "utils/log.h"
+#include "utils/fileio.h"
+#include <unistd.h>
 #include <sys/stat.h>
-#include <sys/mount.h>
 #include <sys/sysmacros.h>
-#include <sys/wait.h>
+#include <sys/mount.h>
+#include <cerrno>
+#include <cstring>
+#include <array>
+#include <system_error>
 
 struct DeviceConfig {
     std::string_view name;
@@ -23,10 +29,10 @@ int setup_dev() {
   };
 
   for (const auto &[name, mode, dev] : devices) {
-    fs::path device_path = fs::path("dev") / name;
+    std::filesystem::path device_path = std::filesystem::path("dev") / name;
 
     std::error_code ec;
-    fs::remove(device_path, ec); 
+    std::filesystem::remove(device_path, ec); 
 
     if (mknod(device_path.c_str(), mode, dev) < 0) {
       log_error("创建设备节点 %s 失败: %s", device_path.c_str(), strerror(errno));
@@ -68,7 +74,7 @@ int setup_devpts() {
   auto setup_ptmx_fallback = [&]() -> bool {
     std::error_code ec;
     // 策略 1: Bind Mount
-    fs::remove("dev/ptmx", ec);
+    std::filesystem::remove("dev/ptmx", ec);
     if (write_file("dev/ptmx", "") == 0) {
       if (mount("dev/pts/ptmx", "dev/ptmx", nullptr, MS_BIND, nullptr) == 0) {
         return true;
@@ -76,8 +82,8 @@ int setup_devpts() {
     }
 
     // 策略 2: Symlink
-    fs::remove("dev/ptmx", ec);
-    if (symlink("pts/ptmx", "dev/ptmx") == 0 && fs::exists("dev/pts/ptmx", ec)) {
+    std::filesystem::remove("dev/ptmx", ec);
+    if (symlink("pts/ptmx", "dev/ptmx") == 0 && std::filesystem::exists("dev/pts/ptmx", ec)) {
       return true;
     }
 

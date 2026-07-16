@@ -1,8 +1,17 @@
-#include "asc.h"
-#include <sys/signalfd.h>
+#include "platform/console.h"
+#include "platform/pty.h"
+#include "core/container.h"
+#include "utils/process.h"
+#include "utils/log.h"
+#include <unistd.h>
+#include <fcntl.h>
 #include <sys/epoll.h>
-#include <sys/mount.h>
+#include <sys/signalfd.h>
+#include <sys/ioctl.h>
 #include <sys/wait.h>
+#include <csignal>
+#include <cerrno>
+#include <cstring>
 
 /* 定义控制台上下文，避免在拆分的函数中传递大量参数 */
 struct ConsoleContext {

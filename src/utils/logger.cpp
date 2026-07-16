@@ -1,4 +1,6 @@
-#include "asc.h"
+#include <cstdio>
+#include <cstdarg>
+#include "utils/logger.h"
 
 [[gnu::format(printf, 3, 4)]]
 void log_internal(const char *prefix, const bool is_err, const char *fmt, ...) {

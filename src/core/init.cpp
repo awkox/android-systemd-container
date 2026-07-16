@@ -1,10 +1,20 @@
-#include "asc.h"
-#include <utmp.h>
-#include <sys/stat.h>
+#include <cerrno>
+#include <cstring>
+#include <array>
+#include <unistd.h>
+#include <fcntl.h>
 #include <sys/mount.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
-#include <sys/sysmacros.h>
-#include <sys/wait.h>
+#include <sys/ioctl.h>
+#include <utmp.h>
+#include "core/init.h"
+#include "utils/log.h"
+#include "utils/path.h"
+#include "fs_mount.h"
+#include "platform/devices.h"
+#include "oci/seccomp.h"
+#include "oci/caps.h"
 
 static constexpr auto dirs_to_create = std::to_array<const char*>({
   ".old_root", "proc", "sys", "dev", "run", "tmp"
@@ -22,6 +32,8 @@ static constexpr auto proc_universal_masks = std::to_array<const char*>({
   "proc/irq",
 });
 
+constexpr const char* DEFAULT_INIT = "/sbin/init";
+
 /* 1. 基础挂载隔离与 Rootfs 挂载 */
 static bool setup_mount_isolation_and_rootfs(cfg_t &cfg) {
   if (mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) < 0) {
@@ -31,7 +43,7 @@ static bool setup_mount_isolation_and_rootfs(cfg_t &cfg) {
 
   if (!cfg.conf.rootfs_img_path.empty()) {
     log_info("[BOOT] 准备挂载 Rootfs 镜像...");
-    fs::path mount_point = mount_dir / cfg.rt.container_name;
+    std::filesystem::path mount_point = mount_dir / cfg.rt.container_name;
     if (mount_rootfs_img(cfg.conf.rootfs_img_path, mount_point) < 0) {
       log_error("无法挂载镜像: %s", strerror(errno));
       return false;
@@ -61,7 +73,7 @@ static bool setup_procfs(const asc_conf_t &conf) {
   }
 
   for (const auto path : proc_sys_rw_holes) {
-    if (!fs::exists(path)) continue;
+    if (!std::filesystem::exists(path)) continue;
     if (mount(path, path, nullptr, MS_BIND, nullptr) < 0) {
       log_warn("[SEC] 无法将安全挂载洞 %s 绑定: %s", path, strerror(errno));
       continue;

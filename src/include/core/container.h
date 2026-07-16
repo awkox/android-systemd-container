@@ -1,6 +1,8 @@
 #ifndef ASC_CORE_CONTAINER_H
 #define ASC_CORE_CONTAINER_H
 
+#include <string_view>
+#include <sys/types.h>
 #include "common.h"
 
 bool is_external_lock_active(std::string_view name);

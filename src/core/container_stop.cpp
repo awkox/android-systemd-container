@@ -1,8 +1,14 @@
-#include "asc.h"
+#include <csignal>
+#include <cerrno>
+#include <cstring>
+#include <unistd.h>
 #include <poll.h>
 #include <sys/syscall.h>
-#include <sys/sysmacros.h>
-#include <sys/wait.h>
+#include "core/container.h"
+#include "core/state.h"
+#include "utils/log.h"
+
+constexpr int STOP_TIMEOUT = 15;
 
 static int stop_rootfs_with_timeout(std::string_view container_name, int timeout_seconds) {
   if (acquire_external_lock(container_name) != 0) {

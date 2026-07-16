@@ -1,7 +1,8 @@
 #ifndef ASC_UTILS_PROCESS_H
 #define ASC_UTILS_PROCESS_H
 
-#include "common.h"
+#include <string_view>
+#include <sys/types.h>
 
 bool is_container_init(const pid_t pid);
 pid_t find_container_init_pid(std::string_view container_name);

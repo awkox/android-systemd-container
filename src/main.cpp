@@ -1,5 +1,15 @@
-#include "asc.h"
-#include <sys/wait.h>
+#include <cstdio>
+#include <cstring>
+#include <unistd.h>
+#include "common.h"
+#include "core/check.h"
+#include "core/config.h"
+#include "core/container.h"
+#include "utils/log.h"
+#include "utils/string.h"
+#include "utils/logger.h"
+#include "utils/workspace.h"
+#include "version.h"
 
 /*
  * !!! 我们假设本程序在除了系统关机外不会被意外杀死 !!!
@@ -7,13 +17,12 @@
  * !!! 若程序意外退出，必须重启系统进行清理 !!!
  */
 
-static void print_usage() {
-  printf(
-      "用法: " PROJECT_NAME " <命令> [参数]\n\n"
-      "命令列表:\n"
-      "  start NAME [CONFIG]  使用 CONFIG 配置文件启动名为 NAME 的容器\n"
-      "  stop  NAME           停止名为 NAME 的容器\n"
-      "  help                 显示此帮助信息\n\n");
+static void print_usage(const char *prog_name) {
+  printf("用法: %s <命令> [参数]", prog_name);
+  printf("命令列表:");
+  printf("  start NAME [CONFIG]  使用 CONFIG 配置文件启动名为 NAME 的容器");
+  printf("  stop  NAME           停止名为 NAME 的容器");
+  printf("  help                 显示此帮助信息");
 }
 
 static int print_usage_error(const char *prog_name) {
@@ -31,7 +40,7 @@ enum class Command {
 
 int asc_main(int argc, char **argv) {
   if (argc < 2) {
-    print_usage();
+    print_usage(argv[0]);
     return 1;
   }
 
@@ -62,12 +71,12 @@ int asc_main(int argc, char **argv) {
 
   /* 3. 统一 Root 权限安全拦截口 */
   if (getuid() != 0) {
-    log_error("执行 '%s' 命令需要 Root 权限", cmd_str.data());
+    printf("执行 '%.*s' 命令需要 Root 权限", static_cast<int>(cmd_str.size()), cmd_str.data());
     return 1;
   }
 
   if (reject_container_name(name) < 0) {
-    log_error("非法的容器名");
+    printf("非法的容器名");
     return 1;
   }
 

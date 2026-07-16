@@ -1,6 +1,8 @@
 #ifndef ASC_PLATFORM_BLOCKDEV_H
 #define ASC_PLATFORM_BLOCKDEV_H
 
-int loop_attach(const fs::path &img_path, fs::path &loop_path_out);
+#include <filesystem>
+
+int loop_attach(const std::filesystem::path &img_path, std::filesystem::path &loop_path_out);
 
 #endif

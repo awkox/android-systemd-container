@@ -1,14 +1,14 @@
 #ifndef ASC_UTILS_PATH_H
 #define ASC_UTILS_PATH_H
 
-#include "common.h"
+#include <filesystem>
 
-inline const fs::path tmp_dir      = fs::path("/tmp");
-inline const fs::path proc_dir     = fs::path("/proc");
-inline const fs::path cgroup_dir   = fs::path("/sys/fs/cgroup");
-inline const fs::path mount_dir    = fs::path("/mnt/asc");
-inline const fs::path project_cgroup_dir = cgroup_dir / "asc";
-inline const fs::path runtime_dir  = tmp_dir / "asc";
-inline const fs::path lock_dir     = runtime_dir / "lock";
+inline const std::filesystem::path tmp_dir      = std::filesystem::path("/tmp");
+inline const std::filesystem::path proc_dir     = std::filesystem::path("/proc");
+inline const std::filesystem::path cgroup_dir   = std::filesystem::path("/sys/fs/cgroup");
+inline const std::filesystem::path mount_dir    = std::filesystem::path("/mnt/asc");
+inline const std::filesystem::path project_cgroup_dir = cgroup_dir / "asc";
+inline const std::filesystem::path runtime_dir  = tmp_dir / "asc";
+inline const std::filesystem::path lock_dir     = runtime_dir / "lock";
 
 #endif

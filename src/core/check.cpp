@@ -1,11 +1,17 @@
-#include "asc.h"
+#include <filesystem>
+#include <cerrno>
+#include <array>
+#include <string_view>
+#include <unistd.h>
+#include <sched.h>
 #include <sys/syscall.h>
-#include <sys/sysmacros.h>
 #include <sys/wait.h>
+#include "core/check.h"
+#include "utils/log.h"
 
 static bool check_ns(const int flag, std::string_view name) {
   /* 1. 通过 /proc 快速检查内核支持 */
-  if (!fs::exists(fs::path("/proc/self/ns") / name))
+  if (!std::filesystem::exists(std::filesystem::path("/proc/self/ns") / name))
     return false;
 
   /* 2. 功能性检查：尝试实际执行 unshare。

@@ -1,12 +1,19 @@
-#include "asc.h"
+#include <csignal>
+#include <cerrno>
+#include <cstring>
+#include <format>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/ioctl.h>
 #include <sys/stat.h>
-#include <sys/mount.h>
-#include <sys/wait.h>
+#include <termios.h>
+#include "platform/pty.h"
+#include "utils/log.h"
 
 /* 不依赖 /dev/ptmx 符号链接直接打开 master 与 slave。
  * 对于 4.13+ 内核，使用 TIOCGPTPEER 直接从 master 文件描述符派生打开 slave。
  * 对于 3.x 内核，回退使用 TIOCGPTN + 路径打开的方式。*/
-int asc_openpty(int &master, int &slave, fs::path &name) {
+int asc_openpty(int &master, int &slave, std::filesystem::path &name) {
   const int m = open("/dev/ptmx", O_RDWR | O_NOCTTY | O_CLOEXEC);
   if (m < 0)
     return -1;
@@ -27,7 +34,7 @@ int asc_openpty(int &master, int &slave, fs::path &name) {
     unsigned int ptyno;
     if (ioctl(m, TIOCGPTN, &ptyno) < 0)
       goto err;
-    name = fs::path("/dev/pts") / std::to_string(ptyno);
+    name = std::filesystem::path("/dev/pts") / std::to_string(ptyno);
     s = open(name.c_str(), O_RDWR | O_NOCTTY | O_CLOEXEC);
     if (s < 0)
       goto err;

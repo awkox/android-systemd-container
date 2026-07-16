@@ -1,10 +1,6 @@
 #ifndef ASC_UTILS_LOG_H
 #define ASC_UTILS_LOG_H
 
-#include "common.h"
-#include <sys/un.h>
-#include <errno.h>
-
 [[gnu::format(printf, 3, 4)]]
 void log_internal(const char *prefix, bool is_err, const char *fmt, ...);
 

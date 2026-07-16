@@ -1,15 +1,33 @@
-#include "asc.h"
-#include <sys/mount.h>
-#include <sys/wait.h>
+#include <cerrno>
+#include <filesystem>
+#include <string_view>
+#include <cstring>
+#include <ctime>
+#include <format>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include "core/container.h"
+#include "core/monitor.h"
+#include "core/state.h"
+#include "utils/log.h"
+#include "utils/path.h"
+#include "utils/process.h"
+#include "utils/fileio.h"
+#include "utils/string.h"
+#include "platform/pty.h"
+#include "platform/console.h"
+#include "oci/cgroup.h"
+#include "common.h"
 
 static int active_lock_fd = -1;
-static fs::path active_lock_path = "";
+static std::filesystem::path active_lock_path = "";
 
 int acquire_external_lock(std::string_view name) {
   if (active_lock_fd >= 0)
     return 0;
 
-  fs::path lock_path = lock_dir / name;
+  std::filesystem::path lock_path = lock_dir / name;
 
   const int fd = open(lock_path.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644);
   if (fd < 0)
@@ -44,7 +62,7 @@ void release_external_lock(void) {
   if (active_lock_fd >= 0) {
     close(active_lock_fd);
     if (!active_lock_path.empty()) {
-      fs::remove(active_lock_path);
+      std::filesystem::remove(active_lock_path);
     }
     active_lock_fd = -1;
     active_lock_path = "";
@@ -52,7 +70,7 @@ void release_external_lock(void) {
 }
 
 bool is_external_lock_active(std::string_view name) {
-  return fs::exists(lock_dir / name);
+  return std::filesystem::exists(lock_dir / name);
 }
 
 void cleanup_container_resources(std::string_view container_name, const bool force_cleanup) {
@@ -64,8 +82,8 @@ void cleanup_container_resources(std::string_view container_name, const bool for
 }
 
 bool is_valid_container_pid(const pid_t pid) {
-  fs::path path = proc_dir / std::to_string(pid) / "root";
-  if (!fs::exists(path))
+  std::filesystem::path path = proc_dir / std::to_string(pid) / "root";
+  if (!std::filesystem::exists(path))
     return false;
 
   if (!is_container_init(pid))
@@ -100,8 +118,8 @@ int start_rootfs(cfg_t &cfg) {
 
   if (!cfg.conf.rootfs_img_path.empty()) {
     log_info("校验并解析 Rootfs 路径配置...");
-    fs::path abs_path = resolve_path_arg(cfg.conf.rootfs_img_path);
-    if (abs_path.empty() || !fs::exists(abs_path)) {
+    std::filesystem::path abs_path = resolve_path_arg(cfg.conf.rootfs_img_path);
+    if (abs_path.empty() || !std::filesystem::exists(abs_path)) {
       log_error("无法解析 rootfs 镜像路径 '%s': %s",
                 abs_path.empty() ? cfg.conf.rootfs_img_path.c_str() : abs_path.c_str(), strerror(errno));
       goto cleanup;

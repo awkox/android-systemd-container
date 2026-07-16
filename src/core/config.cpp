@@ -1,4 +1,10 @@
-#include "asc.h"
+#include <fstream>
+#include <string>
+#include <algorithm>
+#include <ranges>
+#include "common.h"
+#include "core/config.h"
+#include "utils/log.h"
 
 // 使用 std::string_view 实现零拷贝的 trim，安全且高效
 static std::string_view trim_whitespace(std::string_view sv) {

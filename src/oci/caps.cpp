@@ -1,9 +1,15 @@
-#include "asc.h"
-#include <linux/capability.h>
+#include <cerrno>
+#include <cstring>
+#include <array>
+#include <system_error>
+#include <unistd.h>
 #include <sys/prctl.h>
 #include <sys/syscall.h>
-#include <sys/sysmacros.h>
-#include <sys/wait.h>
+#include <linux/capability.h>
+#include "common.h"
+#include <sys/types.h>
+#include "oci/caps.h"
+#include "utils/log.h"
 
 /* 使用 std::array 替代 C 风格数组，移除 -1 哨兵值 */
 static constexpr auto universal_drops = std::to_array<int>({

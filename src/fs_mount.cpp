@@ -1,6 +1,18 @@
-#include "asc.h"
+#include <fstream>
+#include <sstream>
+#include <vector>
+#include <string>
+#include <ranges>
+#include <cerrno>
+#include <cstring>
+#include <thread>
+#include <chrono>
+#include <unistd.h>
 #include <sys/mount.h>
-#include <sys/wait.h>
+#include "fs_mount.h"
+#include "utils/log.h"
+#include "utils/fileio.h"
+#include "platform/blockdev.h"
 
 // 动态获取内核当前支持的所有块设备文件系统类型
 static std::vector<std::string> get_supported_block_fs() {
@@ -20,14 +32,16 @@ static std::vector<std::string> get_supported_block_fs() {
     return fs_types;
 }
 
-int mount_rootfs_img(const fs::path &img_path, const fs::path &mount_point) {
+using namespace std::chrono_literals;
+
+int mount_rootfs_img(const std::filesystem::path &img_path, const std::filesystem::path &mount_point) {
     if (!create_directories_with_permission(mount_point)) {
         log_error("创建挂载目录 %s 失败: %s", mount_point.c_str(), strerror(errno));
         return -1;
     }
 
     sync();
-    usleep(RETRY_DELAY_US);
+    std::this_thread::sleep_for(200ms);
     constexpr unsigned long mnt_flags = MS_NOATIME | MS_NODIRATIME;
 
     // 1. 获取当前内核支持的文件系统列表
@@ -39,7 +53,7 @@ int mount_rootfs_img(const fs::path &img_path, const fs::path &mount_point) {
         else
             log_info("正在重试挂载 (第 %d/3 次尝试)...", attempt + 1);
 
-        fs::path final_src = "";
+        std::filesystem::path final_src = "";
         int loop_fd = loop_attach(img_path.c_str(), final_src);
         if (loop_fd < 0) return -1;
 
@@ -65,14 +79,14 @@ int mount_rootfs_img(const fs::path &img_path, const fs::path &mount_point) {
 
         if (attempt < 2) {
             sync();
-            usleep(RETRY_DELAY_US * 5);
+            std::this_thread::sleep_for(1s);
         }
     }
     return -1;
 }
 
 int mask_path(const char *path) {
-  if (!fs::exists(path))
+  if (!std::filesystem::exists(path))
     return 0;
   if (mount(path, path, nullptr, MS_BIND, nullptr) < 0)
     return -1;

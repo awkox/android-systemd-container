@@ -1,8 +1,13 @@
-#include "asc.h"
+#include <fstream>
+#include <sstream>
+#include <unistd.h>
 #include <sys/stat.h>
+#include "utils/process.h"
+#include "utils/path.h"
+#include "core/container.h"
 
 bool is_container_init(const pid_t pid) {
-  fs::path path = proc_dir / std::to_string(pid) / "status";
+  std::filesystem::path path = proc_dir / std::to_string(pid) / "status";
   std::ifstream file(path);
   if (!file) return false;
 
@@ -34,7 +39,7 @@ bool is_container_init(const pid_t pid) {
     return is_init;
 
   struct stat st_pid, st_host;
-  fs::path ns_path = proc_dir / std::to_string(pid) / "ns/pid";
+  std::filesystem::path ns_path = proc_dir / std::to_string(pid) / "ns/pid";
   
   if (stat(ns_path.c_str(), &st_pid) < 0)
     return false;
@@ -47,17 +52,17 @@ bool is_container_init(const pid_t pid) {
 
 unsigned long get_pid_ns_inode(const pid_t pid) {
   struct stat st;
-  fs::path path = proc_dir / std::to_string(pid) / "ns/pid";
+  std::filesystem::path path = proc_dir / std::to_string(pid) / "ns/pid";
   return stat(path.c_str(), &st) == 0 ? st.st_ino : 0UL;
 }
 
 pid_t find_container_init_pid(std::string_view container_name) {
-  fs::path cg_root = project_cgroup_dir / container_name;
+  std::filesystem::path cg_root = project_cgroup_dir / container_name;
   std::error_code ec;
   
-  if (!fs::exists(cg_root, ec)) return 0;
+  if (!std::filesystem::exists(cg_root, ec)) return 0;
 
-  for (const auto &entry : fs::recursive_directory_iterator(cg_root, fs::directory_options::skip_permission_denied, ec)) {
+  for (const auto &entry : std::filesystem::recursive_directory_iterator(cg_root, std::filesystem::directory_options::skip_permission_denied, ec)) {
     if (entry.path().filename() == "cgroup.procs") {
       std::ifstream file(entry.path());
       pid_t pid;
