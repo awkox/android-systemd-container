@@ -105,51 +105,23 @@ static pid_t launch_container_init(cfg_t &cfg, void *stack_top, int &sync_fd) {
 }
 
 // 子模块 4: 高效阻塞等待容器退出
+// 优化后的极简逻辑
 static int wait_for_container_exit(pid_t init_pid) {
-  int status = 0;
   int pfd = syscall(SYS_pidfd_open, init_pid, 0);
   if (pfd < 0) {
     log_error("pidfd_open失败：%s", strerror(errno));
     return -1;
   }
 
-  sigset_t mask;
-  sigemptyset(&mask);
-  sigaddset(&mask, SIGCHLD);
-  sigprocmask(SIG_BLOCK, &mask, nullptr);
-  int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
-
-  pollfd pfds[2] = {};
-  pfds[0].fd = pfd; pfds[0].events = POLLIN;
-  pfds[1].fd = sfd; pfds[1].events = POLLIN;
-  int nfds = (sfd >= 0) ? 2 : 1;
-  bool reaped = false;
-
-  while (true) {
-    int r = poll(pfds, nfds, -1);
-    if (r < 0 && errno == EINTR) continue;
-
-    if (pfds[0].revents & POLLIN) {
-      break;
-    }
-
-    if (nfds == 2 && (pfds[1].revents & POLLIN)) {
-      signalfd_siginfo si;
-      while (read(sfd, &si, sizeof(si)) == static_cast<ssize_t>(sizeof(si)))
-        ;
-      pid_t rpid = waitpid(init_pid, &status, WNOHANG);
-      if (rpid == init_pid) {
-        reaped = true;
-        break;
-      }
-    }
-  }
-
-  if (sfd >= 0) close(sfd);
-  close(pfd);
-  sigprocmask(SIG_UNBLOCK, &mask, nullptr);
+  pollfd pfd_poll = {.fd = pfd, .events = POLLIN, .revents = 0};
   
-  if (!reaped) waitpid(init_pid, &status, 0);
+  // 阻塞等待，直到目标进程退出
+  while (poll(&pfd_poll, 1, -1) < 0 && errno == EINTR) {}
+
+  int status = 0;
+  // 直接回收退出状态
+  waitpid(init_pid, &status, 0);
+  close(pfd);
   
   return status;
 }
