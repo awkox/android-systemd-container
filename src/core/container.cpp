@@ -7,9 +7,14 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <sys/syscall.h>
+#include <sys/wait.h>
+#include <poll.h>
+#include <csignal>
 #include "core/container.h"
 #include "core/monitor.h"
 #include "core/state.h"
+#include "core/lock.h"
 #include "utils/log.h"
 #include "utils/path.h"
 #include "utils/process.h"
@@ -17,79 +22,59 @@
 #include "utils/string.h"
 #include "platform/pty.h"
 #include "platform/console.h"
-#include "oci/cgroup.h"
 #include "common.h"
 
-static int active_lock_fd = -1;
-static std::filesystem::path active_lock_path = "";
+constexpr int STOP_TIMEOUT = 15;
 
-int acquire_external_lock(std::string_view name) {
-  if (active_lock_fd >= 0)
-    return 0;
-
-  std::filesystem::path lock_path = lock_dir / name;
-
-  const int fd = open(lock_path.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0644);
-  if (fd < 0)
+static int stop_rootfs_with_timeout(std::string_view container_name, int timeout_seconds) {
+  if (acquire_external_lock(container_name) != 0) {
+    log_error("无法停止 '{}': 另一个命令正在管理此容器", container_name);
     return -1;
-
-  flock fl = {};
-  fl.l_type = F_WRLCK;
-  fl.l_whence = SEEK_SET;
-
-  if (fcntl(fd, F_SETLK, &fl) == 0) {
-    std::string pid_str = std::format("{}\n", getpid());
-    if (ftruncate(fd, 0) == 0) {
-      write_all(fd, pid_str.c_str(), pid_str.size());
-    }
-
-    active_lock_fd = fd;
-    active_lock_path = lock_path;
-    return 0;
   }
 
-  if (errno == EACCES || errno == EAGAIN) {
-    if (fcntl(fd, F_GETLK, &fl) == 0 && fl.l_type != F_UNLCK) {
-      log_warn("无法获取锁: 当前已被进程 {} 持有", fl.l_pid);
-    }
+  pid_t pid = -1;
+  if (!is_container_running(container_name, pid)) {
+    log_error("容器 '{}' 未运行或状态无效。", container_name);
+    release_external_lock();
+    return -1;
   }
 
-  close(fd);
-  return -1;
-}
+  log_info("正在停止容器 '{}' (PID {})...", container_name, pid);
 
-void release_external_lock(void) {
-  if (active_lock_fd >= 0) {
-    close(active_lock_fd);
-    if (!active_lock_path.empty()) {
-      std::filesystem::remove(active_lock_path);
-    }
-    active_lock_fd = -1;
-    active_lock_path = "";
+  int pfd = syscall(SYS_pidfd_open, pid, 0);
+  if (pfd < 0) {
+    log_error("pidfd_open失败：{}", strerror(errno));
+    release_external_lock();
+    return -1;
   }
+
+  bool unkillable = false;
+  syscall(SYS_pidfd_send_signal, pfd, SIGRTMIN + 3, nullptr, 0);
+
+  pollfd pfd_poll = {.fd = pfd, .events = POLLIN, .revents = 0};
+  int r = poll(&pfd_poll, 1, timeout_seconds * 1000);
+  if (!(r > 0 && (pfd_poll.revents & POLLIN))) {
+    log_warn("超时，正在发送 SIGKILL 信号...");
+    syscall(SYS_pidfd_send_signal, pfd, SIGKILL, nullptr, 0);
+    r = poll(&pfd_poll, 1, 5000); 
+    if (!(r > 0 && (pfd_poll.revents & POLLIN))) {
+      unkillable = true;
+      log_error("容器进程 (PID {}) 进入了不可杀死的僵尸状态！", pid);
+      log_warn("这通常是因为内核僵尸进程导致。\n将尽最大努力清理宿主机资源 (无数据同步)...");
+    }
+  }
+  close(pfd);
+
+  if (!unkillable) {
+    log_info("已成功终止容器 '{}'。资源清理已移交后台 Monitor 完成。", container_name);
+  }
+
+  release_external_lock();
+  return unkillable ? -1 : 0;
 }
 
-bool is_external_lock_active(std::string_view name) {
-  return std::filesystem::exists(lock_dir / name);
-}
-
-void cleanup_container_resources(std::string_view container_name, const bool force_cleanup) {
-  if (!force_cleanup)
-    sync();
-
-  // 只需要清理全局可见的 Cgroup，挂载点和 Loop 设备内核会自动回收
-  cgroup_cleanup_container(container_name);
-}
-
-bool is_valid_container_pid(const pid_t pid) {
-  std::filesystem::path path = proc_dir / std::to_string(pid) / "root";
-  if (!std::filesystem::exists(path))
-    return false;
-
-  if (!is_container_init(pid))
-    return false;
-
-  return true;
+int stop_rootfs(std::string_view container_name) {
+  return stop_rootfs_with_timeout(container_name, STOP_TIMEOUT);
 }
 
 int start_rootfs(cfg_t &cfg) {
@@ -101,8 +86,7 @@ int start_rootfs(cfg_t &cfg) {
   log_info("正在获取容器独占锁与资源...");
   if (acquire_external_lock(cfg.rt.container_name) != 0) {
     if (is_container_running(cfg.rt.container_name, existing_pid)) {
-      log_error("容器名称 '{}' 已被 PID {} 占用。",
-                cfg.rt.container_name, existing_pid);
+      log_error("容器名称 '{}' 已被 PID {} 占用。", cfg.rt.container_name, existing_pid);
     } else {
       log_error("无法操作容器 '{}': 另一个管理命令正在执行。", cfg.rt.container_name);
     }
@@ -111,8 +95,7 @@ int start_rootfs(cfg_t &cfg) {
   lock_acquired = true;
 
   if (is_container_running(cfg.rt.container_name, existing_pid)) {
-    log_error("容器名称 '{}' 已被 PID {} 占用。",
-              cfg.rt.container_name, existing_pid);
+    log_error("容器名称 '{}' 已被 PID {} 占用。", cfg.rt.container_name, existing_pid);
     goto cleanup;
   }
 
@@ -147,7 +130,6 @@ int start_rootfs(cfg_t &cfg) {
     log_error("创建管道失败: {}", strerror(errno));
     goto cleanup;
   }
-
   fcntl(sync_pipe[0], F_SETFD, FD_CLOEXEC);
   fcntl(sync_pipe[1], F_SETFD, FD_CLOEXEC);
 
@@ -167,18 +149,13 @@ int start_rootfs(cfg_t &cfg) {
   if (monitor_pid == 0) {
     close(sync_pipe[0]);
     sync_pipe[0] = -1;
-
     if (cfg.rt.console.master >= 0) {
       close(cfg.rt.console.master);
       cfg.rt.console.master = -1;
     }
-    // 保留 cfg.rt.console.slave。
-    // Monitor 进程必须在后台持有一份 slave 的引用以维持 PTY 状态机存活，
-    // 从而防止前台进程收到虚假的 EPOLLHUP 过早销毁终端。Monitor 退出时会自动释放。
-    if (active_lock_fd >= 0) {
-      close(active_lock_fd);
-      active_lock_fd = -1;
-    }
+    
+    // 子进程仅需关闭锁文件的 fd 而不应释放锁文件本身
+    close_external_lock_fd();
 
     monitor_run(cfg, sync_pipe[1]);
     _exit(EXIT_FAILURE);
@@ -196,12 +173,10 @@ int start_rootfs(cfg_t &cfg) {
     log_error("Monitor 监控进程未能发送容器 PID。");
     goto cleanup;
   }
-
   close(sync_pipe[0]);
   sync_pipe[0] = -1;
 
-  if (lock_acquired)
-    release_external_lock();
+  if (lock_acquired) release_external_lock();
 
   if (cfg.rt.foreground) {
     return console_monitor_loop(cfg.rt.console.master, monitor_pid, cfg);
@@ -215,8 +190,7 @@ int start_rootfs(cfg_t &cfg) {
   return 0;
 
 cleanup:
-  if (lock_acquired)
-    release_external_lock();
+  if (lock_acquired) release_external_lock();
 
   if (cfg.rt.console.master >= 0) {
     close(cfg.rt.console.master);
@@ -226,11 +200,8 @@ cleanup:
     close(cfg.rt.console.slave);
     cfg.rt.console.slave = -1;
   }
-
-  if (sync_pipe[0] >= 0)
-    close(sync_pipe[0]);
-  if (sync_pipe[1] >= 0)
-    close(sync_pipe[1]);
+  if (sync_pipe[0] >= 0) close(sync_pipe[0]);
+  if (sync_pipe[1] >= 0) close(sync_pipe[1]);
 
   return -1;
 }

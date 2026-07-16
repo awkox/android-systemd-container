@@ -30,16 +30,15 @@ configure_file(
 
 add_executable(asc
 	src/main.cpp
-	src/fs_mount.cpp
 
 	# Core - container lifecycle
 	src/core/config.cpp
-	src/core/container_start.cpp
-	src/core/container_stop.cpp
+	src/core/container.cpp
 	src/core/init.cpp
 	src/core/monitor.cpp
 	src/core/state.cpp
 	src/core/check.cpp
+	src/core/lock.cpp
 
 	# OCI - security & resource control
 	src/oci/caps.cpp
@@ -50,11 +49,11 @@ add_executable(asc
 	src/platform/blockdev.cpp
 	src/platform/console.cpp
 	src/platform/devices.cpp
+	src/platform/mount.cpp
 	src/platform/pty.cpp
 
 	# Utils - helpers
 	src/utils/fileio.cpp
-	src/utils/logger.cpp
 	src/utils/process.cpp
 	src/utils/string.cpp
 	src/utils/workspace.cpp

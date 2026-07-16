@@ -9,12 +9,11 @@
 #include <chrono>
 #include <unistd.h>
 #include <sys/mount.h>
-#include "fs_mount.h"
+#include "platform/mount.h"
 #include "utils/log.h"
 #include "utils/fileio.h"
 #include "platform/blockdev.h"
 
-// 动态获取内核当前支持的所有块设备文件系统类型
 static std::vector<std::string> get_supported_block_fs() {
     std::vector<std::string> fs_types;
     std::ifstream f("/proc/filesystems");
@@ -23,9 +22,7 @@ static std::vector<std::string> get_supported_block_fs() {
         std::istringstream iss(line);
         std::string token;
         if (iss >> token) {
-            if (token == "nodev") {
-                continue; // 跳过不支持块设备的虚拟文件系统
-            }
+            if (token == "nodev") continue;
             fs_types.push_back(token);
         }
     }
@@ -44,7 +41,6 @@ int mount_rootfs_img(const std::filesystem::path &img_path, const std::filesyste
     std::this_thread::sleep_for(200ms);
     constexpr unsigned long mnt_flags = MS_NOATIME | MS_NODIRATIME;
 
-    // 1. 获取当前内核支持的文件系统列表
     const auto supported_fs = get_supported_block_fs();
 
     for (int attempt : std::views::iota(0, 3)) {
@@ -58,13 +54,11 @@ int mount_rootfs_img(const std::filesystem::path &img_path, const std::filesyste
         if (loop_fd < 0) return -1;
 
         bool success = false;
-
-        // 2. 遍历尝试内核支持的所有文件系统
         for (const auto &fstype : supported_fs) {
             if (mount(final_src.c_str(), mount_point.c_str(), fstype.c_str(), mnt_flags, nullptr) == 0) {
                 log_info("识别到文件系统并成功挂载 ({})", fstype);
                 success = true;
-                break; // 只要有一个成功，立即退出嗅探循环
+                break;
             }
         }
 
@@ -86,9 +80,7 @@ int mount_rootfs_img(const std::filesystem::path &img_path, const std::filesyste
 }
 
 int mask_path(const char *path) {
-  if (!std::filesystem::exists(path))
-    return 0;
-  if (mount(path, path, nullptr, MS_BIND, nullptr) < 0)
-    return -1;
+  if (!std::filesystem::exists(path)) return 0;
+  if (mount(path, path, nullptr, MS_BIND, nullptr) < 0) return -1;
   return mount(path, path, nullptr, MS_BIND | MS_REMOUNT | MS_RDONLY, nullptr);
 }

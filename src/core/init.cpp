@@ -11,7 +11,7 @@
 #include "core/init.h"
 #include "utils/log.h"
 #include "utils/path.h"
-#include "fs_mount.h"
+#include "platform/mount.h"
 #include "platform/devices.h"
 #include "oci/seccomp.h"
 #include "oci/caps.h"

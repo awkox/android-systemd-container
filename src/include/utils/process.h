@@ -5,6 +5,7 @@
 #include <sys/types.h>
 
 bool is_container_init(const pid_t pid);
+bool is_valid_container_pid(const pid_t pid);
 pid_t find_container_init_pid(std::string_view container_name);
 unsigned long get_pid_ns_inode(const pid_t pid);
 
