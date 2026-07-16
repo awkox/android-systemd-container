@@ -1,4 +1,5 @@
 #include "asc.h"
+#include <sys/wait.h>
 
 /*
  * !!! 我们假设本程序在除了系统关机外不会被意外杀死 !!!

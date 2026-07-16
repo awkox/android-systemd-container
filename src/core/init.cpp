@@ -1,4 +1,10 @@
 #include "asc.h"
+#include <utmp.h>
+#include <sys/stat.h>
+#include <sys/mount.h>
+#include <sys/syscall.h>
+#include <sys/sysmacros.h>
+#include <sys/wait.h>
 
 static constexpr auto dirs_to_create = std::to_array<const char*>({
   ".old_root", "proc", "sys", "dev", "run", "tmp"

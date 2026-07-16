@@ -1,4 +1,5 @@
 #include "asc.h"
+#include <sys/stat.h>
 
 bool is_container_init(const pid_t pid) {
   fs::path path = proc_dir / std::to_string(pid) / "status";

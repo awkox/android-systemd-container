@@ -1,4 +1,8 @@
 #include "asc.h"
+#include <sys/stat.h>
+#include <sys/mount.h>
+#include <sys/sysmacros.h>
+#include <sys/wait.h>
 
 struct DeviceConfig {
     std::string_view name;

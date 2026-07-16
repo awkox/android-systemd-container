@@ -1,4 +1,5 @@
 #include "asc.h"
+#include <wordexp.h>
 
 fs::path resolve_path_arg(const fs::path &path) {
     if (path.empty()) return "";

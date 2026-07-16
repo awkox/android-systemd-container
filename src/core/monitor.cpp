@@ -1,4 +1,11 @@
 #include "asc.h"
+#include <poll.h>
+#include <sys/eventfd.h>
+#include <sys/prctl.h>
+#include <sys/mount.h>
+#include <sys/syscall.h>
+#include <sys/sysmacros.h>
+#include <sys/wait.h>
 
 struct InitArgs {
   cfg_t &cfg;

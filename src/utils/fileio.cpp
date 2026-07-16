@@ -1,4 +1,6 @@
 #include "asc.h"
+#include <sys/stat.h>
+#include <sys/wait.h>
 
 bool create_directories_with_permission(const fs::path &target, mode_t mode) {
   // 规范化路径（解析掉多余的 / 以及 . 或 ..）

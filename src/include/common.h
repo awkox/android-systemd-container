@@ -1,10 +1,6 @@
 #ifndef ASC_COMMON_H
 #define ASC_COMMON_H
 
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
-
 #include <cstdarg>
 #include <cstddef>
 #include <cstdint>
@@ -21,52 +17,6 @@
 #include <vector>
 #include <stdexcept>
 #include <ranges>
-
-#include <sys/epoll.h>
-#include <sys/ioctl.h>
-#include <sys/mount.h>
-#include <sys/prctl.h>
-#include <sys/signalfd.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#include <sys/statfs.h>
-#include <sys/syscall.h>
-#include <sys/sysmacros.h>
-#include <sys/types.h>
-#include <sys/un.h>
-#include <sys/utsname.h>
-#include <sys/vfs.h>
-#include <sys/wait.h>
-#include <sys/uio.h>
-#include <sys/xattr.h>
-#include <sys/eventfd.h>
-
-#include <linux/magic.h>
-#include <linux/capability.h>
-#include <linux/rtnetlink.h>
-#include <linux/seccomp.h>
-#include <linux/loop.h>
-#include <linux/audit.h>
-#include <linux/filter.h>
-
-#include <arpa/inet.h>
-#include <dirent.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <getopt.h>
-#include <limits.h>
-#include <net/if.h>
-#include <poll.h>
-#include <sched.h>
-#include <signal.h>
-#include <string.h>
-#include <termios.h>
-#include <time.h>
-#include <unistd.h>
-#include <libgen.h>
-#include <ftw.h>
-#include <wordexp.h>
-#include <utmp.h>
 
 #include "version.h"
 

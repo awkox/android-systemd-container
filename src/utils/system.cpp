@@ -1,4 +1,5 @@
 #include "asc.h"
+#include <sys/utsname.h>
 
 int get_kernel_version(int &major, int &minor) {
   utsname uts;

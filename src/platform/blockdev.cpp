@@ -1,4 +1,9 @@
 #include "asc.h"
+#include <linux/loop.h>
+#include <sys/stat.h>
+#include <sys/mount.h>
+#include <sys/sysmacros.h>
+#include <sys/wait.h>
 
 /*
  * 终极优化版 open_loop_dev: 

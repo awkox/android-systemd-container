@@ -2,6 +2,7 @@
 #define ASC_PLATFORM_PTY_H
 
 #include "common.h"
+#include <termios.h>
 
 int terminal_create(tty_info &tty);
 int terminal_set_stdfds(const int fd);

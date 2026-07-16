@@ -1,4 +1,8 @@
 #include "asc.h"
+#include <sys/signalfd.h>
+#include <sys/epoll.h>
+#include <sys/mount.h>
+#include <sys/wait.h>
 
 /* 定义控制台上下文，避免在拆分的函数中传递大量参数 */
 struct ConsoleContext {

@@ -1,4 +1,9 @@
 #include "asc.h"
+#include <linux/capability.h>
+#include <sys/prctl.h>
+#include <sys/syscall.h>
+#include <sys/sysmacros.h>
+#include <sys/wait.h>
 
 /* 使用 std::array 替代 C 风格数组，移除 -1 哨兵值 */
 static constexpr auto universal_drops = std::to_array<int>({

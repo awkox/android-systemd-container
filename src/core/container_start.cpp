@@ -1,4 +1,6 @@
 #include "asc.h"
+#include <sys/mount.h>
+#include <sys/wait.h>
 
 static int active_lock_fd = -1;
 static fs::path active_lock_path = "";

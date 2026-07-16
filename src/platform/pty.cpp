@@ -1,4 +1,7 @@
 #include "asc.h"
+#include <sys/stat.h>
+#include <sys/mount.h>
+#include <sys/wait.h>
 
 /* 不依赖 /dev/ptmx 符号链接直接打开 master 与 slave。
  * 对于 4.13+ 内核，使用 TIOCGPTPEER 直接从 master 文件描述符派生打开 slave。

@@ -1,4 +1,8 @@
 #include "asc.h"
+#include <linux/magic.h>
+#include <sys/statfs.h>
+#include <sys/mount.h>
+#include <sys/wait.h>
 
 static bool cgroup_kernel_supports_v2(void) {
   return grep_file("/proc/filesystems", "cgroup2");

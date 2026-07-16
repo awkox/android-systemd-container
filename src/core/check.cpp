@@ -1,4 +1,7 @@
 #include "asc.h"
+#include <sys/syscall.h>
+#include <sys/sysmacros.h>
+#include <sys/wait.h>
 
 static bool check_ns(const int flag, std::string_view name) {
   /* 1. 通过 /proc 快速检查内核支持 */

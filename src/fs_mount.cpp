@@ -1,4 +1,6 @@
 #include "asc.h"
+#include <sys/mount.h>
+#include <sys/wait.h>
 
 // 动态获取内核当前支持的所有块设备文件系统类型
 static std::vector<std::string> get_supported_block_fs() {
