@@ -80,7 +80,7 @@ constexpr unsigned int RETRY_DELAY_US = 200000;
 constexpr int REBOOT_EXIT = 249;
 
 // 运行时路径
-#define DEFAULT_INIT "/sbin/init"
+constexpr const char* DEFAULT_INIT = "/sbin/init";
 #define ANDROID_TMPFS_CONTEXT "u:object_r:tmpfs:s0"
 
 // 特权掩码定义
