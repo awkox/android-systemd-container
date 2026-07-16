@@ -1,30 +1,9 @@
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
-#include <wordexp.h>
 #include "utils/string.h"
 #include "utils/log.h"
 #include "common.h"
-
-std::filesystem::path resolve_path_arg(const std::filesystem::path &path) {
-    if (path.empty()) return "";
-
-    std::filesystem::path expanded_path = path;
-    wordexp_t we;
-    if (wordexp(path.c_str(), &we, WRDE_NOCMD) == 0) {
-        if (we.we_wordc > 0 && we.we_wordv[0]) {
-            expanded_path = we.we_wordv[0];
-        }
-        wordfree(&we);
-    }
-
-    std::error_code ec;
-    std::filesystem::path abs_path = std::filesystem::weakly_canonical(expanded_path, ec);
-    if (ec) {
-        abs_path = std::filesystem::absolute(expanded_path, ec);
-    }
-    return abs_path.lexically_normal();
-}
 
 static bool validate_container_name(std::string_view name, size_t max_len = 256) {
   if (name.empty() || name.size() > max_len) return false;
