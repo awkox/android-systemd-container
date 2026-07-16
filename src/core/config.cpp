@@ -49,6 +49,8 @@ int config_load(const char *config_path, asc_conf_t &conf) {
       conf.rootfs_img_path = val;
     } else if (key == "block_nested_ns") {
       conf.block_nested_ns = parse_bool(val);
+    } else if (key == "isolation_network") {
+      conf.isolation_network = parse_bool(val);
     } else if (key == "privileged") {
       conf.privileged_mask = parse_privileged(val);
     } else if (key == "custom_init") {
@@ -56,8 +58,6 @@ int config_load(const char *config_path, asc_conf_t &conf) {
         log_warn("配置警告: 忽略包含空格的 custom_init 路径 '%.*s'", static_cast<int>(val.size()), val.data());
       else
         conf.custom_init = val;
-    } else if (key == "isolation_network") {
-      conf.isolation_network = parse_bool(val);
     } else {
       log_warn("配置警告: 忽略未知的配置键 '%.*s'", static_cast<int>(key.size()), key.data());
     }
