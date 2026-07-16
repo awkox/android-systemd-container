@@ -178,7 +178,7 @@ static bool evaluate_reboot_request(int status, asc::rt &rt) {
   }
 
   if (is_reboot_request) {
-    if (is_external_lock_active(rt.container_name)) {
+    if (asc::core::is_external_lock_active(rt.container_name)) {
       log_warn("[MONITOR] 检测到外部命令锁 - 中止内部重启，移交控制权给 CLI");
       return false;
     } 

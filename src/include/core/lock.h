@@ -3,9 +3,13 @@
 
 #include <string_view>
 
+namespace asc::core {
+
 bool is_external_lock_active(std::string_view name);
 int acquire_external_lock(std::string_view name);
 void release_external_lock();
 void close_external_lock_fd();
+
+}
 
 #endif

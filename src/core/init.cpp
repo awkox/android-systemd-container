@@ -16,16 +16,20 @@
 #include "oci/seccomp.h"
 #include "oci/caps.h"
 
-static constexpr auto dirs_to_create = std::to_array<const char*>({
+namespace asc::core {
+
+namespace {
+
+constexpr auto dirs_to_create = std::to_array<const char*>({
   ".old_root", "proc", "sys", "dev", "run", "tmp"
 });
 
-static constexpr auto proc_sys_rw_holes = std::to_array<const char*>({
+constexpr auto proc_sys_rw_holes = std::to_array<const char*>({
   "proc/sys/kernel/hostname",
   "proc/sys/kernel/domainname",
 });
 
-static constexpr auto proc_universal_masks = std::to_array<const char*>({
+constexpr auto proc_universal_masks = std::to_array<const char*>({
   "proc/sysrq-trigger",
   "proc/kcore",
   "proc/timer_list",
@@ -35,7 +39,7 @@ static constexpr auto proc_universal_masks = std::to_array<const char*>({
 constexpr const char* DEFAULT_INIT = "/sbin/init";
 
 /* 1. 基础挂载隔离与 Rootfs 挂载 */
-static bool setup_mount_isolation_and_rootfs(asc::rt &rt) {
+bool setup_mount_isolation_and_rootfs(asc::rt &rt) {
   if (mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) < 0) {
     log_error("无法设置根目录挂载传播模式 (MS_PRIVATE): {}", strerror(errno));
     return false;
@@ -57,7 +61,7 @@ static bool setup_mount_isolation_and_rootfs(asc::rt &rt) {
 }
 
 /* 2. Procfs 挂载及安全加固 */
-static bool setup_procfs(const asc::conf &conf) {
+bool setup_procfs(const asc::conf &conf) {
   if (mount("proc", "proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
     log_error("挂载 procfs 失败: {}", strerror(errno));
     return false;
@@ -85,7 +89,7 @@ static bool setup_procfs(const asc::conf &conf) {
 }
 
 /* 3. 核心虚拟文件系统建立 */
-static bool setup_virtual_filesystems(asc::rt &rt) {
+bool setup_virtual_filesystems(asc::rt &rt) {
   log_info("[BOOT] 正在挂载并配置虚拟文件系统 (proc, sys, dev)...");
 
   for (const auto dir : dirs_to_create) {
@@ -116,7 +120,7 @@ static bool setup_virtual_filesystems(asc::rt &rt) {
 }
 
 /* 4. 执行 pivot_root 切换根目录 */
-static bool execute_pivot_root() {
+bool execute_pivot_root() {
   log_info("[BOOT] 正在执行 pivot_root (无缝切换系统根目录)...");
 
   if (syscall(SYS_pivot_root, ".", ".old_root") < 0) {
@@ -136,7 +140,7 @@ static bool execute_pivot_root() {
 }
 
 /* 5. Systemd 依赖与网络环境调整 */
-static bool setup_system_environment() {
+bool setup_system_environment() {
   if (mount(nullptr, "/", nullptr, MS_REC | MS_SHARED, nullptr) < 0) {
     log_error("无法将根目录重新挂载为 MS_SHARED (systemd 依赖): {}", strerror(errno));
     return false;
@@ -148,7 +152,7 @@ static bool setup_system_environment() {
 }
 
 /* 6. 标准输入输出挂载与终端绑定 */
-static void setup_console_stdio() {
+void setup_console_stdio() {
   const int console_fd = open("dev/console", O_RDWR);
   if (console_fd < 0) return;
 
@@ -170,7 +174,7 @@ static void setup_console_stdio() {
 }
 
 /* 7. 引导 PID 1 进程 */
-static void execute_init_process(asc::rt &rt) {
+void execute_init_process(asc::rt &rt) {
   const char *init_bin = rt.conf.custom_init.empty() ? DEFAULT_INIT : rt.conf.custom_init.c_str();
   const char *init_args[] = {init_bin, "systemd.unified_cgroup_hierarchy=1", nullptr};
   const char *environment[] = {"container=asc", nullptr};
@@ -186,6 +190,8 @@ static void execute_init_process(asc::rt &rt) {
   if (execve(init_bin, const_cast<char *const *>(init_args), const_cast<char *const *>(environment)) < 0) {
     log_error("执行 {} 失败: {}", init_bin, strerror(errno));
   }
+}
+
 }
 
 void internal_boot(asc::rt &rt) {
@@ -218,4 +224,6 @@ void internal_boot(asc::rt &rt) {
 
   // 7. 脱离当前上下文，执行 init 进程
   execute_init_process(rt);
+}
+
 }

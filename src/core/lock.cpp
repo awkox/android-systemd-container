@@ -7,8 +7,14 @@
 #include "utils/path.h"
 #include "utils/fileio.h"
 
-static int active_lock_fd = -1;
-static std::filesystem::path active_lock_path = "";
+namespace asc::core {
+
+namespace {
+
+int active_lock_fd = -1;
+std::filesystem::path active_lock_path = "";
+
+}
 
 int acquire_external_lock(std::string_view name) {
   if (active_lock_fd >= 0)
@@ -66,4 +72,6 @@ void close_external_lock_fd() {
 
 bool is_external_lock_active(std::string_view name) {
   return std::filesystem::exists(lock_dir / name);
+}
+
 }
