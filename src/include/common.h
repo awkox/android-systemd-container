@@ -39,6 +39,7 @@
 #include <sys/wait.h>
 #include <sys/uio.h>
 #include <sys/xattr.h>
+#include <sys/eventfd.h>
 
 #include <linux/magic.h>
 #include <linux/capability.h>

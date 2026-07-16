@@ -2,26 +2,23 @@
 
 struct InitArgs {
   cfg_t &cfg;
-  int sync_fd;          // pipefd[0]: 当前 Init 用来接收唤醒信号的读端
-  int wake_write_fd;    // pipefd[1]: 属于 Monitor 的唤醒写端（应关闭）
-  int sync_pipe_write;  // sync_fd: 属于 Monitor 向 CLI 通信的写端（应关闭）
+  int efd;              // 替代原有的读写管道，仅需一个 fd
+  int sync_pipe_write;  // 属于 Monitor 向 CLI 通信的写端（Init应关闭）
 };
 
 static int init_trampoline(void *arg) {
   InitArgs *args = static_cast<InitArgs *>(arg);
   
   // 1. 修复 FD 泄漏：显式关闭继承自父进程但属于父进程的管道写端
-  if (args->wake_write_fd >= 0) close(args->wake_write_fd);
   if (args->sync_pipe_write >= 0) close(args->sync_pipe_write);
 
   /* 2. 阻塞等待父进程(Monitor)将我们安全迁入 Cgroup 树 */
-  char c;
-  if (read(args->sync_fd, &c, 1) < 0) {
-    // 顺手修复：安全隐患（读失败不应静默忽略，否则会引发竞争条件）
+  uint64_t wake_val = 0;
+  if (read(args->efd, &wake_val, sizeof(wake_val)) != sizeof(wake_val)) {
     log_error("Init 进程读取同步信号失败: %s", strerror(errno));
     return -1;
   }
-  close(args->sync_fd);
+  close(args->efd); // 消费完毕，安全关闭
 
   /* 现在我们在正确的 Cgroup 中，执行 Cgroup 命名空间隔离锁定 */
   if (unshare(CLONE_NEWCGROUP) < 0) {
@@ -67,21 +64,22 @@ static void redirect_stdio_to_null() {
 
 // 子模块 3: 孵化与唤醒容器 Init 进程
 static pid_t launch_container_init(cfg_t &cfg, void *stack_top, int &sync_fd) {
-  int pipefd[2];
-  if (pipe2(pipefd, O_CLOEXEC) < 0) {
+  // 使用 eventfd 替代 pipe，创建一个纯内存的 64 位计数器对象
+  int efd = eventfd(0, EFD_CLOEXEC);
+  if (efd < 0) {
+    log_error("分配 eventfd 失败: %s", strerror(errno));
     return -1;
   }
 
-  InitArgs args = {cfg, pipefd[0], pipefd[1], sync_fd};
+  InitArgs args = {cfg, efd, sync_fd};
   int clone_flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNS | SIGCHLD;
   if (cfg.conf.isolation_network) clone_flags |= CLONE_NEWNET;
 
   pid_t init_pid = clone(init_trampoline, stack_top, clone_flags, &args);
-  close(pipefd[0]); // 父进程关闭供子进程读取的管道端
 
   if (init_pid < 0) {
     log_error("clone 容器进程失败: %s", strerror(errno));
-    close(pipefd[1]);
+    close(efd); // 发生错误，清理 efd
     return -1;
   }
 
@@ -90,9 +88,11 @@ static pid_t launch_container_init(cfg_t &cfg, void *stack_top, int &sync_fd) {
   write_file(cg_path / "cgroup.procs", std::format("{}\n", init_pid));
 
   /* 释放 Init 进程，允许其推进引导 */
-  char wake_char = 'A';
-  if (write(pipefd[1], &wake_char, 1) < 0) {}
-  close(pipefd[1]);
+  uint64_t wake_val = 1; // 必须写入 8 字节 (uint64_t)
+  if (write(efd, &wake_val, sizeof(wake_val)) < 0) {
+    log_warn("唤醒 Init 进程警告: %s", strerror(errno));
+  }
+  close(efd); // 写入后父进程即关闭，不影响子进程持有
 
   /* 首次启动时通知 CLI 工具 */
   if (sync_fd >= 0) {
