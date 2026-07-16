@@ -1,23 +1,25 @@
-#include "platform/console.h"
-#include "platform/pty.h"
-#include "core/container.h"
-#include "utils/process.h"
-#include "utils/log.h"
+#include <csignal>
+#include <cerrno>
+#include <cstring>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/epoll.h>
 #include <sys/signalfd.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
-#include <csignal>
-#include <cerrno>
-#include <cstring>
+#include <sys/syscall.h>
+#include "platform/console.h"
+#include "platform/pty.h"
+#include "core/container.h"
+#include "utils/process.h"
+#include "utils/log.h"
 
 /* 定义控制台上下文，避免在拆分的函数中传递大量参数 */
 struct ConsoleContext {
   int epfd;
   int console_master_fd;
   int sfd;
+  int pidfd;
   pid_t monitor_pid;
   cfg_t &cfg;
   bool running;
@@ -135,19 +137,13 @@ static void handle_pty_event(ConsoleContext &ctx, uint32_t events) {
   }
 }
 
-/* 3. 处理信号事件 (子进程退出、终端缩放、中断信号) */
+/* 3. 处理信号事件 (终端缩放、中断信号) */
 static void handle_signal_event(ConsoleContext &ctx, uint32_t /* events */) {
   signalfd_siginfo fdsi;
   ssize_t n = read(ctx.sfd, &fdsi, sizeof(fdsi));
   if (n != sizeof(fdsi)) return;
 
-  if (fdsi.ssi_signo == SIGCHLD) {
-    int status;
-    pid_t child = waitpid(ctx.monitor_pid, &status, WNOHANG);
-    if (child == ctx.monitor_pid) {
-      ctx.running = false;
-    }
-  } else if (fdsi.ssi_signo == SIGWINCH) {
+  if (fdsi.ssi_signo == SIGWINCH) {
     if (ctx.console_master_fd >= 0) {
       winsize ws;
       if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
@@ -160,6 +156,14 @@ static void handle_signal_event(ConsoleContext &ctx, uint32_t /* events */) {
   }
 }
 
+/* 处理 Monitor 进程的退出事件 (pidfd 可读) */
+static void handle_pidfd_event(ConsoleContext &ctx, uint32_t /* events */) {
+  int status;
+  // 由于 epoll 已经通知我们该进程退出了，因此使用 WNOHANG 非阻塞清理僵尸进程即可
+  waitpid(ctx.monitor_pid, &status, WNOHANG);
+  ctx.running = false;
+}
+
 int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t &cfg) {
   int ret = 0;
   int is_tty = -1;
@@ -169,6 +173,7 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t &cfg) {
     .epfd = -1,
     .console_master_fd = console_master_fd,
     .sfd = -1,
+    .pidfd = -1,            // 初始化 pidfd
     .monitor_pid = monitor_pid,
     .cfg = cfg,
     .running = true,
@@ -180,9 +185,9 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t &cfg) {
   sigset_t mask;
   epoll_event ev = {}, events[10] = {};
 
-  /* 1. 设置 signalfd */
+  /* 1. 设置 signalfd (移除 SIGCHLD) */
   sigemptyset(&mask);
-  sigaddset(&mask, SIGCHLD);
+  // 注意：不再阻塞和监听 SIGCHLD
   sigaddset(&mask, SIGINT);
   sigaddset(&mask, SIGTERM);
   sigaddset(&mask, SIGWINCH);
@@ -203,6 +208,14 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t &cfg) {
     goto cleanup;
   }
 
+  /* --- 新增：打开 monitor 进程的 pidfd --- */
+  ctx.pidfd = syscall(SYS_pidfd_open, ctx.monitor_pid, 0);
+  if (ctx.pidfd < 0) {
+    log_error("无法为 monitor 获取 pidfd: {}", strerror(errno));
+    ret = -1;
+    goto cleanup;
+  }
+
   /* 注册监听事件 */
   ev.events = EPOLLIN;
   ev.data.fd = STDIN_FILENO;
@@ -215,6 +228,11 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t &cfg) {
   ev.events = EPOLLIN;
   ev.data.fd = ctx.sfd;
   epoll_ctl(ctx.epfd, EPOLL_CTL_ADD, ctx.sfd, &ev);
+
+  /* 将 pidfd 注册到 epoll 中 (退出的子进程在 epoll 中表现为 EPOLLIN 可读) */
+  ev.events = EPOLLIN;
+  ev.data.fd = ctx.pidfd;
+  epoll_ctl(ctx.epfd, EPOLL_CTL_ADD, ctx.pidfd, &ev);
 
   /* 将 PTY master 设为非阻塞模式 */
   if (int fl = fcntl(ctx.console_master_fd, F_GETFL); fl >= 0) {
@@ -248,12 +266,15 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t &cfg) {
         handle_pty_event(ctx, ev_mask);
       } else if (fd == ctx.sfd) {
         handle_signal_event(ctx, ev_mask);
+      } else if (fd == ctx.pidfd) {
+        handle_pidfd_event(ctx, ev_mask);
       }
     }
   }
 
   /* 4. 手动清理分配的资源 */
 cleanup:
+  if (ctx.pidfd >= 0) close(ctx.pidfd);
   if (ctx.sfd >= 0) close(ctx.sfd);
   if (ctx.epfd >= 0) close(ctx.epfd);
   if (ctx.console_master_fd >= 0) close(ctx.console_master_fd);
