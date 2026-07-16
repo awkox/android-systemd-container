@@ -1,10 +1,10 @@
 #include "utils/workspace.h"
 #include "utils/fileio.h"
 #include "utils/path.h"
-#include "oci/cgroup.h"
+#include "oci.h"
 
 int ensure_runtime(void) {
-  if (cgroup_host_bootstrap() < 0) {
+  if (asc::oci::cgroup_host_bootstrap() < 0) {
     return -1;
   }
 

@@ -23,6 +23,10 @@
 #include "utils/process.h"
 #include "platform/pty.h"
 
+namespace asc::core {
+
+namespace {
+
 struct InitArgs {
   asc::rt &rt;
   int efd;              // 替代原有的读写管道，仅需一个 fd
@@ -31,7 +35,7 @@ struct InitArgs {
 
 constexpr int REBOOT_EXIT = 249;
 
-static int init_trampoline(void *arg) {
+int init_trampoline(void *arg) {
   InitArgs *args = static_cast<InitArgs *>(arg);
   
   // 1. 修复 FD 泄漏：显式关闭继承自父进程但属于父进程的管道写端
@@ -56,7 +60,7 @@ static int init_trampoline(void *arg) {
 }
 
 // 子模块 1: 环境与上下文初始化
-static void setup_monitor_environment(asc::rt &rt) {
+void setup_monitor_environment(asc::rt &rt) {
   if (setsid() < 0 && errno != EPERM) {
     log_error("Monitor setsid 失败: {}", strerror(errno));
     _exit(EXIT_FAILURE);
@@ -79,7 +83,7 @@ static void setup_monitor_environment(asc::rt &rt) {
 }
 
 // 子模块 2: 后台模式 IO 重定向
-static void redirect_stdio_to_null() {
+void redirect_stdio_to_null() {
   int devnull = open("/dev/null", O_RDWR);
   if (devnull >= 0) {
     terminal_set_stdfds(devnull);
@@ -88,7 +92,7 @@ static void redirect_stdio_to_null() {
 }
 
 // 子模块 3: 孵化与唤醒容器 Init 进程
-static pid_t launch_container_init(asc::rt &rt, void *stack_top, int &sync_fd) {
+pid_t launch_container_init(asc::rt &rt, void *stack_top, int &sync_fd) {
   // 使用 eventfd 替代 pipe，创建一个纯内存的 64 位计数器对象
   int efd = eventfd(0, EFD_CLOEXEC);
   if (efd < 0) {
@@ -131,7 +135,7 @@ static pid_t launch_container_init(asc::rt &rt, void *stack_top, int &sync_fd) {
 
 // 子模块 4: 高效阻塞等待容器退出
 // 优化后的极简逻辑
-static int wait_for_container_exit(pid_t init_pid) {
+int wait_for_container_exit(pid_t init_pid) {
   int pfd = syscall(SYS_pidfd_open, init_pid, 0);
   if (pfd < 0) {
     log_error("pidfd_open失败：{}", strerror(errno));
@@ -152,7 +156,7 @@ static int wait_for_container_exit(pid_t init_pid) {
 }
 
 // 子模块 5: 退出状态分析与重启决策
-static bool evaluate_reboot_request(int status, asc::rt &rt) {
+bool evaluate_reboot_request(int status, asc::rt &rt) {
   bool is_reboot_request = false;
 
   if (WIFEXITED(status)) {
@@ -196,6 +200,8 @@ static bool evaluate_reboot_request(int status, asc::rt &rt) {
   }
   
   return false;
+}
+
 }
 
 // 主函数: monitor_run 监督主循环
@@ -254,4 +260,6 @@ void monitor_run(asc::rt &rt, int sync_pipe_write) {
 
   log_info("[MONITOR] 资源清理完毕，守护进程退出。");
   _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 0);
+}
+
 }

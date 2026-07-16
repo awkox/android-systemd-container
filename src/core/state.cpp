@@ -1,7 +1,9 @@
 #include <unistd.h>
 #include "core/state.h"
 #include "utils/process.h"
-#include "oci/cgroup.h"
+#include "oci.h"
+
+namespace asc::core {
 
 bool is_container_running(std::string_view container_name, pid_t &pid_out) {
   const pid_t deep_pid = find_container_init_pid(container_name);
@@ -18,5 +20,7 @@ void cleanup_container_resources(std::string_view container_name, const bool for
   if (!force_cleanup)
     sync();
 
-  cgroup_cleanup_container(container_name);
+  asc::oci::cgroup_cleanup_container(container_name);
+}
+
 }

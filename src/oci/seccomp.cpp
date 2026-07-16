@@ -9,12 +9,12 @@
 #include <linux/seccomp.h>
 #include <linux/audit.h>
 #include <linux/filter.h>
-#include "oci/seccomp.h"
+#include "oci.h"
 #include "utils/log.h"
 #include "utils/system.h"
 #include "common.h"
 
-using namespace asc;
+namespace asc::oci {
 
 namespace {
 
@@ -157,4 +157,6 @@ int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask)
   }
 
   return 0;
+}
+
 }

@@ -13,8 +13,7 @@
 #include "utils/path.h"
 #include "platform/mount.h"
 #include "platform/devices.h"
-#include "oci/seccomp.h"
-#include "oci/caps.h"
+#include "oci.h"
 
 namespace asc::core {
 
@@ -211,13 +210,13 @@ void internal_boot(asc::rt &rt) {
 
   // 5. 应用安全性防护
   log_info("[BOOT] 正在应用系统安全加固与沙箱隔离策略...");
-  if (seccomp_apply_minimal(rt.conf.privileged_mask) < 0) {
+  if (asc::oci::seccomp_apply_minimal(rt.conf.privileged_mask) < 0) {
     log_error("Seccomp 应用失败，拒绝启动不安全的容器");
     return;
   }
-  android_seccomp_setup(rt.conf.block_nested_ns && !(rt.conf.privileged_mask & PRIV_NOSEC), 
+  asc::oci::android_seccomp_setup(rt.conf.block_nested_ns && !(rt.conf.privileged_mask & PRIV_NOSEC), 
                         rt.conf.privileged_mask);
-  apply_capability_hardening(rt.conf.privileged_mask);
+  asc::oci::apply_capability_hardening(rt.conf.privileged_mask);
 
   // 6. 绑定控制台输入输出
   setup_console_stdio();

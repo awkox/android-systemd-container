@@ -8,17 +8,19 @@
 #include <linux/capability.h>
 #include "common.h"
 #include <sys/types.h>
-#include "oci/caps.h"
+#include "oci.h"
 #include "utils/log.h"
 
-using namespace asc;
+namespace asc::oci {
+
+namespace {
 
 /* 使用 std::array 替代 C 风格数组，移除 -1 哨兵值 */
-static constexpr auto universal_drops = std::to_array<int>({
+constexpr auto universal_drops = std::to_array<int>({
   CAP_SYS_MODULE
 });
 
-static constexpr auto caps_to_drop = std::to_array<int>({
+constexpr auto caps_to_drop = std::to_array<int>({
   CAP_SYS_RAWIO,       /* 原始的硬件 I/O 访问 (端口, 内存) */
   CAP_SYS_PTRACE,      /* 允许跨命名空间跟踪或注入进程 */
   CAP_SYS_PACCT,       /* 进程审计记录 */
@@ -30,6 +32,8 @@ static constexpr auto caps_to_drop = std::to_array<int>({
   CAP_AUDIT_READ,      /* 读取内核审计日志 */
   CAP_DAC_READ_SEARCH  /* 绕过文件读取和目录搜索的权限检查 */
 });
+
+}
 
 /*
  * apply_capability_hardening()
@@ -87,4 +91,6 @@ void apply_capability_hardening(const int privileged_mask) {
   }
 
   log_info("[SEC] 已完成内核权限边界裁剪 (共移除了 {} 个 Cap)。", total_dropped);
+}
+
 }

@@ -7,13 +7,19 @@
 #include <sys/statfs.h>
 #include <sys/mount.h>
 #include <linux/magic.h>
-#include "oci/cgroup.h"
+#include "oci.h"
 #include "utils/log.h"
 #include "utils/fileio.h"
 #include "utils/path.h"
 
-static bool cgroup_kernel_supports_v2(void) {
+namespace asc::oci {
+
+namespace {
+
+bool cgroup_kernel_supports_v2(void) {
   return grep_file("/proc/filesystems", "cgroup2");
+}
+
 }
 
 // 处理系统cgroup
@@ -58,7 +64,9 @@ int cgroup_host_bootstrap() {
   return 0;
 }
 
-static void rmdir_cgroup_tree(const std::filesystem::path &path) {
+namespace {
+
+void rmdir_cgroup_tree(const std::filesystem::path &path) {
   std::error_code ec;
   if (!std::filesystem::exists(path, ec)) return;
 
@@ -99,6 +107,10 @@ static void rmdir_cgroup_tree(const std::filesystem::path &path) {
   }
 }
 
+}
+
 void cgroup_cleanup_container(std::string_view container_name) {
   rmdir_cgroup_tree(project_cgroup_dir / container_name);
+}
+
 }
