@@ -152,7 +152,7 @@ static int wait_for_container_exit(pid_t init_pid) {
 }
 
 // 子模块 5: 退出状态分析与重启决策
-static bool evaluate_reboot_request(int status, cfg_t &cfg) {
+static bool evaluate_reboot_request(int status, asc_rt_t &rt) {
   bool is_reboot_request = false;
 
   if (WIFEXITED(status)) {
@@ -178,21 +178,21 @@ static bool evaluate_reboot_request(int status, cfg_t &cfg) {
   }
 
   if (is_reboot_request) {
-    if (is_external_lock_active(cfg.rt.container_name)) {
+    if (is_external_lock_active(rt.container_name)) {
       log_warn("[MONITOR] 检测到外部命令锁 - 中止内部重启，移交控制权给 CLI");
       return false;
     } 
     
-    if (cfg.rt.foreground) {
-      log_info("容器 {} 正在重启", cfg.rt.container_name);
+    if (rt.foreground) {
+      log_info("容器 {} 正在重启", rt.container_name);
       fflush(stdout);
     }
-    cfg.rt.reboot_cycle = true;
-    clock_gettime(CLOCK_BOOTTIME, &cfg.rt.start_time);
+    rt.reboot_cycle = true;
+    clock_gettime(CLOCK_BOOTTIME, &rt.start_time);
 
     // 重置运行时 PID 标识以进入下一轮
-    cfg.rt.container_pid = 0;
-    cfg.rt.ns_inode = 0;
+    rt.container_pid = 0;
+    rt.ns_inode = 0;
     return true;
   }
   
@@ -246,7 +246,7 @@ void monitor_run(cfg_t &cfg, int sync_pipe_write) {
     }
 
     // 4. 判断是否需要自旋重启
-    should_reboot = evaluate_reboot_request(status, cfg);
+    should_reboot = evaluate_reboot_request(status, cfg.rt);
 
   } while (should_reboot);
 
