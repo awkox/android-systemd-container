@@ -33,14 +33,12 @@ struct rt {
   asc::conf conf;
 
   std::string container_name;
+  pid_t container_pid;
 
   bool foreground;
   bool reboot_cycle;
 
-  pid_t container_pid;
-
   tty_info console;
-  timespec start_time;
   unsigned long ns_inode;
 };
 

@@ -119,8 +119,6 @@ int start_rootfs(asc::rt &rt) {
   fcntl(sync_pipe[0], F_SETFD, FD_CLOEXEC);
   fcntl(sync_pipe[1], F_SETFD, FD_CLOEXEC);
 
-  clock_gettime(CLOCK_BOOTTIME, &rt.start_time);
-
   log_info("正在孵化 Monitor 监控守护进程...");
   monitor_pid = fork();
   if (monitor_pid < 0) {

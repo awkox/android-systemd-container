@@ -188,7 +188,6 @@ static bool evaluate_reboot_request(int status, asc::rt &rt) {
       fflush(stdout);
     }
     rt.reboot_cycle = true;
-    clock_gettime(CLOCK_BOOTTIME, &rt.start_time);
 
     // 重置运行时 PID 标识以进入下一轮
     rt.container_pid = 0;
