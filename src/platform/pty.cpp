@@ -48,7 +48,7 @@ err:
   return -1;
 }
 
-int terminal_create(tty_info &tty) {
+int terminal_create(asc::tty_info &tty) {
   if (asc_openpty(tty.master, tty.slave, tty.name) < 0) {
     log_error("openpty 获取伪终端失败: {}", strerror(errno));
     return -1;

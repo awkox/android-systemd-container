@@ -4,7 +4,7 @@
 #include <string_view>
 #include "common.h"
 
-int start_rootfs(cfg_t &cfg);
+int start_rootfs(asc::rt &rt);
 int stop_rootfs(std::string_view container_name);
 
 #endif

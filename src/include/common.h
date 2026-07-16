@@ -12,13 +12,15 @@ constexpr int PRIV_NOCAPS = 1 << 1;
 constexpr int PRIV_NOSEC  = 1 << 2;
 constexpr int PRIV_FULL   = 0xFF;
 
+namespace asc {
+
 struct tty_info {
   int master = -1;
   int slave  = -1;
   std::filesystem::path name;
 };
 
-struct asc_conf_t {
+struct conf {
   std::filesystem::path rootfs_img_path;
   std::filesystem::path custom_init;
 
@@ -27,7 +29,9 @@ struct asc_conf_t {
   int privileged_mask;
 };
 
-struct asc_rt_t {
+struct rt {
+  asc::conf conf;
+
   std::string container_name;
 
   bool foreground;
@@ -40,9 +44,5 @@ struct asc_rt_t {
   unsigned long ns_inode;
 };
 
-struct cfg_t {
-  asc_conf_t conf;
-  asc_rt_t rt;
-};
-
+}
 #endif

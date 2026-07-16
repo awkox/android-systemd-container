@@ -21,7 +21,7 @@ struct ConsoleContext {
   int sfd;
   int pidfd;
   pid_t monitor_pid;
-  cfg_t &cfg;
+  asc::rt &rt;
   bool running;
 
   /* 挂起的写入状态，用于非阻塞 PTY I/O 的背压处理 */
@@ -43,7 +43,7 @@ static void handle_stdin_event(ConsoleContext &ctx, uint32_t /* events */) {
   if (n >= 2 && buf[0] == '\x1b' && buf[1] == '\x11') {
     static bool exit_detected = false;
     if (!exit_detected) {
-      log_info("正在停止容器 '{}'...", ctx.cfg.rt.container_name);
+      log_info("正在停止容器 '{}'...", ctx.rt.container_name);
       pid_t bg_pid = fork();
       if (bg_pid == 0) {
         setsid();
@@ -60,7 +60,7 @@ static void handle_stdin_event(ConsoleContext &ctx, uint32_t /* events */) {
           close(devnull);
         }
 
-        stop_rootfs(ctx.cfg.rt.container_name);
+        stop_rootfs(ctx.rt.container_name);
         _exit(0);
       }
       if (bg_pid > 0) {
@@ -150,7 +150,7 @@ static void handle_signal_event(ConsoleContext &ctx, uint32_t /* events */) {
         ioctl(ctx.console_master_fd, TIOCSWINSZ, &ws);
     }
   } else if (fdsi.ssi_signo == SIGINT || fdsi.ssi_signo == SIGTERM) {
-    pid_t live_pid = find_container_init_pid(ctx.cfg.rt.container_name);
+    pid_t live_pid = find_container_init_pid(ctx.rt.container_name);
     if (live_pid > 0)
       kill(live_pid, static_cast<int>(fdsi.ssi_signo));
   }
@@ -164,7 +164,7 @@ static void handle_pidfd_event(ConsoleContext &ctx, uint32_t /* events */) {
   ctx.running = false;
 }
 
-int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t &cfg) {
+int console_monitor_loop(int console_master_fd, pid_t monitor_pid, asc::rt &rt) {
   int ret = 0;
   int is_tty = -1;
   termios oldtios;
@@ -175,7 +175,7 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, cfg_t &cfg) {
     .sfd = -1,
     .pidfd = -1,            // 初始化 pidfd
     .monitor_pid = monitor_pid,
-    .cfg = cfg,
+    .rt = rt,
     .running = true,
     .pending = {},
   };

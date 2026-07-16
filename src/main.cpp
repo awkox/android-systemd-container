@@ -69,22 +69,22 @@ int asc_main(int argc, char **argv) {
       if (check_requirements_hw() < 0) return 1;
       ensure_runtime();
 
-      cfg_t cfg = {};
-      cfg.rt.foreground = true;
-      cfg.rt.container_name = name;
+      asc::rt rt = {};
+      rt.foreground = true;
+      rt.container_name = name;
 
       if (config_path[0]) {
-        if (config_load(config_path, cfg.conf) < 0) {
+        if (config_load(config_path, rt.conf) < 0) {
           log_error("无法从 '{}' 加载配置: {}", config_path, strerror(errno));
           return 1;
         }
       }
 
-      print_privileged_warning(cfg.conf.privileged_mask);
-      if ((cfg.conf.privileged_mask & PRIV_NOSEC) && cfg.conf.block_nested_ns) {
+      print_privileged_warning(rt.conf.privileged_mask);
+      if ((rt.conf.privileged_mask & PRIV_NOSEC) && rt.conf.block_nested_ns) {
         log_warn("警告：由于启用了 privileged=noseccomp，block-nested-namespaces 已失效。");
       }
-      return start_rootfs(cfg);
+      return start_rootfs(rt);
     }
     case Command::STOP: {
       return stop_rootfs(name);

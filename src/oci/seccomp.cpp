@@ -14,6 +14,8 @@
 #include "utils/system.h"
 #include "common.h"
 
+using namespace asc;
+
 namespace {
 
 class BpfBuilder {

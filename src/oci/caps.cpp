@@ -11,6 +11,8 @@
 #include "oci/caps.h"
 #include "utils/log.h"
 
+using namespace asc;
+
 /* 使用 std::array 替代 C 风格数组，移除 -1 哨兵值 */
 static constexpr auto universal_drops = std::to_array<int>({
   CAP_SYS_MODULE

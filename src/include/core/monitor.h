@@ -3,6 +3,6 @@
 
 #include "common.h"
 
-void monitor_run(cfg_t &cfg, int sync_pipe_write);
+void monitor_run(asc::rt &rt, int sync_pipe_write);
 
 #endif
