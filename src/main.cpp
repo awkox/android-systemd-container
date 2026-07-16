@@ -65,7 +65,7 @@ int asc_main(int argc, char **argv) {
 
   /* 2. 基础信息命令 (无需 Root 权限) */
   if (cmd == Command::HELP) {
-    print_usage();
+    print_usage(argv[0]);
     return 0;
   }
 

@@ -37,7 +37,7 @@ constexpr const char* DEFAULT_INIT = "/sbin/init";
 /* 1. 基础挂载隔离与 Rootfs 挂载 */
 static bool setup_mount_isolation_and_rootfs(cfg_t &cfg) {
   if (mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) < 0) {
-    log_error("无法设置根目录挂载传播模式 (MS_PRIVATE): %s", strerror(errno));
+    log_error("无法设置根目录挂载传播模式 (MS_PRIVATE): {}", strerror(errno));
     return false;
   }
 
@@ -45,11 +45,11 @@ static bool setup_mount_isolation_and_rootfs(cfg_t &cfg) {
     log_info("[BOOT] 准备挂载 Rootfs 镜像...");
     std::filesystem::path mount_point = mount_dir / cfg.rt.container_name;
     if (mount_rootfs_img(cfg.conf.rootfs_img_path, mount_point) < 0) {
-      log_error("无法挂载镜像: %s", strerror(errno));
+      log_error("无法挂载镜像: {}", strerror(errno));
       return false;
     }
     if (chdir(mount_point.c_str()) < 0) {
-      log_error("无法 chdir 到 '%s': %s", mount_point.c_str(), strerror(errno));
+      log_error("无法 chdir 到 '{}': {}", mount_point.c_str(), strerror(errno));
       return false;
     }
   }
@@ -59,7 +59,7 @@ static bool setup_mount_isolation_and_rootfs(cfg_t &cfg) {
 /* 2. Procfs 挂载及安全加固 */
 static bool setup_procfs(const asc_conf_t &conf) {
   if (mount("proc", "proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
-    log_error("挂载 procfs 失败: %s", strerror(errno));
+    log_error("挂载 procfs 失败: {}", strerror(errno));
     return false;
   }
 
@@ -68,18 +68,18 @@ static bool setup_procfs(const asc_conf_t &conf) {
   }
 
   if (mask_path("proc/sys") < 0) {
-    log_error("屏蔽 /proc/sys 失败: %s", strerror(errno));
+    log_error("屏蔽 /proc/sys 失败: {}", strerror(errno));
     return false;
   }
 
   for (const auto path : proc_sys_rw_holes) {
     if (!std::filesystem::exists(path)) continue;
     if (mount(path, path, nullptr, MS_BIND, nullptr) < 0) {
-      log_warn("[SEC] 无法将安全挂载洞 %s 绑定: %s", path, strerror(errno));
+      log_warn("[SEC] 无法将安全挂载洞 {} 绑定: {}", path, strerror(errno));
       continue;
     }
     if (mount(path, path, nullptr, MS_BIND | MS_REMOUNT | MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0)
-      log_warn("[SEC] 无法重新挂载安全挂载洞 %s: %s", path, strerror(errno));
+      log_warn("[SEC] 无法重新挂载安全挂载洞 {}: {}", path, strerror(errno));
   }
   return true;
 }
@@ -90,7 +90,7 @@ static bool setup_virtual_filesystems(cfg_t &cfg) {
 
   for (const auto dir : dirs_to_create) {
     if (mkdir(dir, 0755) < 0 && errno != EEXIST) {
-      log_error("无法创建目录 '%s': %s", dir, strerror(errno));
+      log_error("无法创建目录 '{}': {}", dir, strerror(errno));
       return false;
     }
   }
@@ -98,7 +98,7 @@ static bool setup_virtual_filesystems(cfg_t &cfg) {
   if (!setup_procfs(cfg.conf)) return false;
 
   if (mount("sysfs", "sys", "sysfs", MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
-    log_error("挂载 sysfs 失败: %s", strerror(errno));
+    log_error("挂载 sysfs 失败: {}", strerror(errno));
     return false;
   }
 
@@ -110,7 +110,7 @@ static bool setup_virtual_filesystems(cfg_t &cfg) {
   if (setup_devpts() < 0) return false;
 
   if (mount(cfg.rt.console.name.c_str(), "dev/console", nullptr, MS_BIND, nullptr) < 0)
-    log_warn("无法绑定挂载 Console '%s': %s", cfg.rt.console.name.c_str(), strerror(errno));
+    log_warn("无法绑定挂载 Console '{}': {}", cfg.rt.console.name.c_str(), strerror(errno));
 
   return true;
 }
@@ -120,15 +120,15 @@ static bool execute_pivot_root() {
   log_info("[BOOT] 正在执行 pivot_root (无缝切换系统根目录)...");
 
   if (syscall(SYS_pivot_root, ".", ".old_root") < 0) {
-    log_error("pivot_root 系统调用失败: %s", strerror(errno));
+    log_error("pivot_root 系统调用失败: {}", strerror(errno));
     return false;
   }
   if (chdir("/") < 0) {
-    log_error("pivot_root 后的 chdir(\"/\") 失败: %s", strerror(errno));
+    log_error("pivot_root 后的 chdir(\"/\") 失败: {}", strerror(errno));
     return false;
   }
   if (umount2(".old_root", MNT_DETACH) < 0) {
-    log_error("卸载 .old_root 失败: %s", strerror(errno));
+    log_error("卸载 .old_root 失败: {}", strerror(errno));
     return false;
   }
   rmdir(".old_root");
@@ -138,11 +138,11 @@ static bool execute_pivot_root() {
 /* 5. Systemd 依赖与网络环境调整 */
 static bool setup_system_environment() {
   if (mount(nullptr, "/", nullptr, MS_REC | MS_SHARED, nullptr) < 0) {
-    log_error("无法将根目录重新挂载为 MS_SHARED (systemd 依赖): %s", strerror(errno));
+    log_error("无法将根目录重新挂载为 MS_SHARED (systemd 依赖): {}", strerror(errno));
     return false;
   }
   if (sethostname("(none)", 6) < 0) {
-    log_warn("重置主机名失败: %s", strerror(errno));
+    log_warn("重置主机名失败: {}", strerror(errno));
   }
   return true;
 }
@@ -165,7 +165,7 @@ static void setup_console_stdio() {
   // 【核心优化】使用标准库 login_tty 替代所有的 dup2、setsid 和 TIOCSCTTY
   // 它甚至会自动帮你执行 close(console_fd)，如果它大于2的话！
   if (login_tty(console_fd) < 0) {
-    log_warn("login_tty 失败，无法绑定终端: %s", strerror(errno));
+    log_warn("login_tty 失败，无法绑定终端: {}", strerror(errno));
   }
 }
 
@@ -175,7 +175,7 @@ static void execute_init_process(cfg_t &cfg) {
   const char *init_args[] = {init_bin, "systemd.unified_cgroup_hierarchy=1", nullptr};
   const char *environment[] = {"container=asc", nullptr};
 
-  log_info("[BOOT] 容器引导环境搭建完毕，移交控制权至 PID 1 (%s)...", init_bin);
+  log_info("[BOOT] 容器引导环境搭建完毕，移交控制权至 PID 1 ({})...", init_bin);
 
   if (cfg.rt.foreground) {
     printf("\r\n(按下 CTRL+ALT+Q 以脱离前台并退出)\r\n");
@@ -184,7 +184,7 @@ static void execute_init_process(cfg_t &cfg) {
   fflush(stdout);
 
   if (execve(init_bin, const_cast<char *const *>(init_args), const_cast<char *const *>(environment)) < 0) {
-    log_error("执行 %s 失败: %s", init_bin, strerror(errno));
+    log_error("执行 {} 失败: {}", init_bin, strerror(errno));
   }
 }
 

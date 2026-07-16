@@ -36,7 +36,7 @@ using namespace std::chrono_literals;
 
 int mount_rootfs_img(const std::filesystem::path &img_path, const std::filesystem::path &mount_point) {
     if (!create_directories_with_permission(mount_point)) {
-        log_error("创建挂载目录 %s 失败: %s", mount_point.c_str(), strerror(errno));
+        log_error("创建挂载目录 {} 失败: {}", mount_point.c_str(), strerror(errno));
         return -1;
     }
 
@@ -49,9 +49,9 @@ int mount_rootfs_img(const std::filesystem::path &img_path, const std::filesyste
 
     for (int attempt : std::views::iota(0, 3)) {
         if (attempt == 0)
-            log_info("正在尝试挂载镜像 %s 到 %s...", img_path.c_str(), mount_point.c_str());
+            log_info("正在尝试挂载镜像 {} 到 {}...", img_path.c_str(), mount_point.c_str());
         else
-            log_info("正在重试挂载 (第 %d/3 次尝试)...", attempt + 1);
+            log_info("正在重试挂载 (第 {}/3 次尝试)...", attempt + 1);
 
         std::filesystem::path final_src = "";
         int loop_fd = loop_attach(img_path.c_str(), final_src);
@@ -62,7 +62,7 @@ int mount_rootfs_img(const std::filesystem::path &img_path, const std::filesyste
         // 2. 遍历尝试内核支持的所有文件系统
         for (const auto &fstype : supported_fs) {
             if (mount(final_src.c_str(), mount_point.c_str(), fstype.c_str(), mnt_flags, nullptr) == 0) {
-                log_info("识别到文件系统并成功挂载 (%s)", fstype.c_str());
+                log_info("识别到文件系统并成功挂载 ({})", fstype);
                 success = true;
                 break; // 只要有一个成功，立即退出嗅探循环
             }

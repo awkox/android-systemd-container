@@ -12,23 +12,23 @@ constexpr int STOP_TIMEOUT = 15;
 
 static int stop_rootfs_with_timeout(std::string_view container_name, int timeout_seconds) {
   if (acquire_external_lock(container_name) != 0) {
-    log_error("无法停止 '%s': 另一个命令正在管理此容器",
-              container_name.data());
+    log_error("无法停止 '{}': 另一个命令正在管理此容器",
+              container_name);
     return -1;
   }
 
   pid_t pid = -1;
   if (!is_container_running(container_name, pid)) {
-    log_error("容器 '%s' 未运行或状态无效。", container_name.data());
+    log_error("容器 '{}' 未运行或状态无效。", container_name);
     release_external_lock();
     return -1;
   }
 
-  log_info("正在停止容器 '%s' (PID %d)...", container_name.data(), pid);
+  log_info("正在停止容器 '{}' (PID {})...", container_name, pid);
 
   int pfd = syscall(SYS_pidfd_open, pid, 0);
   if (pfd < 0) {
-    log_error("pidfd_open失败：%s", strerror(errno));
+    log_error("pidfd_open失败：{}", strerror(errno));
     release_external_lock();
     return -1;
   }
@@ -44,14 +44,14 @@ static int stop_rootfs_with_timeout(std::string_view container_name, int timeout
     r = poll(&pfd_poll, 1, 5000); // 5 sec max wait for SIGKILL
     if (!(r > 0 && (pfd_poll.revents & POLLIN))) {
       unkillable = true;
-      log_error("容器进程 (PID %d) 进入了不可杀死的僵尸状态！", pid);
+      log_error("容器进程 (PID {}) 进入了不可杀死的僵尸状态！", pid);
       log_warn("这通常是因为内核僵尸进程导致。\n将尽最大努力清理宿主机资源 (无数据同步)...");
     }
   }
   close(pfd);
 
   if (!unkillable) {
-    log_info("已成功终止容器 '%s'。资源清理已移交后台 Monitor 完成。", container_name.data());
+    log_info("已成功终止容器 '{}'。资源清理已移交后台 Monitor 完成。", container_name);
   }
 
   release_external_lock();

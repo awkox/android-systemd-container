@@ -70,7 +70,7 @@ int check_requirements_hw() {
 
   for (const auto &[flag, name, label] : ns_checks) {
     if (!check_ns(flag, name)) {
-      log_error("当前内核不支持 %.*s", static_cast<int>(label.size()), label.data());
+      log_error("当前内核不支持 {}", label);
       missing++;
     }
   }
@@ -86,7 +86,7 @@ int check_requirements_hw() {
   }
 
   if (missing > 0) {
-    log_error("缺少 %d 项【必须】功能 - 无法继续启动过程", missing);
+    log_error("缺少 {} 项【必须】功能 - 无法继续启动过程", missing);
     return -1;
   }
   return 0;

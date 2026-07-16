@@ -45,7 +45,7 @@ void apply_capability_hardening(const int privileged_mask) {
   __user_cap_data_struct data[2] = {};
 
   if (syscall(SYS_capget, &hdr, data) < 0) {
-    log_warn("[SEC] 无法获取当前进程 Capabilities: %s", strerror(errno));
+    log_warn("[SEC] 无法获取当前进程 Capabilities: {}", strerror(errno));
     return;
   }
 
@@ -56,8 +56,8 @@ void apply_capability_hardening(const int privileged_mask) {
       // 1. 从 Bounding Set (边界集) 中丢弃，这会影响后续的 execve 授权上限
       if (prctl(PR_CAPBSET_DROP, cap, 0, 0, 0) < 0) {
         if (errno != EINVAL) {
-          log_warn("[SEC] 无法移除边界 Cap %d: %s", cap, 
-                   std::system_category().message(errno).c_str());
+          log_warn("[SEC] 无法移除边界 Cap {}: {}", cap, 
+                   std::system_category().message(errno));
         }
       } else {
         dropped_count++;
@@ -81,8 +81,8 @@ void apply_capability_hardening(const int privileged_mask) {
 
   // 4. 应用修改回内核，让能力剥夺立刻针对当前进程上下文生效
   if (syscall(SYS_capset, &hdr, data) < 0) {
-    log_warn("[SEC] 无法应用 Capabilities 裁剪策略 (capset): %s", strerror(errno));
+    log_warn("[SEC] 无法应用 Capabilities 裁剪策略 (capset): {}", strerror(errno));
   }
 
-  log_info("[SEC] 已完成内核权限边界裁剪 (共移除了 %d 个 Cap)。", total_dropped);
+  log_info("[SEC] 已完成内核权限边界裁剪 (共移除了 {} 个 Cap)。", total_dropped);
 }

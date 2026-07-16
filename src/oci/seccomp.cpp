@@ -107,7 +107,7 @@ int seccomp_apply_minimal(const int privileged_mask) {
   bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
 
   if (bpf.apply() < 0) {
-    log_error("[SEC] 无法应用基础的 Seccomp 内核隔离机制: %s", strerror(errno));
+    log_error("[SEC] 无法应用基础的 Seccomp 内核隔离机制: {}", strerror(errno));
     return -1;
   }
   return 0;
@@ -150,7 +150,7 @@ int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask)
   bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
 
   if (bpf.apply() < 0) {
-    log_error("由于未知错误无法应用 Android 附加 Seccomp 滤网: %s", strerror(errno));
+    log_error("由于未知错误无法应用 Android 附加 Seccomp 滤网: {}", strerror(errno));
     return -1;
   }
 

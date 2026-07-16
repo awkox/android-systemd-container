@@ -50,7 +50,7 @@ int acquire_external_lock(std::string_view name) {
 
   if (errno == EACCES || errno == EAGAIN) {
     if (fcntl(fd, F_GETLK, &fl) == 0 && fl.l_type != F_UNLCK) {
-      log_warn("无法获取锁: 当前已被进程 %d 持有", fl.l_pid);
+      log_warn("无法获取锁: 当前已被进程 {} 持有", fl.l_pid);
     }
   }
 
@@ -101,18 +101,18 @@ int start_rootfs(cfg_t &cfg) {
   log_info("正在获取容器独占锁与资源...");
   if (acquire_external_lock(cfg.rt.container_name) != 0) {
     if (is_container_running(cfg.rt.container_name, existing_pid)) {
-      log_error("容器名称 '%s' 已被 PID %d 占用。",
-                cfg.rt.container_name.c_str(), existing_pid);
+      log_error("容器名称 '{}' 已被 PID {} 占用。",
+                cfg.rt.container_name, existing_pid);
     } else {
-      log_error("无法操作容器 '%s': 另一个管理命令正在执行。", cfg.rt.container_name.c_str());
+      log_error("无法操作容器 '{}': 另一个管理命令正在执行。", cfg.rt.container_name);
     }
     goto cleanup;
   }
   lock_acquired = true;
 
   if (is_container_running(cfg.rt.container_name, existing_pid)) {
-    log_error("容器名称 '%s' 已被 PID %d 占用。",
-              cfg.rt.container_name.c_str(), existing_pid);
+    log_error("容器名称 '{}' 已被 PID {} 占用。",
+              cfg.rt.container_name, existing_pid);
     goto cleanup;
   }
 
@@ -120,7 +120,7 @@ int start_rootfs(cfg_t &cfg) {
     log_info("校验并解析 Rootfs 路径配置...");
     std::filesystem::path abs_path = resolve_path_arg(cfg.conf.rootfs_img_path);
     if (abs_path.empty() || !std::filesystem::exists(abs_path)) {
-      log_error("无法解析 rootfs 镜像路径 '%s': %s",
+      log_error("无法解析 rootfs 镜像路径 '{}': {}",
                 abs_path.empty() ? cfg.conf.rootfs_img_path.c_str() : abs_path.c_str(), strerror(errno));
       goto cleanup;
     }
@@ -144,7 +144,7 @@ int start_rootfs(cfg_t &cfg) {
   }
 
   if (pipe(sync_pipe) < 0) {
-    log_error("创建管道失败: %s", strerror(errno));
+    log_error("创建管道失败: {}", strerror(errno));
     goto cleanup;
   }
 
@@ -160,7 +160,7 @@ int start_rootfs(cfg_t &cfg) {
     close(sync_pipe[1]);
     sync_pipe[0] = -1;
     sync_pipe[1] = -1;
-    log_error("fork(Monitor) 失败: %s", strerror(errno));
+    log_error("fork(Monitor) 失败: {}", strerror(errno));
     goto cleanup;
   }
 

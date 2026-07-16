@@ -61,11 +61,11 @@ int config_load(const char *config_path, asc_conf_t &conf) {
       conf.privileged_mask = parse_privileged(val);
     } else if (key == "custom_init") {
       if (val.find(' ') != std::string_view::npos)
-        log_warn("配置警告: 忽略包含空格的 custom_init 路径 '%.*s'", static_cast<int>(val.size()), val.data());
+        log_warn("配置警告: 忽略包含空格的 custom_init 路径 '{}'", val);
       else
         conf.custom_init = val;
     } else {
-      log_warn("配置警告: 忽略未知的配置键 '%.*s'", static_cast<int>(key.size()), key.data());
+      log_warn("配置警告: 忽略未知的配置键 '{}'", key);
     }
   }
 

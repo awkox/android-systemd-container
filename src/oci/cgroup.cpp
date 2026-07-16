@@ -31,7 +31,7 @@ int cgroup_host_bootstrap() {
 
   if (!std::filesystem::exists("/sys/fs/cgroup")) {
     if (!create_directories_with_permission("sys/fs/cgroup")) {
-      log_error("[CGROUP] 创建 sys/fs/cgroup 失败: %s",
+      log_error("[CGROUP] 创建 sys/fs/cgroup 失败: {}",
                 strerror(errno));
       return -1;
     }
@@ -42,7 +42,7 @@ int cgroup_host_bootstrap() {
       sfs.f_type != CGROUP2_SUPER_MAGIC) {
     if (mount("none", "/sys/fs/cgroup", "tmpfs",
               MS_NOSUID | MS_NODEV | MS_NOEXEC, "mode=755,size=16M") != 0) {
-      log_error("[CGROUP] 挂载 tmpfs 到 /sys/fs/cgroup 失败: %s",
+      log_error("[CGROUP] 挂载 tmpfs 到 /sys/fs/cgroup 失败: {}",
                 strerror(errno));
       return -1;
     }
@@ -51,7 +51,7 @@ int cgroup_host_bootstrap() {
 
   if (mount("none", "/sys/fs/cgroup", "cgroup2",
             MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) != 0) {
-    log_error("挂载 cgroup2 到 sys/fs/cgroup 失败: %s", strerror(errno));
+    log_error("挂载 cgroup2 到 sys/fs/cgroup 失败: {}", strerror(errno));
     return -1;
   }
   log_info("自动引导并挂载了 cgroup2 到 /sys/fs/cgroup。");

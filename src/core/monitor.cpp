@@ -38,14 +38,14 @@ static int init_trampoline(void *arg) {
   /* 2. 阻塞等待父进程(Monitor)将我们安全迁入 Cgroup 树 */
   uint64_t wake_val = 0;
   if (read(args->efd, &wake_val, sizeof(wake_val)) != sizeof(wake_val)) {
-    log_error("Init 进程读取同步信号失败: %s", strerror(errno));
+    log_error("Init 进程读取同步信号失败: {}", strerror(errno));
     return -1;
   }
   close(args->efd); // 消费完毕，安全关闭
 
   /* 现在我们在正确的 Cgroup 中，执行 Cgroup 命名空间隔离锁定 */
   if (unshare(CLONE_NEWCGROUP) < 0) {
-    log_error("Init Cgroup 隔离失败: %s", strerror(errno));
+    log_error("Init Cgroup 隔离失败: {}", strerror(errno));
     return -1;
   }
 
@@ -56,7 +56,7 @@ static int init_trampoline(void *arg) {
 // 子模块 1: 环境与上下文初始化
 static void setup_monitor_environment(cfg_t &cfg) {
   if (setsid() < 0 && errno != EPERM) {
-    log_error("Monitor setsid 失败: %s", strerror(errno));
+    log_error("Monitor setsid 失败: {}", strerror(errno));
     _exit(EXIT_FAILURE);
   }
 
@@ -90,7 +90,7 @@ static pid_t launch_container_init(cfg_t &cfg, void *stack_top, int &sync_fd) {
   // 使用 eventfd 替代 pipe，创建一个纯内存的 64 位计数器对象
   int efd = eventfd(0, EFD_CLOEXEC);
   if (efd < 0) {
-    log_error("分配 eventfd 失败: %s", strerror(errno));
+    log_error("分配 eventfd 失败: {}", strerror(errno));
     return -1;
   }
 
@@ -101,7 +101,7 @@ static pid_t launch_container_init(cfg_t &cfg, void *stack_top, int &sync_fd) {
   pid_t init_pid = clone(init_trampoline, stack_top, clone_flags, &args);
 
   if (init_pid < 0) {
-    log_error("clone 容器进程失败: %s", strerror(errno));
+    log_error("clone 容器进程失败: {}", strerror(errno));
     close(efd); // 发生错误，清理 efd
     return -1;
   }
@@ -113,7 +113,7 @@ static pid_t launch_container_init(cfg_t &cfg, void *stack_top, int &sync_fd) {
   /* 释放 Init 进程，允许其推进引导 */
   uint64_t wake_val = 1; // 必须写入 8 字节 (uint64_t)
   if (write(efd, &wake_val, sizeof(wake_val)) < 0) {
-    log_warn("唤醒 Init 进程警告: %s", strerror(errno));
+    log_warn("唤醒 Init 进程警告: {}", strerror(errno));
   }
   close(efd); // 写入后父进程即关闭，不影响子进程持有
 
@@ -132,7 +132,7 @@ static pid_t launch_container_init(cfg_t &cfg, void *stack_top, int &sync_fd) {
 static int wait_for_container_exit(pid_t init_pid) {
   int pfd = syscall(SYS_pidfd_open, init_pid, 0);
   if (pfd < 0) {
-    log_error("pidfd_open失败：%s", strerror(errno));
+    log_error("pidfd_open失败：{}", strerror(errno));
     return -1;
   }
 
@@ -157,9 +157,9 @@ static bool evaluate_reboot_request(int status, cfg_t &cfg) {
     int code = WEXITSTATUS(status);
     if (code == REBOOT_EXIT) {
       is_reboot_request = true;
-      log_info("[MONITOR] 检测到容器内部发起了重启请求 (退出码: %d)", code);
+      log_info("[MONITOR] 检测到容器内部发起了重启请求 (退出码: {})", code);
     } else {
-      log_info("[MONITOR] 检测到容器正常关机 (退出码: %d)", code);
+      log_info("[MONITOR] 检测到容器正常关机 (退出码: {})", code);
     }
   } else if (WIFSIGNALED(status)) {
     int sig = WTERMSIG(status);
@@ -169,9 +169,9 @@ static bool evaluate_reboot_request(int status, cfg_t &cfg) {
     } else if (sig == SIGINT || sig == (SIGRTMIN + 3) ||
                sig == (SIGRTMIN + 4) || sig == (SIGRTMIN + 13) ||
                sig == (SIGRTMIN + 14)) {
-      log_info("[MONITOR] 检测到容器内部发起了关机请求 (Signal %d)", sig);
+      log_info("[MONITOR] 检测到容器内部发起了关机请求 (Signal {})", sig);
     } else {
-      log_warn("[MONITOR] Init 进程被信号异常终止: %d (%s)", sig, strsignal(sig));
+      log_warn("[MONITOR] Init 进程被信号异常终止: {} ({})", sig, strsignal(sig));
     }
   }
 
@@ -182,7 +182,7 @@ static bool evaluate_reboot_request(int status, cfg_t &cfg) {
     } 
     
     if (cfg.rt.foreground) {
-      log_info("容器 %s 正在重启", cfg.rt.container_name.c_str());
+      log_info("容器 {} 正在重启", cfg.rt.container_name);
       fflush(stdout);
     }
     cfg.rt.reboot_cycle = true;
@@ -227,10 +227,10 @@ void monitor_run(cfg_t &cfg, int sync_pipe_write) {
 
     cfg.rt.container_pid = init_pid;
     cfg.rt.ns_inode = get_pid_ns_inode(init_pid);
-    log_info("容器启动成功，主 PID 为 %d (Monitor PID: %d)", init_pid, getpid());
+    log_info("容器启动成功，主 PID 为 {} (Monitor PID: {})", init_pid, getpid());
 
     if (chdir("/") < 0) {
-      log_warn("无法 chdir 到 /: %s", strerror(errno));
+      log_warn("无法 chdir 到 /: {}", strerror(errno));
     }
 
     // 2. 挂起 Monitor 自身，阻塞监听容器退出

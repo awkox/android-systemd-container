@@ -41,7 +41,7 @@ static void handle_stdin_event(ConsoleContext &ctx, uint32_t /* events */) {
   if (n >= 2 && buf[0] == '\x1b' && buf[1] == '\x11') {
     static bool exit_detected = false;
     if (!exit_detected) {
-      log_info("正在停止容器 '%s'...", ctx.cfg.rt.container_name.c_str());
+      log_info("正在停止容器 '{}'...", ctx.cfg.rt.container_name);
       pid_t bg_pid = fork();
       if (bg_pid == 0) {
         setsid();

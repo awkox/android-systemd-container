@@ -23,7 +23,7 @@ static int open_loop_dev(const long devnr, std::filesystem::path &path_out) {
   // 1. 同步读取内核分配的确切设备号
   std::ifstream f(sysfs_path);
   if (!f) {
-    log_error("无法读取 loop%ld 的 sysfs 状态", devnr);
+    log_error("无法读取 loop{} 的 sysfs 状态", devnr);
     return -1;
   }
 
@@ -36,39 +36,39 @@ static int open_loop_dev(const long devnr, std::filesystem::path &path_out) {
 
     // 3. 使用内核告诉我们的确切设备号创建节点
     if (mknod(path_out.c_str(), S_IFBLK | 0600, makedev(major, minor)) < 0) {
-      log_error("无法创建设备节点 %s (major=%d, minor=%d)", path_out.c_str(), major, minor);
+      log_error("无法创建设备节点 {} (major={}, minor={})", path_out.c_str(), major, minor);
       return -1;
     }
     return open(path_out.c_str(), O_RDWR | O_CLOEXEC);
   }
 
-  log_error("无法解析 loop%ld 的设备号", devnr);
+  log_error("无法解析 loop{} 的设备号", devnr);
   return -1;
 }
 
 int loop_attach(const std::filesystem::path &img_path, std::filesystem::path &loop_path_out) {
   const int ctl_fd = open("/dev/loop-control", O_RDWR | O_CLOEXEC);
   if (ctl_fd < 0) {
-    log_error("打开 /dev/loop-control 失败: %s", strerror(errno));
+    log_error("打开 /dev/loop-control 失败: {}", strerror(errno));
     return -1;
   }
 
   const long devnr = ioctl(ctl_fd, LOOP_CTL_GET_FREE);
   close(ctl_fd);
   if (devnr < 0) {
-    log_error("请求空闲的 loop 设备失败: %s", strerror(errno));
+    log_error("请求空闲的 loop 设备失败: {}", strerror(errno));
     return -1;
   }
 
   const int loop_fd = open_loop_dev(devnr, loop_path_out);
   if (loop_fd < 0) {
-    log_error("创建/打开 loop 设备节点失败: %s", strerror(errno));
+    log_error("创建/打开 loop 设备节点失败: {}", strerror(errno));
     return -1;
   }
 
   const int img_fd = open(img_path.c_str(), O_RDWR | O_CLOEXEC);
   if (img_fd < 0) {
-    log_error("打开镜像文件 %s 失败: %s", img_path.c_str(), strerror(errno));
+    log_error("打开镜像文件 {} 失败: {}", img_path.c_str(), strerror(errno));
     close(loop_fd);
     return -1;
   }
@@ -81,7 +81,7 @@ int loop_attach(const std::filesystem::path &img_path, std::filesystem::path &lo
 
   if (ioctl(loop_fd, LOOP_CONFIGURE, &config) < 0) {
     close(img_fd);
-    log_error("LOOP_CONFIGURE 绑定失败: %s", strerror(errno));
+    log_error("LOOP_CONFIGURE 绑定失败: {}", strerror(errno));
     close(loop_fd);
     return -1;
   }

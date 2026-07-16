@@ -35,7 +35,7 @@ int setup_dev() {
     std::filesystem::remove(device_path, ec); 
 
     if (mknod(device_path.c_str(), mode, dev) < 0) {
-      log_error("创建设备节点 %s 失败: %s", device_path.c_str(), strerror(errno));
+      log_error("创建设备节点 {} 失败: {}", device_path.c_str(), strerror(errno));
       return -1;
     } 
     
