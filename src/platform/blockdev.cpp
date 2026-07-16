@@ -18,7 +18,7 @@ static int open_loop_dev(const long devnr, fs::path &path_out) {
   char colon;
   if (f >> major >> colon >> minor && colon == ':') {
     // 2. 在 /dev 创建私有的临时节点，绝对避免与宿主机 udev 发生权限和竞态冲突
-    path_out = std::format("/dev/asc_loop_{}", devnr);
+    path_out.assign(std::format("/dev/asc_loop_{}", devnr));
     unlink(path_out.c_str()); // 清理可能的残留
 
     // 3. 使用内核告诉我们的确切设备号创建节点

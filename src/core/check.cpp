@@ -61,7 +61,7 @@ int check_requirements_hw() {
 
   for (const auto &[flag, name, label] : ns_checks) {
     if (!check_ns(flag, name)) {
-      log_error("当前内核不支持 %s", std::string(label).c_str());
+      log_error("当前内核不支持 %.*s", static_cast<int>(label.size()), label.data());
       missing++;
     }
   }

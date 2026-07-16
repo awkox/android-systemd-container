@@ -19,7 +19,7 @@ bool is_container_init(const pid_t pid) {
       std::istringstream iss(line.substr(6));
       std::string current, last_val;
       while (iss >> current) {
-        last_val = current;
+        last_val = std::move(current);
       }
       
       if (last_val == "1") {

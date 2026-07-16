@@ -3,7 +3,7 @@
 fs::path resolve_path_arg(const fs::path &path) {
     if (path.empty()) return "";
 
-    std::string expanded_path = path;
+    fs::path expanded_path = path;
     wordexp_t we;
     if (wordexp(path.c_str(), &we, WRDE_NOCMD) == 0) {
         if (we.we_wordc > 0 && we.we_wordv[0]) {
@@ -28,9 +28,9 @@ static bool validate_container_name(std::string_view name, size_t max_len = 256)
   });
 }
 
-int reject_container_name(const std::string &name) {
+int reject_container_name(std::string_view name) {
   if (!validate_container_name(name)) {
-    log_error("非法的容器名称 '%s'。", name.c_str());
+    log_error("非法的容器名称 '%.*s'。", static_cast<int>(name.size()), name.data());
     return -1;
   }
   return 0;
