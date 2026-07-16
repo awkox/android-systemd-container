@@ -60,7 +60,7 @@ static void handle_stdin_event(ConsoleContext &ctx, uint32_t /* events */) {
           close(devnull);
         }
 
-        stop_rootfs(ctx.rt.container_name);
+        asc::core::stop_rootfs(ctx.rt.container_name);
         _exit(0);
       }
       if (bg_pid > 0) {

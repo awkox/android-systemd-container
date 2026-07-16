@@ -3,6 +3,10 @@
 
 #include "common.h"
 
+namespace asc::core {
+
 void internal_boot(asc::rt &rt);
+
+}
 
 #endif

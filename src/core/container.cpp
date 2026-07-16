@@ -24,7 +24,13 @@
 #include "platform/console.h"
 #include "common.h"
 
+namespace asc::core {
+
+namespace {
+
 constexpr int STOP_TIMEOUT = 15;
+
+}
 
 int stop_rootfs(std::string_view container_name) {
   if (acquire_external_lock(container_name) != 0) {
@@ -188,4 +194,6 @@ cleanup:
   if (sync_pipe[1] >= 0) close(sync_pipe[1]);
 
   return -1;
+}
+
 }

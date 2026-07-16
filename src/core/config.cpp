@@ -6,10 +6,12 @@
 #include "core/config.h"
 #include "utils/log.h"
 
-using namespace asc;
+namespace asc::core {
+
+namespace {
 
 // 使用 std::string_view 实现零拷贝的 trim，安全且高效
-static std::string_view trim_whitespace(std::string_view sv) {
+std::string_view trim_whitespace(std::string_view sv) {
   sv.remove_prefix(std::min(sv.find_first_not_of(" \t\r\n"), sv.size()));
   if (!sv.empty()) {
     sv.remove_suffix(sv.size() - sv.find_last_not_of(" \t\r\n") - 1);
@@ -17,11 +19,11 @@ static std::string_view trim_whitespace(std::string_view sv) {
   return sv;
 }
 
-static constexpr bool parse_bool(std::string_view val) {
+constexpr bool parse_bool(std::string_view val) {
   return val == "1";
 }
 
-static int parse_privileged(std::string_view value) {
+int parse_privileged(std::string_view value) {
   int mask = 0;
   for (const auto word_range : value | std::views::split(',')) {
     std::string_view token = trim_whitespace(std::string_view(word_range));
@@ -33,7 +35,9 @@ static int parse_privileged(std::string_view value) {
   return mask;
 }
 
-int config_load(const char *config_path, conf &conf) {
+}
+
+int config_load(const char *config_path, asc::conf &conf) {
   std::ifstream file(config_path);
   if (!file) return -1;
 
@@ -72,4 +76,6 @@ int config_load(const char *config_path, conf &conf) {
   }
 
   return 0;
+}
+
 }

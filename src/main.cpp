@@ -66,7 +66,7 @@ int asc_main(int argc, char **argv) {
 
   switch (cmd) {
     case Command::START: {
-      if (check_requirements_hw() < 0) return 1;
+      if (asc::core::check_requirements_hw() < 0) return 1;
       ensure_runtime();
 
       asc::rt rt = {};
@@ -74,7 +74,7 @@ int asc_main(int argc, char **argv) {
       rt.container_name = name;
 
       if (config_path[0]) {
-        if (config_load(config_path, rt.conf) < 0) {
+        if (asc::core::config_load(config_path, rt.conf) < 0) {
           log_error("无法从 '{}' 加载配置: {}", config_path, strerror(errno));
           return 1;
         }
@@ -84,10 +84,10 @@ int asc_main(int argc, char **argv) {
       if ((rt.conf.privileged_mask & PRIV_NOSEC) && rt.conf.block_nested_ns) {
         log_warn("警告：由于启用了 privileged=noseccomp，block-nested-namespaces 已失效。");
       }
-      return start_rootfs(rt);
+      return asc::core::start_rootfs(rt);
     }
     case Command::STOP: {
-      return stop_rootfs(name);
+      return asc::core::stop_rootfs(name);
     }
     default:
       return 1;

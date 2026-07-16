@@ -51,7 +51,7 @@ static int init_trampoline(void *arg) {
     return -1;
   }
 
-  internal_boot(args->rt);
+  asc::core::internal_boot(args->rt);
   return -1; 
 }
 

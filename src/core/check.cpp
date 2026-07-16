@@ -9,7 +9,11 @@
 #include "core/check.h"
 #include "utils/log.h"
 
-static bool check_ns(const int flag, std::string_view name) {
+namespace asc::core {
+
+namespace {
+
+bool check_ns(const int flag, std::string_view name) {
   /* 1. 通过 /proc 快速检查内核支持 */
   if (!std::filesystem::exists(std::filesystem::path("/proc/self/ns") / name))
     return false;
@@ -32,7 +36,7 @@ static bool check_ns(const int flag, std::string_view name) {
   return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
-static bool check_pivot_root(void) {
+bool check_pivot_root(void) {
   /* 
    * 探测 pivot_root 系统调用是否存在，而不实际执行携带危险参数的调用。
    * 我们通过传递无效指针 (nullptr) 检查该系统调用是否已实现；
@@ -43,7 +47,7 @@ static bool check_pivot_root(void) {
   return true;
 }
 
-static bool check_pidfd_supported(void) {
+bool check_pidfd_supported(void) {
   // 传一个不存在的负数 PID 给 pidfd_open，如果是 ENOSYS 说明内核不支持
   // 如果是 EINVAL 或 ESRCH，说明系统调用存在（支持）。
   if (syscall(SYS_pidfd_open, -1, 0) < 0 && errno == ENOSYS)
@@ -57,13 +61,15 @@ struct NsCheck {
     std::string_view label;
 };
 
-static constexpr auto ns_checks = std::to_array<NsCheck>({
+constexpr auto ns_checks = std::to_array<NsCheck>({
     {CLONE_NEWNS,     "mnt",    "MNT 命名空间"},
     {CLONE_NEWPID,    "pid",    "PID 命名空间"},
     {CLONE_NEWUTS,    "uts",    "UTS 命名空间"},
     {CLONE_NEWIPC,    "ipc",    "IPC 命名空间"},
     {CLONE_NEWCGROUP, "cgroup", "CGROUP 命名空间"},
 });
+
+}
 
 int check_requirements_hw() {
   int missing = 0;
@@ -90,4 +96,6 @@ int check_requirements_hw() {
     return -1;
   }
   return 0;
+}
+
 }
