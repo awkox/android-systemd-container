@@ -81,7 +81,6 @@ constexpr int REBOOT_EXIT = 249;
 
 // 运行时路径
 constexpr const char* DEFAULT_INIT = "/sbin/init";
-#define ANDROID_TMPFS_CONTEXT "u:object_r:tmpfs:s0"
 
 // 特权掩码定义
 constexpr int PRIV_NOMASK = 1 << 0;
