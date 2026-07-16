@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <ranges>
 #include "common.h"
-#include "core/config.h"
+#include "core.h"
 #include "utils/log.h"
 
 namespace asc::core {

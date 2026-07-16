@@ -2,7 +2,7 @@
 #include <format>
 #include <unistd.h>
 #include <fcntl.h>
-#include "core/lock.h"
+#include "core.h"
 #include "utils/log.h"
 #include "utils/path.h"
 #include "utils/fileio.h"

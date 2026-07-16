@@ -11,10 +11,7 @@
 #include <sys/wait.h>
 #include <poll.h>
 #include <csignal>
-#include "core/container.h"
-#include "core/monitor.h"
-#include "core/state.h"
-#include "core/lock.h"
+#include "core.h"
 #include "utils/log.h"
 #include "utils/path.h"
 #include "utils/process.h"

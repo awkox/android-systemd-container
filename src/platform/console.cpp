@@ -10,7 +10,7 @@
 #include <sys/syscall.h>
 #include "platform/console.h"
 #include "platform/pty.h"
-#include "core/container.h"
+#include "core.h"
 #include "utils/process.h"
 #include "utils/log.h"
 

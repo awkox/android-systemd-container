@@ -8,7 +8,7 @@
 #include <sys/syscall.h>
 #include <sys/ioctl.h>
 #include <utmp.h>
-#include "core/init.h"
+#include "core.h"
 #include "utils/log.h"
 #include "utils/path.h"
 #include "platform/mount.h"

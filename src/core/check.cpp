@@ -6,7 +6,7 @@
 #include <sched.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
-#include "core/check.h"
+#include "core.h"
 #include "utils/log.h"
 
 namespace asc::core {

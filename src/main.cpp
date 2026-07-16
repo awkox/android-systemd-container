@@ -2,9 +2,7 @@
 #include <cstring>
 #include <unistd.h>
 #include "common.h"
-#include "core/check.h"
-#include "core/config.h"
-#include "core/container.h"
+#include "core.h"
 #include "utils/log.h"
 #include "utils/string.h"
 #include "utils/workspace.h"

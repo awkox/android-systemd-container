@@ -11,11 +11,7 @@
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
-#include "core/lock.h"
-#include "core/state.h"
-#include "core/monitor.h"
-#include "core/container.h"
-#include "core/init.h"
+#include "core.h"
 #include "utils/log.h"
 #include "utils/fileio.h"
 #include "utils/path.h"
