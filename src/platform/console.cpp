@@ -1,6 +1,3 @@
-#include <csignal>
-#include <cerrno>
-#include <cstring>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/epoll.h>
@@ -8,6 +5,14 @@
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <sys/syscall.h>
+#include <stdint.h>
+#include <sys/types.h>
+#include <termios.h>
+#include <csignal>
+#include <cerrno>
+#include <cstring>
+#include <string_view>
+
 #include "platform/console.h"
 #include "platform/pty.h"
 #include "utils/process.h"

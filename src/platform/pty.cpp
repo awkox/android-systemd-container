@@ -1,14 +1,20 @@
-#include <csignal>
-#include <cerrno>
-#include <cstring>
-#include <format>
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <termios.h>
+#include <bits/termios-c_cc.h>
+#include <bits/termios-c_oflag.h>
+#include <csignal>
+#include <cerrno>
+#include <cstring>
+#include <format>
+#include <filesystem>
+#include <string>
+
 #include "platform/pty.h"
 #include "utils/log.h"
+#include "common.h"
 
 /* 不依赖 /dev/ptmx 符号链接直接打开 master 与 slave。
  * 对于 4.13+ 内核，使用 TIOCGPTPEER 直接从 master 文件描述符派生打开 slave。

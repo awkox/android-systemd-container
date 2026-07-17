@@ -1,4 +1,7 @@
 #include <unistd.h>
+#include <sys/types.h>
+#include <string_view>
+
 #include "core.h"
 #include "utils/process.h"
 #include "oci.h"

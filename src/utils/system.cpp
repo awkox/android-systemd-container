@@ -1,7 +1,7 @@
+#include <sys/utsname.h>
 #include <cstdio>
 #include <fstream>
-#include <unistd.h>
-#include <sys/utsname.h>
+
 #include "utils/system.h"
 
 int get_kernel_version(int &major, int &minor) {

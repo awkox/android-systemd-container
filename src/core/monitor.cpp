@@ -1,8 +1,3 @@
-#include <csignal>
-#include <cerrno>
-#include <cstring>
-#include <cstdlib>
-#include <format>
 #include <unistd.h>
 #include <poll.h>
 #include <sched.h>
@@ -12,6 +7,17 @@
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <csignal>
+#include <cerrno>
+#include <cstring>
+#include <cstdlib>
+#include <format>
+#include <filesystem>
+#include <string>
+
 #include "core.h"
 #include "utils/log.h"
 #include "utils/fileio.h"
@@ -19,6 +25,7 @@
 #include "utils/system.h"
 #include "utils/process.h"
 #include "platform/pty.h"
+#include "common.h"
 
 namespace asc::core {
 

@@ -2,6 +2,9 @@
 #include <string>
 #include <algorithm>
 #include <ranges>
+#include <filesystem>
+#include <string_view>
+
 #include "common.h"
 #include "core.h"
 #include "utils/log.h"

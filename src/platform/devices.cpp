@@ -1,14 +1,21 @@
 #include "platform/devices.h"
-#include "utils/log.h"
-#include "utils/fileio.h"
+
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/mount.h>
+#include <fcntl.h>
+#include <sys/types.h>
 #include <cerrno>
 #include <cstring>
 #include <array>
 #include <system_error>
+#include <filesystem>
+#include <string>
+#include <string_view>
+
+#include "utils/log.h"
+#include "utils/fileio.h"
 
 struct DeviceConfig {
     std::string_view name;
