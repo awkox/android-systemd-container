@@ -107,7 +107,7 @@ int start_rootfs(const char *container_name, const char *config_path) {
   if (config_path[0]) {
     if (config_load(config_path, rt.conf) < 0) {
       log_error("无法从 '{}' 加载配置: {}", config_path, strerror(errno));
-      return 1;
+      goto cleanup;
     }
   }
 
