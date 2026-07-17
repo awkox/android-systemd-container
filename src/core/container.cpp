@@ -64,7 +64,6 @@ int stop_rootfs(std::string_view container_name) {
     if (!(r > 0 && (pfd_poll.revents & POLLIN))) {
       unkillable = true;
       log_error("容器进程 (PID {}) 进入了不可杀死的僵尸状态！", pid);
-      log_warn("这通常是因为内核僵尸进程导致。\n将尽最大努力清理宿主机资源 (无数据同步)...");
     }
   }
   close(pfd);
