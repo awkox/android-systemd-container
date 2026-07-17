@@ -100,7 +100,7 @@ void rmdir_cgroup_tree(const std::filesystem::path &path) {
   }
 
   // 原有的不断重试 rmdir 逻辑
-  for (auto _ : std::views::iota(0, 10)) {
+  for ([[maybe_unused]] auto _ : std::views::iota(0, 10)) {
     if (rmdir(path.string().c_str()) == 0 || errno == ENOENT) return;
     if (errno != EBUSY) return;
     usleep(20000);
