@@ -180,9 +180,6 @@ void execute_init_process(asc::rt &rt) {
 
   log_info("[BOOT] 容器引导环境搭建完毕，移交控制权至 PID 1 ({})...", init_bin);
 
-  if (rt.foreground) {
-    printf("\r\n(按下 CTRL+ALT+Q 以脱离前台并退出)\r\n");
-  }
   printf("\r\n");
   fflush(stdout);
 

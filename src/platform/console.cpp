@@ -10,7 +10,6 @@
 #include <sys/syscall.h>
 #include "platform/console.h"
 #include "platform/pty.h"
-#include "core.h"
 #include "utils/process.h"
 #include "utils/log.h"
 
@@ -39,38 +38,7 @@ static void handle_stdin_event(ConsoleContext &ctx, uint32_t /* events */) {
   ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
   if (n <= 0) return;
 
-  /* 拦截检查 CTRL+ALT+Q (\x1b\x11) 逃逸序列 */
-  if (n >= 2 && buf[0] == '\x1b' && buf[1] == '\x11') {
-    static bool exit_detected = false;
-    if (!exit_detected) {
-      log_info("正在停止容器 '{}'...", ctx.rt.container_name);
-      pid_t bg_pid = fork();
-      if (bg_pid == 0) {
-        setsid();
-        
-        // 子进程安全关闭所有继承的文件描述符
-        close(ctx.epfd);
-        close(ctx.sfd);
-        if (ctx.console_master_fd >= 0) close(ctx.console_master_fd);
-
-        // 断开宿主机终端 IO
-        int devnull = open("/dev/null", O_RDWR);
-        if (devnull >= 0) {
-          terminal_set_stdfds(devnull);
-          close(devnull);
-        }
-
-        asc::core::stop_rootfs(ctx.rt.container_name);
-        _exit(0);
-      }
-      if (bg_pid > 0) {
-        exit_detected = true;
-      }
-    }
-    return;
-  }
-
-  /* 正常输入透传至 PTY Master (带有背压处理) */
+  /* 透传至 PTY Master (带有背压处理) */
   if (ctx.console_master_fd >= 0 && ctx.pending.fd < 0) {
     ssize_t w = write(ctx.console_master_fd, buf, static_cast<size_t>(n));
     epoll_event ev = {};
