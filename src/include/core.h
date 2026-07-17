@@ -11,7 +11,7 @@ int check_requirements_hw();
 
 int config_load(const char *config_path, asc::conf &conf);
 
-int start_rootfs(asc::rt &rt);
+int start_rootfs(const char *container_name, const char *config_path);
 int stop_rootfs(std::string_view container_name);
 
 void internal_boot(asc::rt &rt);

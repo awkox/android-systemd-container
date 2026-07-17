@@ -17,6 +17,7 @@
 #include "utils/process.h"
 #include "utils/fileio.h"
 #include "utils/string.h"
+#include "utils/workspace.h"
 #include "platform/pty.h"
 #include "platform/console.h"
 #include "common.h"
@@ -76,26 +77,45 @@ int stop_rootfs(std::string_view container_name) {
   return unkillable ? -1 : 0;
 }
 
-int start_rootfs(asc::rt &rt) {
+int start_rootfs(const char *container_name, const char *config_path) {
   bool lock_acquired = false;
   int sync_pipe[2] = {-1, -1};
   pid_t monitor_pid = -1;
   pid_t existing_pid = -1;
+  asc::rt rt = {};
 
   log_info("正在获取容器独占锁与资源...");
-  if (acquire_external_lock(rt.container_name) != 0) {
-    if (is_container_running(rt.container_name, existing_pid)) {
-      log_error("容器名称 '{}' 已被 PID {} 占用。", rt.container_name, existing_pid);
+  if (acquire_external_lock(container_name) != 0) {
+    if (is_container_running(container_name, existing_pid)) {
+      log_error("容器名称 '{}' 已被 PID {} 占用。", container_name, existing_pid);
     } else {
-      log_error("无法操作容器 '{}': 另一个管理命令正在执行。", rt.container_name);
+      log_error("无法操作容器 '{}': 另一个管理命令正在执行。", container_name);
     }
     goto cleanup;
   }
   lock_acquired = true;
 
-  if (is_container_running(rt.container_name, existing_pid)) {
-    log_error("容器名称 '{}' 已被 PID {} 占用。", rt.container_name, existing_pid);
+  if (is_container_running(container_name, existing_pid)) {
+    log_error("容器名称 '{}' 已被 PID {} 占用。", container_name, existing_pid);
     goto cleanup;
+  }
+
+  if (check_requirements_hw() < 0) return 1;
+  ensure_runtime();
+
+  rt.foreground = true;
+  rt.container_name = container_name;
+
+  if (config_path[0]) {
+    if (config_load(config_path, rt.conf) < 0) {
+      log_error("无法从 '{}' 加载配置: {}", config_path, strerror(errno));
+      return 1;
+    }
+  }
+
+  print_privileged_warning(rt.conf.privileged_mask);
+  if ((rt.conf.privileged_mask & PRIV_NOSEC) && rt.conf.block_nested_ns) {
+    log_warn("警告：由于启用了 privileged=noseccomp，block-nested-namespaces 已失效。");
   }
 
   if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) {
