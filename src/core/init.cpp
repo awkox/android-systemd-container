@@ -141,7 +141,7 @@ bool execute_pivot_root() {
 /* 5. Systemd 依赖与网络环境调整 */
 bool setup_system_environment() {
   if (mount(nullptr, "/", nullptr, MS_REC | MS_SHARED, nullptr) < 0) {
-    log_error("无法将根目录重新挂载为 MS_SHARED (systemd 依赖): {}", strerror(errno));
+    log_error("无法将根目录重新挂载为 MS_SHARED: {}", strerror(errno));
     return false;
   }
   if (sethostname("(none)", 6) < 0) {
@@ -210,12 +210,12 @@ void internal_boot(asc::rt &rt) {
 
   // 5. 应用安全性防护
   log_info("[BOOT] 正在应用系统安全加固与沙箱隔离策略...");
+  print_privileged_warning(rt.conf.privileged_mask);
   if (asc::oci::seccomp_apply_minimal(rt.conf.privileged_mask) < 0) {
     log_error("Seccomp 应用失败，拒绝启动不安全的容器");
     return;
   }
-  asc::oci::android_seccomp_setup(rt.conf.block_nested_ns && !(rt.conf.privileged_mask & PRIV_NOSEC), 
-                        rt.conf.privileged_mask);
+  asc::oci::android_seccomp_setup(rt.conf.block_nested_ns, rt.conf.privileged_mask);
   asc::oci::apply_capability_hardening(rt.conf.privileged_mask);
 
   // 6. 绑定控制台输入输出

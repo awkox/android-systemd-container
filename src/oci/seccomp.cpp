@@ -121,12 +121,15 @@ int seccomp_apply_minimal(const int privileged_mask) {
  * 为 Android 兼容性应用的一层附加隔离。
  */
 int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask) {
-  if (privileged_mask & PRIV_NOSEC)
+  if (privileged_mask & PRIV_NOSEC) {
+    if (block_nested_ns) {
+      log_warn("由于启用了 privileged=noseccomp，block-nested-namespaces 已失效。");
+    }
     return 0;
+  }
+
   int major = 0, minor = 0;
   get_kernel_version(major, minor);
-
-  constexpr uint32_t ns_mask = 0x7E020000;
 
   if (!block_nested_ns && major >= 5)
     return 0;
@@ -145,7 +148,7 @@ int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask)
     bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_unshare, 1, 0);
     bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_clone, 0, 3);
     bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0]));
-    bpf.jump(BPF_JMP | BPF_JSET | BPF_K, ns_mask, 0, 1);
+    bpf.jump(BPF_JMP | BPF_JSET | BPF_K, 0x7E020000, 0, 1);
     bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
   }
 

@@ -84,6 +84,8 @@ int start_rootfs(const char *container_name, const char *config_path) {
   pid_t existing_pid = -1;
   asc::rt rt = {};
 
+  ensure_runtime();
+
   log_info("正在获取容器独占锁与资源...");
   if (acquire_external_lock(container_name) != 0) {
     if (is_container_running(container_name, existing_pid)) {
@@ -101,18 +103,12 @@ int start_rootfs(const char *container_name, const char *config_path) {
   }
 
   if (check_requirements_hw() < 0) return 1;
-  ensure_runtime();
 
   if (config_path[0]) {
     if (config_load(config_path, rt.conf) < 0) {
       log_error("无法从 '{}' 加载配置: {}", config_path, strerror(errno));
       return 1;
     }
-  }
-
-  print_privileged_warning(rt.conf.privileged_mask);
-  if ((rt.conf.privileged_mask & PRIV_NOSEC) && rt.conf.block_nested_ns) {
-    log_warn("警告：由于启用了 privileged=noseccomp，block-nested-namespaces 已失效。");
   }
 
   rt.foreground = true;
@@ -160,7 +156,7 @@ int start_rootfs(const char *container_name, const char *config_path) {
       close(rt.console.master);
       rt.console.master = -1;
     }
-    
+
     // 子进程仅需关闭锁文件的 fd 而不应释放锁文件本身
     close_external_lock_fd();
 
