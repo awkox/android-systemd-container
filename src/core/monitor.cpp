@@ -51,7 +51,7 @@ int init_trampoline(void *arg) {
     return -1;
   }
 
-  asc::core::internal_boot(args->rt);
+  internal_boot(args->rt);
   return -1; 
 }
 
@@ -178,7 +178,7 @@ bool evaluate_reboot_request(int status, asc::rt &rt) {
   }
 
   if (is_reboot_request) {
-    if (asc::core::is_external_lock_active(rt.container_name)) {
+    if (is_external_lock_active(rt.container_name)) {
       log_warn("[MONITOR] 检测到外部命令锁 - 中止内部重启，移交控制权给 CLI");
       return false;
     } 
