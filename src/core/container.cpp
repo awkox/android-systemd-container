@@ -103,9 +103,6 @@ int start_rootfs(const char *container_name, const char *config_path) {
   if (check_requirements_hw() < 0) return 1;
   ensure_runtime();
 
-  rt.foreground = true;
-  rt.container_name = container_name;
-
   if (config_path[0]) {
     if (config_load(config_path, rt.conf) < 0) {
       log_error("无法从 '{}' 加载配置: {}", config_path, strerror(errno));
@@ -118,6 +115,7 @@ int start_rootfs(const char *container_name, const char *config_path) {
     log_warn("警告：由于启用了 privileged=noseccomp，block-nested-namespaces 已失效。");
   }
 
+  rt.foreground = true;
   if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) {
     rt.foreground = false;
     log_warn("无交互式终端 - 自动转入后台运行。");
@@ -141,6 +139,8 @@ int start_rootfs(const char *container_name, const char *config_path) {
   }
   fcntl(sync_pipe[0], F_SETFD, FD_CLOEXEC);
   fcntl(sync_pipe[1], F_SETFD, FD_CLOEXEC);
+
+  rt.container_name = container_name;
 
   log_info("正在孵化 Monitor 监控守护进程...");
   monitor_pid = fork();
