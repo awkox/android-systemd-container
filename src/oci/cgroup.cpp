@@ -1,6 +1,7 @@
 #include <cerrno>
 #include <cstring>
 #include <vector>
+#include <thread>
 #include <ranges>
 #include <unistd.h>
 #include <fcntl.h>
@@ -67,6 +68,8 @@ int cgroup_host_bootstrap() {
 namespace {
 
 void rmdir_cgroup_tree(const std::filesystem::path &path) {
+  using namespace std::chrono_literals;
+
   std::error_code ec;
   if (!std::filesystem::exists(path, ec)) return;
 
@@ -96,14 +99,14 @@ void rmdir_cgroup_tree(const std::filesystem::path &path) {
   for ([[maybe_unused]] auto _ : std::views::iota(0, 50)) {
     if (grep_file(events_path, "populated 0"))
       break;
-    usleep(10000); 
+    std::this_thread::sleep_for(10ms);
   }
 
   // 原有的不断重试 rmdir 逻辑
   for ([[maybe_unused]] auto _ : std::views::iota(0, 10)) {
     if (rmdir(path.string().c_str()) == 0 || errno == ENOENT) return;
     if (errno != EBUSY) return;
-    usleep(20000);
+    std::this_thread::sleep_for(20ms);
   }
 }
 
