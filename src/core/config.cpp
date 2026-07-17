@@ -40,7 +40,7 @@ int parse_privileged(std::string_view value) {
 
 }
 
-int config_load(const char *config_path, asc::conf &conf) {
+int config_load(const char *config_path, conf &conf) {
   std::ifstream file(config_path);
   if (!file) return -1;
 

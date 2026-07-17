@@ -39,7 +39,7 @@ bool check_ns(const int flag, std::string_view name) {
   return WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
-bool check_pivot_root(void) {
+bool check_pivot_root() {
   /* 
    * 探测 pivot_root 系统调用是否存在，而不实际执行携带危险参数的调用。
    * 我们通过传递无效指针 (nullptr) 检查该系统调用是否已实现；
@@ -50,7 +50,7 @@ bool check_pivot_root(void) {
   return true;
 }
 
-bool check_pidfd_supported(void) {
+bool check_pidfd_supported() {
   // 传一个不存在的负数 PID 给 pidfd_open，如果是 ENOSYS 说明内核不支持
   // 如果是 EINVAL 或 ESRCH，说明系统调用存在（支持）。
   if (syscall(SYS_pidfd_open, -1, 0) < 0 && errno == ENOSYS)

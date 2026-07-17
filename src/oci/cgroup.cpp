@@ -22,7 +22,7 @@ namespace asc::oci {
 
 namespace {
 
-bool cgroup_kernel_supports_v2(void) {
+bool cgroup_kernel_supports_v2() {
   return grep_file("/proc/filesystems", "cgroup2");
 }
 
@@ -93,8 +93,7 @@ void rmdir_cgroup_tree(const std::filesystem::path &path) {
 
   const std::filesystem::path kill_path = path / "cgroup.kill";
   if (access(kill_path.c_str(), W_OK) == 0) {
-    const int kfd = open(kill_path.c_str(), O_WRONLY | O_CLOEXEC);
-    if (kfd >= 0) {
+    if (const int kfd = open(kill_path.c_str(), O_WRONLY | O_CLOEXEC); kfd >= 0) {
       if (write(kfd, "1", 1) < 0) {}
       close(kfd);
     }

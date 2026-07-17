@@ -36,7 +36,7 @@ public:
     }
 
     void validate_arch() {
-        stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, arch));
+        stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(seccomp_data, arch));
 #ifdef __aarch64__
         jump(BPF_JMP | BPF_JEQ | BPF_K, AUDIT_ARCH_AARCH64, 1, 0);
 #elifdef __x86_64__
@@ -48,7 +48,7 @@ public:
     }
 
     void load_syscall_nr() {
-        stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, nr));
+        stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(seccomp_data, nr));
     }
 
     int apply() {
@@ -147,7 +147,7 @@ int android_seccomp_setup(const bool block_nested_ns, const int privileged_mask)
     log_info("[SEC] 激活 block-nested-namespaces: 已强制拦截后续的命名空间系统调用。");
     bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_unshare, 1, 0);
     bpf.jump(BPF_JMP | BPF_JEQ | BPF_K, SYS_clone, 0, 3);
-    bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(struct seccomp_data, args[0]));
+    bpf.stmt(BPF_LD | BPF_W | BPF_ABS, offsetof(seccomp_data, args[0]));
     bpf.jump(BPF_JMP | BPF_JSET | BPF_K, 0x7E020000, 0, 1);
     bpf.stmt(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA));
   }

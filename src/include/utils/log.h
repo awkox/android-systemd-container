@@ -8,7 +8,7 @@
 #include <print>
 
 template <typename... Args>
-inline void log_internal(const char* prefix, bool is_err, 
+void log_internal(const char* prefix, bool is_err,
                          std::format_string<Args...> fmt, Args&&... args) {
     FILE* out = is_err ? stderr : stdout;
     std::print(out, "[{}] {}\r\n", prefix, std::format(fmt, std::forward<Args>(args)...));
@@ -16,17 +16,17 @@ inline void log_internal(const char* prefix, bool is_err,
 }
 
 template <typename... Args>
-inline void log_info(std::format_string<Args...> fmt, Args&&... args) {
+void log_info(std::format_string<Args...> fmt, Args&&... args) {
     log_internal("+", false, fmt, std::forward<Args>(args)...);
 }
 
 template <typename... Args>
-inline void log_warn(std::format_string<Args...> fmt, Args&&... args) {
+void log_warn(std::format_string<Args...> fmt, Args&&... args) {
     log_internal("!", true, fmt, std::forward<Args>(args)...);
 }
 
 template <typename... Args>
-inline void log_error(std::format_string<Args...> fmt, Args&&... args) {
+void log_error(std::format_string<Args...> fmt, Args&&... args) {
     log_internal("-", true, fmt, std::forward<Args>(args)...);
 }
 

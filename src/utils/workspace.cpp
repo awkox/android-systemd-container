@@ -3,7 +3,7 @@
 #include "utils/path.h"
 #include "oci.h"
 
-int ensure_runtime(void) {
+int ensure_runtime() {
   if (asc::oci::cgroup_host_bootstrap() < 0) {
     return -1;
   }

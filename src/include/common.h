@@ -30,7 +30,7 @@ struct conf {
 };
 
 struct rt {
-  asc::conf conf;
+  conf conf;
 
   std::string container_name;
   pid_t container_pid;
