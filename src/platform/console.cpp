@@ -72,6 +72,8 @@ static void handle_stdin_event(ConsoleContext &ctx, uint32_t /* events */) {
 
 /* 2. 处理容器 PTY Master 的事件 (读输出、写挂起数据、挂断) */
 static void handle_pty_event(ConsoleContext &ctx, uint32_t events) {
+  if (ctx.console_master_fd < 0) return;
+
   /* 容器断开控制台（如关机阶段），取消监听但不退出，等待 Monitor 信号 */
   if (events & (EPOLLHUP | EPOLLERR)) {
     epoll_ctl(ctx.epfd, EPOLL_CTL_DEL, ctx.console_master_fd, nullptr);
@@ -137,6 +139,8 @@ static void handle_pidfd_event(ConsoleContext &ctx, uint32_t /* events */) {
 }
 
 int console_monitor_loop(int console_master_fd, pid_t monitor_pid, std::string_view container_name) {
+  if (console_master_fd < 0) return -1;
+
   int ret = 0;
   int is_tty = -1;
   termios oldtios;
