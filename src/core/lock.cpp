@@ -54,11 +54,12 @@ int acquire_external_lock(std::string_view name) {
 void release_external_lock(void) {
   if (active_lock_fd >= 0) {
     close(active_lock_fd);
+    active_lock_fd = -1;
+
     if (!active_lock_path.empty()) {
       std::filesystem::remove(active_lock_path);
+      active_lock_path = "";
     }
-    active_lock_fd = -1;
-    active_lock_path = "";
   }
 }
 
