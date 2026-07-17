@@ -108,8 +108,7 @@ static void handle_pty_event(ConsoleContext &ctx, uint32_t events) {
 /* 3. 处理信号事件 (终端缩放、中断信号) */
 static void handle_signal_event(ConsoleContext &ctx, uint32_t /* events */) {
   signalfd_siginfo fdsi;
-  ssize_t n = read(ctx.sfd, &fdsi, sizeof(fdsi));
-  if (n != sizeof(fdsi)) return;
+  if (read(ctx.sfd, &fdsi, sizeof(fdsi)) != sizeof(fdsi)) return;
 
   if (fdsi.ssi_signo == SIGWINCH) {
     if (ctx.console_master_fd >= 0) {

@@ -67,7 +67,7 @@ static int asc_main(int argc, char **argv) {
       return asc::core::stop_rootfs(name);
     }
     default:
-      return 1;
+      return print_usage_error(argv[0]);
   }
 }
 
