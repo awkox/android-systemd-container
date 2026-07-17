@@ -7,6 +7,7 @@
 #include <poll.h>
 #include <sched.h>
 #include <fcntl.h>
+#include <sys/signalfd.h>
 #include <sys/eventfd.h>
 #include <sys/prctl.h>
 #include <sys/syscall.h>
@@ -62,9 +63,7 @@ void setup_monitor_environment(asc::rt &rt) {
     _exit(EXIT_FAILURE);
   }
 
-  /* 忽略终止信号，防止管理器意外终止，保护 OOM */
-  signal(SIGTERM, SIG_IGN);
-  signal(SIGINT, SIG_IGN);
+  /* 忽略挂断及其他中断，防止意外终止。(SIGTERM/SIGINT 交由 signalfd 处理) */
   signal(SIGQUIT, SIG_IGN);
   signal(SIGHUP, SIG_IGN);
   signal(SIGPIPE, SIG_IGN);
@@ -130,18 +129,40 @@ pid_t launch_container_init(asc::rt &rt, void *stack_top, int &sync_fd) {
 }
 
 // 子模块 4: 高效阻塞等待容器退出
-// 优化后的极简逻辑
-int wait_for_container_exit(pid_t init_pid) {
+int wait_for_container_exit(pid_t init_pid, int sfd) {
   int pfd = syscall(SYS_pidfd_open, init_pid, 0);
   if (pfd < 0) {
     log_error("pidfd_open失败：{}", strerror(errno));
     return -1;
   }
 
-  pollfd pfd_poll = {.fd = pfd, .events = POLLIN, .revents = 0};
+  pollfd pfds[2] = {
+      {.fd = pfd, .events = POLLIN, .revents = 0},
+      {.fd = sfd, .events = POLLIN, .revents = 0}
+  };
   
-  // 阻塞等待，直到目标进程退出
-  while (poll(&pfd_poll, 1, -1) < 0 && errno == EINTR) {}
+  // 阻塞等待：目标进程退出 OR 收到前台代理信号
+  while (true) {
+    if (poll(pfds, 2, -1) < 0) {
+      if (errno == EINTR) continue;
+      break;
+    }
+
+    // 1. 处理来自 CLI 前台透传过来的关机信号
+    if (pfds[1].revents & POLLIN) {
+      signalfd_siginfo fdsi;
+      while (read(sfd, &fdsi, sizeof(fdsi)) == sizeof(fdsi)) {
+        if (fdsi.ssi_signo == SIGINT || fdsi.ssi_signo == SIGTERM) {
+          kill(init_pid, fdsi.ssi_signo);
+        }
+      }
+    }
+
+    // 2. 优先判定容器是否退出 (即使上面刚发信号，这里也正常监测)
+    if (pfds[0].revents & POLLIN) {
+      break;
+    }
+  }
 
   int status = 0;
   // 直接回收退出状态
@@ -209,6 +230,19 @@ void monitor_run(asc::rt &rt, int sync_pipe_write) {
   int status = 0;
   bool should_reboot = false;
 
+   // 初始化 Monitor 专属的代理信号监听器
+  sigset_t mask;
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGINT);
+  sigaddset(&mask, SIGTERM);
+  sigprocmask(SIG_BLOCK, &mask, nullptr);
+  
+  int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
+  if (sfd < 0) {
+    log_error("Monitor 无法创建 signalfd: {}", strerror(errno));
+    _exit(EXIT_FAILURE);
+  }
+
   constexpr size_t stack_size = 2 * 1024 * 1024;
 
   do {
@@ -236,8 +270,8 @@ void monitor_run(asc::rt &rt, int sync_pipe_write) {
       log_warn("无法 chdir 到 /: {}", strerror(errno));
     }
 
-    // 2. 挂起 Monitor 自身，阻塞监听容器退出
-    status = wait_for_container_exit(init_pid);
+    // 2. 挂起 Monitor 自身，阻塞监听容器退出及信号
+    status = wait_for_container_exit(init_pid, sfd);
     
     // 3. 显式释放栈内存
     free(stack);
@@ -251,6 +285,7 @@ void monitor_run(asc::rt &rt, int sync_pipe_write) {
 
   } while (should_reboot);
 
+  if (sfd >= 0) close(sfd);
   log_info("[MONITOR] 容器主进程已退出，Monitor 正在执行退出清理工作...");
   cleanup_container_resources(rt.container_name, false);
 
