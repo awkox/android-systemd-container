@@ -182,7 +182,7 @@ int start_rootfs(const char *container_name, const char *config_path) {
   if (lock_acquired) release_external_lock();
 
   if (rt.foreground) {
-    return console_monitor_loop(rt.console.master, monitor_pid, rt);
+    return console_monitor_loop(rt.console.master, monitor_pid, rt.container_name);
   }
 
   if (rt.console.master >= 0) {

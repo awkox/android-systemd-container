@@ -4,6 +4,6 @@
 #include <sys/types.h>
 #include "common.h"
 
-int console_monitor_loop(int console_master_fd, pid_t monitor_pid, asc::rt &rt);
+int console_monitor_loop(int console_master_fd, pid_t monitor_pid, std::string_view container_name);
 
 #endif
