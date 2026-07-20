@@ -28,21 +28,11 @@ bool is_container_init(const pid_t pid) {
       while (iss >> current) {
         last_val = std::move(current);
       }
-      if (last_val == "1") {
-        is_init = true;
-      }
-      break;
+      return last_val == "1";
     }
   }
 
-  if (nspid_found) return is_init;
-
-  struct stat st_pid, st_host;
-  std::filesystem::path ns_path = proc_dir / std::to_string(pid) / "ns/pid";
-  if (stat(ns_path.c_str(), &st_pid) < 0) return false;
-  if (stat("/proc/1/ns/pid", &st_host) < 0) return false;
-
-  return st_pid.st_ino != st_host.st_ino;
+  return false;
 }
 
 bool is_valid_container_pid(const pid_t pid) {
