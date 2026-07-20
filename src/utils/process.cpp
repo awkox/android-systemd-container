@@ -17,9 +17,6 @@ bool is_container_init(const pid_t pid) {
   if (!file) return false;
 
   std::string line;
-  bool nspid_found = false;
-  bool is_init = false;
-
   while (std::getline(file, line)) {
     if (line.starts_with("NSpid:")) {
       nspid_found = true;
