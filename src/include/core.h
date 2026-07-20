@@ -9,7 +9,7 @@ namespace asc::core {
 
 int check_requirements_hw();
 
-int config_load(const char *config_path, asc::conf &conf);
+int config_load(const char *config_path, asc::conf &cfg);
 
 int start_rootfs(const char *container_name, const char *config_path);
 int stop_rootfs(std::string_view container_name);

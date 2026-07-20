@@ -49,10 +49,10 @@ bool setup_mount_isolation_and_rootfs(asc::rt &rt) {
     return false;
   }
 
-  if (!rt.conf.rootfs_img_path.empty()) {
+  if (!rt.cfg.rootfs_img_path.empty()) {
     log_info("[BOOT] 准备挂载 Rootfs 镜像...");
     std::filesystem::path mount_point = mount_dir / rt.container_name;
-    if (mount_rootfs_img(rt.conf.rootfs_img_path, mount_point) < 0) {
+    if (mount_rootfs_img(rt.cfg.rootfs_img_path, mount_point) < 0) {
       log_error("无法挂载镜像: {}", strerror(errno));
       return false;
     }
@@ -65,13 +65,13 @@ bool setup_mount_isolation_and_rootfs(asc::rt &rt) {
 }
 
 /* 2. Procfs 挂载及安全加固 */
-bool setup_procfs(const asc::conf &conf) {
+bool setup_procfs(const asc::conf &cfg) {
   if (mount("proc", "proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
     log_error("挂载 procfs 失败: {}", strerror(errno));
     return false;
   }
 
-  if (!(conf.privileged_mask & PRIV_NOMASK)) {
+  if (!(cfg.privileged_mask & PRIV_NOMASK)) {
     for (const auto path : proc_universal_masks) mask_path(path);
   }
 
@@ -103,7 +103,7 @@ bool setup_virtual_filesystems(asc::rt &rt) {
     }
   }
 
-  if (!setup_procfs(rt.conf)) return false;
+  if (!setup_procfs(rt.cfg)) return false;
 
   if (mount("sysfs", "sys", "sysfs", MS_RDONLY | MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) < 0) {
     log_error("挂载 sysfs 失败: {}", strerror(errno));
@@ -179,7 +179,7 @@ void setup_console_stdio() {
 
 /* 7. 引导 PID 1 进程 */
 void execute_init_process(asc::rt &rt) {
-  const char *init_bin = rt.conf.custom_init.empty() ? DEFAULT_INIT : rt.conf.custom_init.c_str();
+  const char *init_bin = rt.cfg.custom_init.empty() ? DEFAULT_INIT : rt.cfg.custom_init.c_str();
   const char *init_args[] = {init_bin, "systemd.unified_cgroup_hierarchy=1", nullptr};
   const char *environment[] = {"container=asc", nullptr};
 
@@ -212,13 +212,13 @@ void internal_boot(asc::rt &rt) {
 
   // 5. 应用安全性防护
   log_info("[BOOT] 正在应用系统安全加固与沙箱隔离策略...");
-  print_privileged_warning(rt.conf.privileged_mask);
-  if (asc::oci::seccomp_apply_minimal(rt.conf.privileged_mask) < 0) {
+  print_privileged_warning(rt.cfg.privileged_mask);
+  if (asc::oci::seccomp_apply_minimal(rt.cfg.privileged_mask) < 0) {
     log_error("Seccomp 应用失败，拒绝启动不安全的容器");
     return;
   }
-  asc::oci::android_seccomp_setup(rt.conf.block_nested_ns, rt.conf.privileged_mask);
-  asc::oci::apply_capability_hardening(rt.conf.privileged_mask);
+  asc::oci::android_seccomp_setup(rt.cfg.block_nested_ns, rt.cfg.privileged_mask);
+  asc::oci::apply_capability_hardening(rt.cfg.privileged_mask);
 
   // 6. 绑定控制台输入输出
   setup_console_stdio();

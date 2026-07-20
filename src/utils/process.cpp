@@ -19,7 +19,6 @@ bool is_container_init(const pid_t pid) {
   std::string line;
   while (std::getline(file, line)) {
     if (line.starts_with("NSpid:")) {
-      nspid_found = true;
       std::istringstream iss(line.substr(6));
       std::string current, last_val;
       while (iss >> current) {

@@ -104,7 +104,7 @@ pid_t launch_container_init(asc::rt &rt, void *stack_top, int &sync_fd) {
 
   InitArgs args = {rt, efd, sync_fd};
   int clone_flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNS | SIGCHLD;
-  if (rt.conf.isolation_network) clone_flags |= CLONE_NEWNET;
+  if (rt.cfg.isolation_network) clone_flags |= CLONE_NEWNET;
 
   pid_t init_pid = clone(init_trampoline, stack_top, clone_flags, &args);
 
