@@ -3,8 +3,6 @@
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <termios.h>
-#include <bits/termios-c_cc.h>
-#include <bits/termios-c_oflag.h>
 #include <csignal>
 #include <cerrno>
 #include <cstring>
