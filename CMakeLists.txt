@@ -53,10 +53,6 @@ add_executable(asc
 	src/utils/workspace.cpp
 	src/utils/system.cpp
 )
-target_include_directories(asc PRIVATE 
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/include"
-    "${CMAKE_CURRENT_BINARY_DIR}/generated"
-)
 target_link_libraries(asc PRIVATE
 	util
 )
