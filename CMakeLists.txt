@@ -53,6 +53,9 @@ add_executable(asc
 	src/utils/workspace.cpp
 	src/utils/system.cpp
 )
+target_include_directories(asc PRIVATE 
+    "src/include"
+)
 target_link_libraries(asc PRIVATE
 	util
 )

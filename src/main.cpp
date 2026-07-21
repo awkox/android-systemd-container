@@ -1,6 +1,5 @@
 #include <unistd.h>
 #include <cstdio>
-#include <string>
 #include <string_view>
 
 #include "utils/string.h"
