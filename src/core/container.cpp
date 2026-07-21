@@ -21,12 +21,6 @@
 
 namespace asc::core {
 
-namespace {
-
-constexpr int STOP_TIMEOUT = 15;
-
-}
-
 int stop_rootfs(std::string_view container_name) {
   if (acquire_external_lock(container_name) != 0) {
     log_error("无法停止 '{}': 另一个命令正在管理此容器", container_name);
@@ -53,7 +47,7 @@ int stop_rootfs(std::string_view container_name) {
   syscall(SYS_pidfd_send_signal, pfd, SIGRTMIN + 3, nullptr, 0);
 
   pollfd pfd_poll = {.fd = pfd, .events = POLLIN, .revents = 0};
-  int r = poll(&pfd_poll, 1, STOP_TIMEOUT * 1000);
+  int r = poll(&pfd_poll, 1, 15000);
   if (!(r > 0 && (pfd_poll.revents & POLLIN))) {
     log_warn("超时，正在发送 SIGKILL 信号...");
     syscall(SYS_pidfd_send_signal, pfd, SIGKILL, nullptr, 0);
