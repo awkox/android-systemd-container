@@ -22,12 +22,6 @@ set(CMAKE_CXX_EXTENSIONS ON)
 # set(CMAKE_CXX_CLANG_TIDY clang-tidy)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/include/version.h.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/version.h"
-    @ONLY
-)
-
 add_executable(asc
 	src/main.cpp
 
