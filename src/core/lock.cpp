@@ -55,7 +55,7 @@ int acquire_external_lock(std::string_view name) {
   return -1;
 }
 
-void release_external_lock(void) {
+void release_external_lock() {
   if (active_lock_fd >= 0) {
     close(active_lock_fd);
     active_lock_fd = -1;
