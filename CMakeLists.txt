@@ -1,9 +1,9 @@
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.31)
 
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
-    set(CMAKE_C_COMPILER_LAUNCHER   "${CCACHE_PROGRAM}")
-    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+	set(CMAKE_C_COMPILER_LAUNCHER   "${CCACHE_PROGRAM}")
+	set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
 endif()
 
 project(asc
@@ -54,7 +54,7 @@ add_executable(asc
 	src/utils/system.cpp
 )
 target_include_directories(asc PRIVATE 
-    "src/include"
+	"src/include"
 )
 target_link_libraries(asc PRIVATE
 	util
