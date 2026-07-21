@@ -32,8 +32,7 @@ bool cgroup_kernel_supports_v2() {
 int cgroup_host_bootstrap() {
   struct statfs sfs;
 
-  if (statfs("/sys/fs/cgroup", &sfs) == 0 &&
-      sfs.f_type == CGROUP2_SUPER_MAGIC)
+  if (statfs("/sys/fs/cgroup", &sfs) == 0 && sfs.f_type == CGROUP2_SUPER_MAGIC)
     return 0;
 
   if (!cgroup_kernel_supports_v2()) {
@@ -43,8 +42,7 @@ int cgroup_host_bootstrap() {
 
   if (!std::filesystem::exists("/sys/fs/cgroup")) {
     if (!create_directories_with_permission("/sys/fs/cgroup")) {
-      log_error("[CGROUP] 创建 /sys/fs/cgroup 失败: {}",
-                strerror(errno));
+      log_error("[CGROUP] 创建 /sys/fs/cgroup 失败: {}", strerror(errno));
       return -1;
     }
   }
@@ -54,8 +52,7 @@ int cgroup_host_bootstrap() {
       sfs.f_type != CGROUP2_SUPER_MAGIC) {
     if (mount("none", "/sys/fs/cgroup", "tmpfs",
               MS_NOSUID | MS_NODEV | MS_NOEXEC, "mode=755,size=16M") != 0) {
-      log_error("[CGROUP] 挂载 tmpfs 到 /sys/fs/cgroup 失败: {}",
-                strerror(errno));
+      log_error("[CGROUP] 挂载 tmpfs 到 /sys/fs/cgroup 失败: {}", strerror(errno));
       return -1;
     }
     log_info("[CGROUP] 已在 /sys/fs/cgroup 挂载 tmpfs 锚点。");

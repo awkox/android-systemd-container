@@ -9,7 +9,7 @@
 #include "utils/log.h"
 #include "common.h"
 
-static bool validate_container_name(std::string_view name, size_t max_len = 256) {
+static constexpr bool validate_container_name(std::string_view name, size_t max_len = 256) {
   if (name.empty() || name.size() > max_len) return false;
 
   return std::ranges::all_of(name, [](char c) {
