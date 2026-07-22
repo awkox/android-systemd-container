@@ -3,6 +3,7 @@
 
 #include <filesystem>
 
-int loop_attach(const std::filesystem::path &img_path, std::filesystem::path &loop_path_out);
+int loop_attach(const std::filesystem::path &img_path,
+                std::filesystem::path &loop_path_out);
 
 #endif

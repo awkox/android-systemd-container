@@ -1,8 +1,8 @@
-#include <fstream>
-#include <string>
 #include <algorithm>
-#include <ranges>
 #include <filesystem>
+#include <fstream>
+#include <ranges>
+#include <string>
 #include <string_view>
 
 #include "common.h"
@@ -22,27 +22,30 @@ std::string_view trim_whitespace(std::string_view sv) {
   return sv;
 }
 
-constexpr bool parse_bool(std::string_view val) {
-  return val == "1";
-}
+constexpr bool parse_bool(std::string_view val) { return val == "1"; }
 
 int parse_privileged(std::string_view value) {
   int mask = 0;
   for (const auto word_range : value | std::views::split(',')) {
     std::string_view token = trim_whitespace(std::string_view(word_range));
-    if (token == "nomask") mask |= PRIV_NOMASK;
-    else if (token == "nocaps") mask |= PRIV_NOCAPS;
-    else if (token == "noseccomp") mask |= PRIV_NOSEC;
-    else if (token == "full") mask |= PRIV_FULL;
+    if (token == "nomask")
+      mask |= PRIV_NOMASK;
+    else if (token == "nocaps")
+      mask |= PRIV_NOCAPS;
+    else if (token == "noseccomp")
+      mask |= PRIV_NOSEC;
+    else if (token == "full")
+      mask |= PRIV_FULL;
   }
   return mask;
 }
 
-}
+} // namespace
 
 int config_load(const char *config_path, conf &cfg) {
   std::ifstream file(config_path);
-  if (!file) return -1;
+  if (!file)
+    return -1;
 
   std::string line;
   while (std::getline(file, line)) {
@@ -81,4 +84,4 @@ int config_load(const char *config_path, conf &cfg) {
   return 0;
 }
 
-}
+} // namespace asc::core

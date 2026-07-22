@@ -1,13 +1,13 @@
-#include <unistd.h>
-#include <sched.h>
-#include <sys/syscall.h>
-#include <sys/wait.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <filesystem>
-#include <cerrno>
 #include <array>
+#include <cerrno>
+#include <filesystem>
+#include <sched.h>
+#include <stdlib.h>
 #include <string_view>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "core.h"
 #include "utils/log.h"
@@ -40,10 +40,10 @@ bool check_ns(const int flag, std::string_view name) {
 }
 
 bool check_pivot_root() {
-  /* 
+  /*
    * 探测 pivot_root 系统调用是否存在，而不实际执行携带危险参数的调用。
    * 我们通过传递无效指针 (nullptr) 检查该系统调用是否已实现；
-   * 如果返回 ENOSYS，说明内核未提供。如果返回 EFAULT 或 EINVAL，说明其存在。 
+   * 如果返回 ENOSYS，说明内核未提供。如果返回 EFAULT 或 EINVAL，说明其存在。
    */
   if (syscall(SYS_pivot_root, nullptr, nullptr) < 0 && errno == ENOSYS)
     return false;
@@ -59,20 +59,20 @@ bool check_pidfd_supported() {
 }
 
 struct NsCheck {
-    int flag;
-    std::string_view name;
-    std::string_view label;
+  int flag;
+  std::string_view name;
+  std::string_view label;
 };
 
 constexpr auto ns_checks = std::to_array<NsCheck>({
-    {CLONE_NEWNS,     "mnt",    "MNT 命名空间"},
-    {CLONE_NEWPID,    "pid",    "PID 命名空间"},
-    {CLONE_NEWUTS,    "uts",    "UTS 命名空间"},
-    {CLONE_NEWIPC,    "ipc",    "IPC 命名空间"},
+    {CLONE_NEWNS, "mnt", "MNT 命名空间"},
+    {CLONE_NEWPID, "pid", "PID 命名空间"},
+    {CLONE_NEWUTS, "uts", "UTS 命名空间"},
+    {CLONE_NEWIPC, "ipc", "IPC 命名空间"},
     {CLONE_NEWCGROUP, "cgroup", "CGROUP 命名空间"},
 });
 
-}
+} // namespace
 
 int check_requirements_hw() {
   int missing = 0;
@@ -101,4 +101,4 @@ int check_requirements_hw() {
   return 0;
 }
 
-}
+} // namespace asc::core

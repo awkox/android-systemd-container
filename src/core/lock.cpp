@@ -1,15 +1,15 @@
-#include <unistd.h>
-#include <fcntl.h>
 #include <cerrno>
-#include <format>
+#include <fcntl.h>
 #include <filesystem>
+#include <format>
 #include <string>
 #include <string_view>
+#include <unistd.h>
 
 #include "core.h"
+#include "utils/fileio.h"
 #include "utils/log.h"
 #include "utils/path.h"
-#include "utils/fileio.h"
 
 namespace asc::core {
 
@@ -18,7 +18,7 @@ namespace {
 int active_lock_fd = -1;
 std::filesystem::path active_lock_path = "";
 
-}
+} // namespace
 
 int acquire_external_lock(std::string_view name) {
   if (active_lock_fd >= 0)
@@ -79,4 +79,4 @@ bool is_external_lock_active(std::string_view name) {
   return std::filesystem::exists(lock_dir / name);
 }
 
-}
+} // namespace asc::core

@@ -1,22 +1,22 @@
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/epoll.h>
-#include <sys/signalfd.h>
-#include <sys/ioctl.h>
-#include <sys/wait.h>
-#include <sys/syscall.h>
-#include <stdint.h>
-#include <sys/types.h>
-#include <termios.h>
-#include <csignal>
 #include <cerrno>
+#include <csignal>
 #include <cstring>
+#include <fcntl.h>
+#include <stdint.h>
 #include <string_view>
+#include <sys/epoll.h>
+#include <sys/ioctl.h>
+#include <sys/signalfd.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <termios.h>
+#include <unistd.h>
 
 #include "platform/console.h"
 #include "platform/pty.h"
-#include "utils/process.h"
 #include "utils/log.h"
+#include "utils/process.h"
 
 /* 定义控制台上下文，避免在拆分的函数中传递大量参数 */
 struct ConsoleContext {
@@ -41,7 +41,8 @@ struct ConsoleContext {
 static void handle_stdin_event(ConsoleContext &ctx, uint32_t /* events */) {
   char buf[4096];
   ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
-  if (n <= 0) return;
+  if (n <= 0)
+    return;
 
   /* 透传至 PTY Master (带有背压处理) */
   if (ctx.console_master_fd >= 0 && ctx.pending.fd < 0) {
@@ -72,7 +73,8 @@ static void handle_stdin_event(ConsoleContext &ctx, uint32_t /* events */) {
 
 /* 2. 处理容器 PTY Master 的事件 (读输出、写挂起数据、挂断) */
 static void handle_pty_event(ConsoleContext &ctx, uint32_t events) {
-  if (ctx.console_master_fd < 0) return;
+  if (ctx.console_master_fd < 0)
+    return;
 
   /* 容器断开控制台（如关机阶段），取消监听但不退出，等待 Monitor 信号 */
   if (events & (EPOLLHUP | EPOLLERR)) {
@@ -84,7 +86,8 @@ static void handle_pty_event(ConsoleContext &ctx, uint32_t events) {
 
   /* 优先排空挂起的写入 (EPOLLOUT) */
   if ((events & EPOLLOUT) && ctx.pending.fd == ctx.console_master_fd) {
-    ssize_t w = write(ctx.console_master_fd, ctx.pending.data + ctx.pending.off, ctx.pending.len);
+    ssize_t w = write(ctx.console_master_fd, ctx.pending.data + ctx.pending.off,
+                      ctx.pending.len);
     if (w > 0) {
       ctx.pending.off += static_cast<size_t>(w);
       ctx.pending.len -= static_cast<size_t>(w);
@@ -103,7 +106,8 @@ static void handle_pty_event(ConsoleContext &ctx, uint32_t events) {
     char buf[4096];
     ssize_t n = read(ctx.console_master_fd, buf, sizeof(buf));
     if (n > 0) {
-      [[maybe_unused]] ssize_t w = write(STDOUT_FILENO, buf, static_cast<size_t>(n));
+      [[maybe_unused]] ssize_t w =
+          write(STDOUT_FILENO, buf, static_cast<size_t>(n));
     } else {
       epoll_ctl(ctx.epfd, EPOLL_CTL_DEL, ctx.console_master_fd, nullptr);
       close(ctx.console_master_fd);
@@ -115,7 +119,8 @@ static void handle_pty_event(ConsoleContext &ctx, uint32_t events) {
 /* 3. 处理信号事件 (终端缩放、中断信号) */
 static void handle_signal_event(ConsoleContext &ctx, uint32_t /* events */) {
   signalfd_siginfo fdsi;
-  if (read(ctx.sfd, &fdsi, sizeof(fdsi)) != sizeof(fdsi)) return;
+  if (read(ctx.sfd, &fdsi, sizeof(fdsi)) != sizeof(fdsi))
+    return;
 
   if (fdsi.ssi_signo == SIGWINCH) {
     if (ctx.console_master_fd >= 0) {
@@ -133,27 +138,30 @@ static void handle_signal_event(ConsoleContext &ctx, uint32_t /* events */) {
 /* 处理 Monitor 进程的退出事件 (pidfd 可读) */
 static void handle_pidfd_event(ConsoleContext &ctx, uint32_t /* events */) {
   int status;
-  // 由于 epoll 已经通知我们该进程退出了，因此使用 WNOHANG 非阻塞清理僵尸进程即可
+  // 由于 epoll 已经通知我们该进程退出了，因此使用 WNOHANG
+  // 非阻塞清理僵尸进程即可
   waitpid(ctx.monitor_pid, &status, WNOHANG);
   ctx.running = false;
 }
 
-int console_monitor_loop(int console_master_fd, pid_t monitor_pid, std::string_view container_name) {
-  if (console_master_fd < 0) return -1;
+int console_monitor_loop(int console_master_fd, pid_t monitor_pid,
+                         std::string_view container_name) {
+  if (console_master_fd < 0)
+    return -1;
 
   int ret = 0;
   int is_tty = -1;
   termios oldtios;
-  
+
   ConsoleContext ctx = {
-    .epfd = -1,
-    .console_master_fd = console_master_fd,
-    .sfd = -1,
-    .pidfd = -1,            // 初始化 pidfd
-    .monitor_pid = monitor_pid,
-    .container_name = container_name,
-    .running = true,
-    .pending = {},
+      .epfd = -1,
+      .console_master_fd = console_master_fd,
+      .sfd = -1,
+      .pidfd = -1, // 初始化 pidfd
+      .monitor_pid = monitor_pid,
+      .container_name = container_name,
+      .running = true,
+      .pending = {},
   };
 
   ctx.pending.fd = -1;
@@ -227,7 +235,8 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, std::string_v
   while (ctx.running) {
     int nfds = epoll_wait(ctx.epfd, events, 10, -1);
     if (nfds < 0) {
-      if (errno == EINTR) continue;
+      if (errno == EINTR)
+        continue;
       ret = -1;
       break;
     }
@@ -250,11 +259,16 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid, std::string_v
 
   /* 4. 手动清理分配的资源 */
 cleanup:
-  if (ctx.pidfd >= 0) close(ctx.pidfd);
-  if (ctx.sfd >= 0) close(ctx.sfd);
-  if (ctx.epfd >= 0) close(ctx.epfd);
-  if (ctx.console_master_fd >= 0) close(ctx.console_master_fd);
-  if (is_tty == 0) tcsetattr(STDIN_FILENO, TCSAFLUSH, &oldtios);
+  if (ctx.pidfd >= 0)
+    close(ctx.pidfd);
+  if (ctx.sfd >= 0)
+    close(ctx.sfd);
+  if (ctx.epfd >= 0)
+    close(ctx.epfd);
+  if (ctx.console_master_fd >= 0)
+    close(ctx.console_master_fd);
+  if (is_tty == 0)
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &oldtios);
 
   return ret;
 }

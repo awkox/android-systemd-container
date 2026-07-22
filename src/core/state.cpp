@@ -1,10 +1,10 @@
-#include <unistd.h>
-#include <sys/types.h>
 #include <string_view>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "core.h"
-#include "utils/process.h"
 #include "oci.h"
+#include "utils/process.h"
 
 namespace asc::core {
 
@@ -19,11 +19,12 @@ bool is_container_running(std::string_view container_name, pid_t &pid_out) {
   return false;
 }
 
-void cleanup_container_resources(std::string_view container_name, const bool force_cleanup) {
+void cleanup_container_resources(std::string_view container_name,
+                                 const bool force_cleanup) {
   if (!force_cleanup)
     sync();
 
   asc::oci::cgroup_cleanup_container(container_name);
 }
 
-}
+} // namespace asc::core

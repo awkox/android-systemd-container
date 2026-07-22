@@ -1,31 +1,31 @@
-#include <unistd.h>
+#include <cerrno>
+#include <csignal>
+#include <cstdlib>
+#include <cstring>
+#include <fcntl.h>
+#include <filesystem>
+#include <format>
 #include <poll.h>
 #include <sched.h>
-#include <fcntl.h>
-#include <sys/signalfd.h>
-#include <sys/eventfd.h>
-#include <sys/prctl.h>
-#include <sys/syscall.h>
-#include <sys/wait.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <sys/types.h>
-#include <csignal>
-#include <cerrno>
-#include <cstring>
-#include <cstdlib>
-#include <format>
-#include <filesystem>
 #include <string>
+#include <sys/eventfd.h>
+#include <sys/prctl.h>
+#include <sys/signalfd.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
-#include "core.h"
-#include "utils/log.h"
-#include "utils/fileio.h"
-#include "utils/path.h"
-#include "utils/system.h"
-#include "utils/process.h"
-#include "platform/pty.h"
 #include "common.h"
+#include "core.h"
+#include "platform/pty.h"
+#include "utils/fileio.h"
+#include "utils/log.h"
+#include "utils/path.h"
+#include "utils/process.h"
+#include "utils/system.h"
 
 namespace asc::core {
 
@@ -33,17 +33,18 @@ namespace {
 
 struct InitArgs {
   asc::rt &rt;
-  int efd;              // 替代原有的读写管道，仅需一个 fd
-  int sync_pipe_write;  // 属于 Monitor 向 CLI 通信的写端（Init应关闭）
+  int efd;             // 替代原有的读写管道，仅需一个 fd
+  int sync_pipe_write; // 属于 Monitor 向 CLI 通信的写端（Init应关闭）
 };
 
 constexpr int REBOOT_EXIT = 249;
 
 int init_trampoline(void *arg) {
   InitArgs *args = static_cast<InitArgs *>(arg);
-  
+
   // 1. 修复 FD 泄漏：显式关闭继承自父进程但属于父进程的管道写端
-  if (args->sync_pipe_write >= 0) close(args->sync_pipe_write);
+  if (args->sync_pipe_write >= 0)
+    close(args->sync_pipe_write);
 
   /* 2. 阻塞等待父进程(Monitor)将我们安全迁入 Cgroup 树 */
   uint64_t wake_val = 0;
@@ -60,7 +61,7 @@ int init_trampoline(void *arg) {
   }
 
   internal_boot(args->rt);
-  return -1; 
+  return -1;
 }
 
 // 子模块 1: 环境与上下文初始化
@@ -76,7 +77,7 @@ void setup_monitor_environment(asc::rt &rt) {
   signal(SIGPIPE, SIG_IGN);
   signal(SIGUSR1, SIG_IGN);
   signal(SIGUSR2, SIG_IGN);
-  
+
   oom_protect();
   prctl(PR_SET_NAME, "[ds-monitor]", 0, 0, 0);
 
@@ -103,8 +104,10 @@ pid_t launch_container_init(asc::rt &rt, void *stack_top, int &sync_fd) {
   }
 
   InitArgs args = {rt, efd, sync_fd};
-  int clone_flags = CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNS | SIGCHLD;
-  if (rt.cfg.isolation_network) clone_flags |= CLONE_NEWNET;
+  int clone_flags =
+      CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNS | SIGCHLD;
+  if (rt.cfg.isolation_network)
+    clone_flags |= CLONE_NEWNET;
 
   pid_t init_pid = clone(init_trampoline, stack_top, clone_flags, &args);
 
@@ -127,7 +130,8 @@ pid_t launch_container_init(asc::rt &rt, void *stack_top, int &sync_fd) {
 
   /* 首次启动时通知 CLI 工具 */
   if (sync_fd >= 0) {
-    if (write(sync_fd, &init_pid, sizeof(pid_t)) != sizeof(pid_t)) {}
+    if (write(sync_fd, &init_pid, sizeof(pid_t)) != sizeof(pid_t)) {
+    }
     close(sync_fd);
     sync_fd = -1; // 标记为已消费
   }
@@ -143,15 +147,14 @@ int wait_for_container_exit(pid_t init_pid, int sfd) {
     return -1;
   }
 
-  pollfd pfds[2] = {
-      {.fd = pfd, .events = POLLIN, .revents = 0},
-      {.fd = sfd, .events = POLLIN, .revents = 0}
-  };
-  
+  pollfd pfds[2] = {{.fd = pfd, .events = POLLIN, .revents = 0},
+                    {.fd = sfd, .events = POLLIN, .revents = 0}};
+
   // 阻塞等待：目标进程退出 OR 收到前台代理信号
   while (true) {
     if (poll(pfds, 2, -1) < 0) {
-      if (errno == EINTR) continue;
+      if (errno == EINTR)
+        continue;
       break;
     }
 
@@ -175,7 +178,7 @@ int wait_for_container_exit(pid_t init_pid, int sfd) {
   // 直接回收退出状态
   waitpid(init_pid, &status, 0);
   close(pfd);
-  
+
   return status;
 }
 
@@ -201,7 +204,8 @@ bool evaluate_reboot_request(int status, asc::rt &rt) {
                sig == (SIGRTMIN + 14)) {
       log_info("[MONITOR] 检测到容器内部发起了关机请求 (Signal {})", sig);
     } else {
-      log_warn("[MONITOR] Init 进程被信号异常终止: {} ({})", sig, strsignal(sig));
+      log_warn("[MONITOR] Init 进程被信号异常终止: {} ({})", sig,
+               strsignal(sig));
     }
   }
 
@@ -209,8 +213,8 @@ bool evaluate_reboot_request(int status, asc::rt &rt) {
     if (is_external_lock_active(rt.container_name)) {
       log_warn("[MONITOR] 检测到外部命令锁 - 中止内部重启，移交控制权给 CLI");
       return false;
-    } 
-    
+    }
+
     if (rt.foreground) {
       log_info("容器 {} 正在重启", rt.container_name);
       fflush(stdout);
@@ -222,11 +226,11 @@ bool evaluate_reboot_request(int status, asc::rt &rt) {
     rt.ns_inode = 0;
     return true;
   }
-  
+
   return false;
 }
 
-}
+} // namespace
 
 // 主函数: monitor_run 监督主循环
 void monitor_run(asc::rt &rt, int sync_pipe_write) {
@@ -237,13 +241,13 @@ void monitor_run(asc::rt &rt, int sync_pipe_write) {
   int status = 0;
   bool should_reboot = false;
 
-   // 初始化 Monitor 专属的代理信号监听器
+  // 初始化 Monitor 专属的代理信号监听器
   sigset_t mask;
   sigemptyset(&mask);
   sigaddset(&mask, SIGINT);
   sigaddset(&mask, SIGTERM);
   sigprocmask(SIG_BLOCK, &mask, nullptr);
-  
+
   int sfd = signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC);
   if (sfd < 0) {
     log_error("Monitor 无法创建 signalfd: {}", strerror(errno));
@@ -259,7 +263,8 @@ void monitor_run(asc::rt &rt, int sync_pipe_write) {
     }
 
     void *stack = malloc(stack_size);
-    if (!stack) _exit(EXIT_FAILURE);
+    if (!stack)
+      _exit(EXIT_FAILURE);
     void *stack_top = static_cast<char *>(stack) + stack_size;
 
     // 1. 孵化 Init 进程
@@ -271,7 +276,8 @@ void monitor_run(asc::rt &rt, int sync_pipe_write) {
 
     rt.container_pid = init_pid;
     rt.ns_inode = get_pid_ns_inode(init_pid);
-    log_info("容器启动成功，主 PID 为 {} (Monitor PID: {})", init_pid, getpid());
+    log_info("容器启动成功，主 PID 为 {} (Monitor PID: {})", init_pid,
+             getpid());
 
     if (chdir("/") < 0) {
       log_warn("无法 chdir 到 /: {}", strerror(errno));
@@ -279,7 +285,7 @@ void monitor_run(asc::rt &rt, int sync_pipe_write) {
 
     // 2. 挂起 Monitor 自身，阻塞监听容器退出及信号
     status = wait_for_container_exit(init_pid, sfd);
-    
+
     // 3. 显式释放栈内存
     free(stack);
 
@@ -292,7 +298,8 @@ void monitor_run(asc::rt &rt, int sync_pipe_write) {
 
   } while (should_reboot);
 
-  if (sfd >= 0) close(sfd);
+  if (sfd >= 0)
+    close(sfd);
   log_info("[MONITOR] 容器主进程已退出，Monitor 正在执行退出清理工作...");
   cleanup_container_resources(rt.container_name, false);
 
@@ -300,4 +307,4 @@ void monitor_run(asc::rt &rt, int sync_pipe_write) {
   _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 0);
 }
 
-}
+} // namespace asc::core

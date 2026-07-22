@@ -1,9 +1,9 @@
-#include <unistd.h>
 #include <cstdio>
 #include <string_view>
+#include <unistd.h>
 
-#include "utils/string.h"
 #include "core.h"
+#include "utils/string.h"
 
 static void print_usage(const char *prog_name) {
   printf("用法: %s <命令> [参数]\r\n", prog_name);
@@ -19,9 +19,7 @@ static int print_usage_error(const char *prog_name) {
   return 1;
 }
 
-enum class Command {
-  START, STOP, HELP, UNKNOWN
-};
+enum class Command { START, STOP, HELP, UNKNOWN };
 
 static int asc_main(int argc, char **argv) {
   if (argc < 2) {
@@ -35,9 +33,12 @@ static int asc_main(int argc, char **argv) {
   const char *config_path = nullptr;
 
   if (cmd_str == "start" && argc == 4) {
-    cmd = Command::START; name = argv[2]; config_path = argv[3];
+    cmd = Command::START;
+    name = argv[2];
+    config_path = argv[3];
   } else if (cmd_str == "stop" && argc == 3) {
-    cmd = Command::STOP; name = argv[2];
+    cmd = Command::STOP;
+    name = argv[2];
   } else if (cmd_str == "help" && argc == 2) {
     cmd = Command::HELP;
   } else {
@@ -50,7 +51,8 @@ static int asc_main(int argc, char **argv) {
   }
 
   if (getuid() != 0) {
-    printf("执行 '%.*s' 命令需要 Root 权限\r\n", static_cast<int>(cmd_str.size()), cmd_str.data());
+    printf("执行 '%.*s' 命令需要 Root 权限\r\n",
+           static_cast<int>(cmd_str.size()), cmd_str.data());
     return 1;
   }
 
@@ -60,17 +62,15 @@ static int asc_main(int argc, char **argv) {
   }
 
   switch (cmd) {
-    case Command::START: {
-      return asc::core::start_rootfs(name, config_path);
-    }
-    case Command::STOP: {
-      return asc::core::stop_rootfs(name);
-    }
-    default:
-      return print_usage_error(argv[0]);
+  case Command::START: {
+    return asc::core::start_rootfs(name, config_path);
+  }
+  case Command::STOP: {
+    return asc::core::stop_rootfs(name);
+  }
+  default:
+    return print_usage_error(argv[0]);
   }
 }
 
-int main(int argc, char **argv) {
-  return asc_main(argc, argv);
-}
+int main(int argc, char **argv) { return asc_main(argc, argv); }

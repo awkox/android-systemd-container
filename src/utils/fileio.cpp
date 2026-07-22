@@ -1,17 +1,18 @@
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <cerrno>
 #include <cstring>
-#include <fstream>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <string_view>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <system_error>
+#include <unistd.h>
 
 #include "utils/fileio.h"
 
-bool create_directories_with_permission(const std::filesystem::path &target, mode_t mode) {
+bool create_directories_with_permission(const std::filesystem::path &target,
+                                        mode_t mode) {
   // 规范化路径（解析掉多余的 / 以及 . 或 ..）
   std::filesystem::path normalized_target = target.lexically_normal();
   std::filesystem::path current;
@@ -40,10 +41,11 @@ bool create_directories_with_permission(const std::filesystem::path &target, mod
 }
 
 int write_file(const std::filesystem::path &path, std::string_view content) {
-    std::ofstream out(path, std::ios::binary);
-    if (!out) return -1;
-    out << content;
-    return out.good() ? 0 : -1;
+  std::ofstream out(path, std::ios::binary);
+  if (!out)
+    return -1;
+  out << content;
+  return out.good() ? 0 : -1;
 }
 
 ssize_t write_all(const int fd, const void *buf, const size_t count) {
@@ -63,24 +65,24 @@ ssize_t write_all(const int fd, const void *buf, const size_t count) {
 }
 
 bool grep_file(const std::filesystem::path &path, std::string_view pattern) {
-    std::ifstream file(path);
-    std::string line;
-    while (std::getline(file, line)) {
-        if (line.find(pattern) != std::string::npos) {
-            return true;
-        }
+  std::ifstream file(path);
+  std::string line;
+  while (std::getline(file, line)) {
+    if (line.find(pattern) != std::string::npos) {
+      return true;
     }
-    return false;
+  }
+  return false;
 }
 
 bool path_has_symlink(const std::filesystem::path &path) {
-    std::error_code ec;
-    std::filesystem::path current;
-    for (const auto &part : path) {
-        current /= part;
-        if (std::filesystem::is_symlink(current, ec)) {
-            return true;
-        }
+  std::error_code ec;
+  std::filesystem::path current;
+  for (const auto &part : path) {
+    current /= part;
+    if (std::filesystem::is_symlink(current, ec)) {
+      return true;
     }
-    return false;
+  }
+  return false;
 }

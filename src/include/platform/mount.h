@@ -3,7 +3,8 @@
 
 #include <filesystem>
 
-int mount_rootfs_img(const std::filesystem::path &img_path, const std::filesystem::path &mount_point);
+int mount_rootfs_img(const std::filesystem::path &img_path,
+                     const std::filesystem::path &mount_point);
 int mask_path(const char *path);
 
 #endif

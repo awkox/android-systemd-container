@@ -1,6 +1,6 @@
-#include <sys/utsname.h>
 #include <cstdio>
 #include <fstream>
+#include <sys/utsname.h>
 
 #include "utils/system.h"
 
@@ -15,6 +15,4 @@ int get_kernel_version(int &major, int &minor) {
   return 0;
 }
 
-void oom_protect() {
-    std::ofstream("/proc/self/oom_score_adj") << "-1000\n";
-}
+void oom_protect() { std::ofstream("/proc/self/oom_score_adj") << "-1000\n"; }

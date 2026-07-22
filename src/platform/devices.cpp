@@ -1,51 +1,52 @@
 #include "platform/devices.h"
 
-#include <unistd.h>
-#include <sys/stat.h>
-#include <sys/sysmacros.h>
-#include <sys/mount.h>
-#include <fcntl.h>
-#include <sys/types.h>
+#include <array>
 #include <cerrno>
 #include <cstring>
-#include <array>
-#include <system_error>
+#include <fcntl.h>
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <sys/mount.h>
+#include <sys/stat.h>
+#include <sys/sysmacros.h>
+#include <sys/types.h>
+#include <system_error>
+#include <unistd.h>
 
-#include "utils/log.h"
 #include "utils/fileio.h"
+#include "utils/log.h"
 
 struct DeviceConfig {
-    std::string_view name;
-    mode_t mode;
-    dev_t dev;
+  std::string_view name;
+  mode_t mode;
+  dev_t dev;
 };
 
 int setup_dev() {
   static const std::array devices{
-    DeviceConfig{"null",    S_IFCHR | 0666, makedev(1, 3)},
-    DeviceConfig{"zero",    S_IFCHR | 0666, makedev(1, 5)},
-    DeviceConfig{"full",    S_IFCHR | 0666, makedev(1, 7)},
-    DeviceConfig{"random",  S_IFCHR | 0666, makedev(1, 8)},
-    DeviceConfig{"urandom", S_IFCHR | 0666, makedev(1, 9)},
-    DeviceConfig{"tty",     S_IFCHR | 0666, makedev(5, 0)},
-    DeviceConfig{"ptmx",    S_IFCHR | 0666, makedev(5, 2)},
-    DeviceConfig{"console", S_IFCHR | 0620, makedev(5, 1)},
+      DeviceConfig{"null", S_IFCHR | 0666, makedev(1, 3)},
+      DeviceConfig{"zero", S_IFCHR | 0666, makedev(1, 5)},
+      DeviceConfig{"full", S_IFCHR | 0666, makedev(1, 7)},
+      DeviceConfig{"random", S_IFCHR | 0666, makedev(1, 8)},
+      DeviceConfig{"urandom", S_IFCHR | 0666, makedev(1, 9)},
+      DeviceConfig{"tty", S_IFCHR | 0666, makedev(5, 0)},
+      DeviceConfig{"ptmx", S_IFCHR | 0666, makedev(5, 2)},
+      DeviceConfig{"console", S_IFCHR | 0620, makedev(5, 1)},
   };
 
   for (const auto &[name, mode, dev] : devices) {
     std::filesystem::path device_path = std::filesystem::path("dev") / name;
 
     std::error_code ec;
-    std::filesystem::remove(device_path, ec); 
+    std::filesystem::remove(device_path, ec);
 
     if (mknod(device_path.c_str(), mode, dev) < 0) {
-      log_error("创建设备节点 {} 失败: {}", device_path.c_str(), strerror(errno));
+      log_error("创建设备节点 {} 失败: {}", device_path.c_str(),
+                strerror(errno));
       return -1;
-    } 
-    
+    }
+
     chmod(device_path.c_str(), mode & 0777);
     if (name == "console" || name == "tty") {
       if (chown(device_path.c_str(), 0, 5) < 0) {
@@ -58,11 +59,9 @@ int setup_dev() {
 }
 
 int setup_devpts() {
-  static constexpr auto mount_opts = std::to_array<const char*>({
-    "newinstance,ptmxmode=0666,mode=0620,gid=5",
-    "newinstance,ptmxmode=0666,mode=0620",
-    "newinstance"
-  });
+  static constexpr auto mount_opts = std::to_array<const char *>(
+      {"newinstance,ptmxmode=0666,mode=0620,gid=5",
+       "newinstance,ptmxmode=0666,mode=0620", "newinstance"});
 
   bool mount_success = false;
   mkdir("dev/pts", 0777);
@@ -90,7 +89,8 @@ int setup_devpts() {
 
     // 策略 2: Symlink
     std::filesystem::remove("dev/ptmx", ec);
-    if (symlink("pts/ptmx", "dev/ptmx") == 0 && std::filesystem::exists("dev/pts/ptmx", ec)) {
+    if (symlink("pts/ptmx", "dev/ptmx") == 0 &&
+        std::filesystem::exists("dev/pts/ptmx", ec)) {
       return true;
     }
 

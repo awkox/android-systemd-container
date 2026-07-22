@@ -1,9 +1,9 @@
 #ifndef ASC_CORE_H
 #define ASC_CORE_H
 
+#include "common.h"
 #include <string_view>
 #include <sys/types.h>
-#include "common.h"
 
 namespace asc::core {
 
@@ -24,8 +24,9 @@ void close_external_lock_fd();
 void monitor_run(asc::rt &rt, int sync_pipe_write);
 
 bool is_container_running(std::string_view container_name, pid_t &pid_out);
-void cleanup_container_resources(std::string_view container_name, const bool force_cleanup);
+void cleanup_container_resources(std::string_view container_name,
+                                 const bool force_cleanup);
 
-}
+} // namespace asc::core
 
 #endif

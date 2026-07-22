@@ -1,18 +1,18 @@
-#include <unistd.h>
+#include <cerrno>
+#include <csignal>
+#include <cstring>
 #include <fcntl.h>
+#include <filesystem>
+#include <format>
+#include <string>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <termios.h>
-#include <csignal>
-#include <cerrno>
-#include <cstring>
-#include <format>
-#include <filesystem>
-#include <string>
+#include <unistd.h>
 
+#include "common.h"
 #include "platform/pty.h"
 #include "utils/log.h"
-#include "common.h"
 
 /* 不依赖 /dev/ptmx 符号链接直接打开 master 与 slave。
  * 对于 4.13+ 内核，使用 TIOCGPTPEER 直接从 master 文件描述符派生打开 slave。
@@ -22,7 +22,8 @@ int asc_openpty(int &master, int &slave, std::filesystem::path &name) {
   if (m < 0)
     return -1;
 
-  /* 尽力尝试解锁：部分 4.9 内核魔改后的 devpts mount 可能返回 EINVAL/EIO，忽略错误 */
+  /* 尽力尝试解锁：部分 4.9 内核魔改后的 devpts mount 可能返回
+   * EINVAL/EIO，忽略错误 */
   int unlock = 0;
   ioctl(m, TIOCSPTLCK, &unlock);
 
@@ -59,7 +60,8 @@ int terminal_create(asc::tty_info &tty) {
   }
 
   /* 修正 PTY 从设备的组属和权限 */
-  if (fchown(tty.slave, 0, 5) < 0) {}
+  if (fchown(tty.slave, 0, 5) < 0) {
+  }
   fchmod(tty.slave, 0620);
 
   return 0;

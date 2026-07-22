@@ -1,22 +1,22 @@
 #ifndef ASC_COMMON_H
 #define ASC_COMMON_H
 
-#include <sys/types.h>
 #include <ctime>
-#include <string>
 #include <filesystem>
+#include <string>
+#include <sys/types.h>
 
 // 常量定义
 constexpr int PRIV_NOMASK = 1 << 0;
 constexpr int PRIV_NOCAPS = 1 << 1;
-constexpr int PRIV_NOSEC  = 1 << 2;
-constexpr int PRIV_FULL   = 0xFF;
+constexpr int PRIV_NOSEC = 1 << 2;
+constexpr int PRIV_FULL = 0xFF;
 
 namespace asc {
 
 struct tty_info {
   int master = -1;
-  int slave  = -1;
+  int slave = -1;
   std::filesystem::path name;
 };
 
@@ -42,5 +42,5 @@ struct rt {
   unsigned long ns_inode;
 };
 
-}
+} // namespace asc
 #endif

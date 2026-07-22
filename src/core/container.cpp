@@ -1,23 +1,23 @@
-#include <unistd.h>
+#include <cerrno>
+#include <csignal>
+#include <cstring>
 #include <fcntl.h>
-#include <sys/ioctl.h>
-#include <sys/syscall.h>
+#include <filesystem>
 #include <poll.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#include <cerrno>
-#include <filesystem>
-#include <string_view>
-#include <cstring>
-#include <csignal>
 #include <string>
+#include <string_view>
+#include <sys/ioctl.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <unistd.h>
 
+#include "common.h"
 #include "core.h"
+#include "platform/console.h"
+#include "platform/pty.h"
 #include "utils/log.h"
 #include "utils/workspace.h"
-#include "platform/pty.h"
-#include "platform/console.h"
-#include "common.h"
 
 namespace asc::core {
 
@@ -51,7 +51,7 @@ int stop_rootfs(std::string_view container_name) {
   if (!(r > 0 && (pfd_poll.revents & POLLIN))) {
     log_warn("超时，正在发送 SIGKILL 信号...");
     syscall(SYS_pidfd_send_signal, pfd, SIGKILL, nullptr, 0);
-    r = poll(&pfd_poll, 1, 5000); 
+    r = poll(&pfd_poll, 1, 5000);
     if (!(r > 0 && (pfd_poll.revents & POLLIN))) {
       unkillable = true;
       log_error("容器进程 (PID {}) 进入了不可杀死的僵尸状态！", pid);
@@ -60,7 +60,8 @@ int stop_rootfs(std::string_view container_name) {
   close(pfd);
 
   if (!unkillable) {
-    log_info("已成功终止容器 '{}'。资源清理已移交后台 Monitor 完成。", container_name);
+    log_info("已成功终止容器 '{}'。资源清理已移交后台 Monitor 完成。",
+             container_name);
   }
 
   release_external_lock();
@@ -79,7 +80,8 @@ int start_rootfs(const char *container_name, const char *config_path) {
   log_info("正在获取容器独占锁与资源...");
   if (acquire_external_lock(container_name) != 0) {
     if (is_container_running(container_name, existing_pid)) {
-      log_error("容器名称 '{}' 已被 PID {} 占用。", container_name, existing_pid);
+      log_error("容器名称 '{}' 已被 PID {} 占用。", container_name,
+                existing_pid);
     } else {
       log_error("无法操作容器 '{}': 另一个管理命令正在执行。", container_name);
     }
@@ -92,7 +94,9 @@ int start_rootfs(const char *container_name, const char *config_path) {
     goto cleanup;
   }
 
-  if (check_requirements_hw() < 0) return 1;
+  if (check_requirements_hw() < 0) {
+    goto cleanup;
+  }
 
   if (config_path[0]) {
     if (config_load(config_path, rt.cfg) < 0) {
@@ -169,10 +173,12 @@ int start_rootfs(const char *container_name, const char *config_path) {
   close(sync_pipe[0]);
   sync_pipe[0] = -1;
 
-  if (lock_acquired) release_external_lock();
+  if (lock_acquired)
+    release_external_lock();
 
   if (rt.foreground) {
-    return console_monitor_loop(rt.console.master, monitor_pid, rt.container_name);
+    return console_monitor_loop(rt.console.master, monitor_pid,
+                                rt.container_name);
   }
 
   if (rt.console.master >= 0) {
@@ -183,7 +189,8 @@ int start_rootfs(const char *container_name, const char *config_path) {
   return 0;
 
 cleanup:
-  if (lock_acquired) release_external_lock();
+  if (lock_acquired)
+    release_external_lock();
 
   if (rt.console.master >= 0) {
     close(rt.console.master);
@@ -193,10 +200,12 @@ cleanup:
     close(rt.console.slave);
     rt.console.slave = -1;
   }
-  if (sync_pipe[0] >= 0) close(sync_pipe[0]);
-  if (sync_pipe[1] >= 0) close(sync_pipe[1]);
+  if (sync_pipe[0] >= 0)
+    close(sync_pipe[0]);
+  if (sync_pipe[1] >= 0)
+    close(sync_pipe[1]);
 
   return -1;
 }
 
-}
+} // namespace asc::core

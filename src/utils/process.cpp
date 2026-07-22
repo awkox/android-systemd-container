@@ -1,20 +1,21 @@
-#include <sys/stat.h>
-#include <sys/types.h>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
-#include <filesystem>
 #include <string>
 #include <string_view>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <system_error>
 #include <utility>
 
-#include "utils/process.h"
 #include "utils/path.h"
+#include "utils/process.h"
 
 bool is_container_init(const pid_t pid) {
   std::filesystem::path path = proc_dir / std::to_string(pid) / "status";
   std::ifstream file(path);
-  if (!file) return false;
+  if (!file)
+    return false;
 
   std::string line;
   while (std::getline(file, line)) {
@@ -33,8 +34,10 @@ bool is_container_init(const pid_t pid) {
 
 bool is_valid_container_pid(const pid_t pid) {
   std::filesystem::path path = proc_dir / std::to_string(pid) / "root";
-  if (!std::filesystem::exists(path)) return false;
-  if (!is_container_init(pid)) return false;
+  if (!std::filesystem::exists(path))
+    return false;
+  if (!is_container_init(pid))
+    return false;
   return true;
 }
 
@@ -47,9 +50,12 @@ unsigned long get_pid_ns_inode(const pid_t pid) {
 pid_t find_container_init_pid(std::string_view container_name) {
   std::filesystem::path cg_root = project_cgroup_dir / container_name;
   std::error_code ec;
-  if (!std::filesystem::exists(cg_root, ec)) return 0;
+  if (!std::filesystem::exists(cg_root, ec))
+    return 0;
 
-  for (const auto &entry : std::filesystem::recursive_directory_iterator(cg_root, std::filesystem::directory_options::skip_permission_denied, ec)) {
+  for (const auto &entry : std::filesystem::recursive_directory_iterator(
+           cg_root, std::filesystem::directory_options::skip_permission_denied,
+           ec)) {
     if (entry.path().filename() == "cgroup.procs") {
       std::ifstream file(entry.path());
       pid_t pid;
