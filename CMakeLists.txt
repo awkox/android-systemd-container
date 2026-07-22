@@ -1,10 +1,11 @@
-cmake_minimum_required(VERSION 3.31)
+cmake_minimum_required(VERSION 4.2)
 
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
-	set(CMAKE_C_COMPILER_LAUNCHER   "${CCACHE_PROGRAM}")
-	set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+	set(CMAKE_C_COMPILER_LAUNCHER   "${CCACHE_PROGRAM}" CACHE FILEPATH "C compiler launcher")
+	set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}" CACHE FILEPATH "CXX compiler launcher")
 endif()
+
 
 project(asc
 	VERSION 1.0.0

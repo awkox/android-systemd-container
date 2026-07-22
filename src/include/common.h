@@ -1,7 +1,6 @@
 #ifndef ASC_COMMON_H
 #define ASC_COMMON_H
 
-#include <ctime>
 #include <filesystem>
 #include <string>
 #include <sys/types.h>
