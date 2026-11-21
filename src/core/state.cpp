@@ -19,10 +19,8 @@ bool is_container_running(std::string_view container_name, pid_t &pid_out) {
   return false;
 }
 
-void cleanup_container_resources(std::string_view container_name,
-                                 const bool force_cleanup) {
-  if (!force_cleanup)
-    sync();
+void cleanup_container_resources(std::string_view container_name) {
+  sync();
 
   asc::oci::cgroup_cleanup_container(container_name);
 }

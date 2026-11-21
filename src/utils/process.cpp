@@ -3,7 +3,6 @@
 #include <sstream>
 #include <string>
 #include <string_view>
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <system_error>
 #include <utility>
@@ -39,12 +38,6 @@ bool is_valid_container_pid(const pid_t pid) {
   if (!is_container_init(pid))
     return false;
   return true;
-}
-
-unsigned long get_pid_ns_inode(const pid_t pid) {
-  struct stat st;
-  std::filesystem::path path = proc_dir / std::to_string(pid) / "ns/pid";
-  return stat(path.c_str(), &st) == 0 ? st.st_ino : 0UL;
 }
 
 pid_t find_container_init_pid(std::string_view container_name) {

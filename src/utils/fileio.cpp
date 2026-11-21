@@ -74,15 +74,3 @@ bool grep_file(const std::filesystem::path &path, std::string_view pattern) {
   }
   return false;
 }
-
-bool path_has_symlink(const std::filesystem::path &path) {
-  std::error_code ec;
-  std::filesystem::path current;
-  for (const auto &part : path) {
-    current /= part;
-    if (std::filesystem::is_symlink(current, ec)) {
-      return true;
-    }
-  }
-  return false;
-}

@@ -73,6 +73,8 @@ int start_rootfs(const char *container_name, const char *config_path) {
   int sync_pipe[2] = {-1, -1};
   pid_t monitor_pid = -1;
   pid_t existing_pid = -1;
+  // 仅作为同步屏障的接收端：阻塞等待 Monitor 报告孵化结果，PID 值本身不再使用
+  pid_t sync_pid = -1;
   asc::rt rt = {};
 
   ensure_runtime();
@@ -166,7 +168,7 @@ int start_rootfs(const char *container_name, const char *config_path) {
     rt.console.slave = -1;
   }
 
-  if (read(sync_pipe[0], &rt.container_pid, sizeof(pid_t)) != sizeof(pid_t)) {
+  if (read(sync_pipe[0], &sync_pid, sizeof(pid_t)) != sizeof(pid_t)) {
     log_error("Monitor 监控进程未能发送容器 PID。");
     goto cleanup;
   }

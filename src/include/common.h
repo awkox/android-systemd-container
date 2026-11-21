@@ -3,7 +3,6 @@
 
 #include <filesystem>
 #include <string>
-#include <sys/types.h>
 
 // 常量定义
 constexpr int PRIV_NOMASK = 1 << 0;
@@ -32,13 +31,10 @@ struct rt {
   conf cfg;
 
   std::string container_name;
-  pid_t container_pid;
 
   bool foreground;
-  bool reboot_cycle;
 
   tty_info console;
-  unsigned long ns_inode;
 };
 
 } // namespace asc

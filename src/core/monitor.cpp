@@ -24,7 +24,6 @@
 #include "utils/fileio.h"
 #include "utils/log.h"
 #include "utils/path.h"
-#include "utils/process.h"
 #include "utils/system.h"
 
 namespace asc::core {
@@ -219,11 +218,6 @@ bool evaluate_reboot_request(int status, asc::rt &rt) {
       log_info("容器 {} 正在重启", rt.container_name);
       fflush(stdout);
     }
-    rt.reboot_cycle = true;
-
-    // 重置运行时 PID 标识以进入下一轮
-    rt.container_pid = 0;
-    rt.ns_inode = 0;
     return true;
   }
 
@@ -274,8 +268,6 @@ void monitor_run(asc::rt &rt, int sync_pipe_write) {
       _exit(EXIT_FAILURE);
     }
 
-    rt.container_pid = init_pid;
-    rt.ns_inode = get_pid_ns_inode(init_pid);
     log_info("容器启动成功，主 PID 为 {} (Monitor PID: {})", init_pid,
              getpid());
 
@@ -301,7 +293,7 @@ void monitor_run(asc::rt &rt, int sync_pipe_write) {
   if (sfd >= 0)
     close(sfd);
   log_info("[MONITOR] 容器主进程已退出，Monitor 正在执行退出清理工作...");
-  cleanup_container_resources(rt.container_name, false);
+  cleanup_container_resources(rt.container_name);
 
   log_info("[MONITOR] 资源清理完毕，守护进程退出。");
   _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 0);

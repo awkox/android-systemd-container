@@ -1,11 +1,8 @@
 #include <algorithm>
 #include <cctype>
 #include <stddef.h>
-#include <string>
 #include <string_view>
-#include <utility>
 
-#include "common.h"
 #include "utils/log.h"
 #include "utils/string.h"
 
@@ -25,27 +22,4 @@ int reject_container_name(std::string_view name) {
     return -1;
   }
   return 0;
-}
-
-std::string format_privileged_mask(const int mask) {
-  if (mask == PRIV_FULL)
-    return "full";
-
-  std::string result;
-  // 按需调整标志列表即可
-  constexpr std::pair<int, std::string_view> flags[] = {
-      {PRIV_NOMASK, "nomask"},
-      {PRIV_NOCAPS, "nocaps"},
-      {PRIV_NOSEC, "noseccomp"},
-  };
-
-  for (const auto &[flag, name] : flags) {
-    if (mask & flag) {
-      if (!result.empty())
-        result += ',';
-      result += name;
-    }
-  }
-
-  return result;
 }

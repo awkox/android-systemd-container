@@ -24,8 +24,7 @@ void close_external_lock_fd();
 void monitor_run(asc::rt &rt, int sync_pipe_write);
 
 bool is_container_running(std::string_view container_name, pid_t &pid_out);
-void cleanup_container_resources(std::string_view container_name,
-                                 const bool force_cleanup);
+void cleanup_container_resources(std::string_view container_name);
 
 } // namespace asc::core
 
