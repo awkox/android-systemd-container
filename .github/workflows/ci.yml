@@ -10,24 +10,24 @@ jobs:
     runs-on: ubuntu-26.04-arm
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: 配置交叉编译环境
+      - name: 安装构建依赖
         run: |
           sudo apt update
           sudo apt install -y gcc g++ cmake
 
       - name: 生成配置文件 (Configuration)
         run: |
-          cmake -S . build -DCMAKE_BUILD_TYPE=Release
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
       - name: 提取版本号
         id: extract
         run: |
-          VERSION_FILE="build/generated/version.h"
-          VERSION=$(grep '#define PROJECT_VERSION "' $VERSION_FILE | cut -d'"' -f2)
+          VERSION_FILE="build/generated/version.txt"
+          VERSION=$(cat "$VERSION_FILE" 2>/dev/null || true)
           
           if [ -z "$VERSION" ]; then
             echo "错误: 无法从 $VERSION_FILE 提取到版本号"

@@ -23,6 +23,10 @@ set(CMAKE_CXX_EXTENSIONS ON)
 # set(CMAKE_CXX_CLANG_TIDY clang-tidy)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# 输出版本号供 CI 提取（C++ 代码不引用此文件）
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/version.txt"
+	"${PROJECT_VERSION}\n")
+
 add_executable(asc
 	src/main.cpp
 

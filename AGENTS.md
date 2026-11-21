@@ -27,7 +27,7 @@
 ## 构建与运行
 
 ```bash
-cmake -S . -B build      # 配置 (生成 build/generated/version.h)
+cmake -S . -B build      # 配置 (生成 build/generated/version.txt)
 cmake --build build       # 编译
 ./build/asc help          # 运行
 ```
