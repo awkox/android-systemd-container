@@ -57,9 +57,12 @@ add_executable(asc
 target_include_directories(asc PRIVATE 
 	"src/include"
 )
-target_link_libraries(asc PRIVATE
-	util
-)
+# bionic 已将 openpty/forkpty/login_tty 并入 libc，不存在独立的 libutil
+if(NOT ANDROID)
+	target_link_libraries(asc PRIVATE
+		util
+	)
+endif()
 target_compile_options(asc PRIVATE
 	-ffunction-sections
 	-fdata-sections
