@@ -1,99 +1,128 @@
-name: Build Standard Rootfs (Ignore GPG)
+name: Build Ubuntu 25.10 ARM64 Rootfs
 
 on:
   workflow_dispatch:
     inputs:
       suite:
-        description: '发行版代号 (如: trixie, bookworm, sid)'
+        description: 'Ubuntu 发行版代号 (25.10 为 questing)'
         required: true
-        default: 'trixie'
-        type: string
+        default: 'questing'
       variant:
-        description: '构建变体 (standard: 完整标准用户态 / minbase: 极简容器态)'
-        required: false
+        description: '构建变体 (standard, minbase)'
+        required: true
         default: 'standard'
-        type: string
-      url:
-        description: '镜像源 URL (留空则激活 mmdebstrap 智能全量官方源补全)'
-        required: false
-        default: ''
-        type: string
-      extra_args:
-        description: '用户自定义附加参数'
-        required: false
-        default: ''
-        type: string
+      username:
+        description: '创建的用户名'
+        required: true
+      password:
+        description: '用户密码'
+        required: true
+      sudo_nopasswd:
+        description: 'sudo 是否免密'
+        type: boolean
+        default: false
+      enable_deb_src:
+        description: '是否同时启用 deb-src 源码源'
+        type: boolean
+        default: false
 
 jobs:
-  build-rootfs:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-26.04
-            arch: amd64
-          - runner: ubuntu-26.04-arm
-            arch: arm64
-            
-    runs-on: ${{ matrix.runner }}
+  build:
+    # 使用 GitHub 原生 ARM64 Runner（若需改回 x86_64 跑 QEMU，改为 ubuntu-26.04 并装 qemu-user-static binfmt-support）
+    runs-on: ubuntu-26.04-arm
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y mmdebstrap genext2fs
+          sudo apt-get install -y mmdebstrap ubuntu-keyring e2fsprogs
 
-      - name: Build Rootfs (tar.gz & ext4)
+      - name: Build Rootfs (arm64)
         env:
-          SUITE: ${{ inputs.suite }}
-          VARIANT: ${{ inputs.variant }}
-          URL: ${{ inputs.url }}
-          EXTRA_ARGS: ${{ inputs.extra_args }}
-          ARCH: ${{ matrix.arch }}
+          ARCH: arm64
+          SUITE: ${{ github.event.inputs.suite }}
+          VARIANT: ${{ github.event.inputs.variant }}
+          USERNAME: ${{ github.event.inputs.username }}
+          PASSWORD: ${{ github.event.inputs.password }}
+          SUDO_NOPASSWD: ${{ github.event.inputs.sudo_nopasswd }}
+          ENABLE_DEB_SRC: ${{ github.event.inputs.enable_deb_src }}
         run: |
-          # 1. 使用 Bash 数组 (Array) 完美封装参数，彻底免疫空格切分灾难
-          OPTS=(
-            --arch="$ARCH"
-            --components=main
-            --dpkgopt='path-exclude=/lib/firmware/*'
-            --aptopt='Acquire::AllowInsecureRepositories "true"'
-            --aptopt='Acquire::AllowDowngradeToInsecureRepositories "true"'
-            --aptopt='APT::Get::AllowUnauthenticated "true"'
-          )
-          
-          # 2. 动态追加变体参数
-          if [ -n "$VARIANT" ]; then
-            OPTS+=("--variant=$VARIANT")
-          fi
-          
-          # 3. 动态解析用户输入的附加参数 (完美尊重内部单双引号)
-          if [ -n "$EXTRA_ARGS" ]; then
-            # 使用 eval 让 Bash 重新按照标准的命令行规则去吞吐引号和空格
-            eval "TEMP_EXTRA_ARRAY=($EXTRA_ARGS)"
-            OPTS+=("${TEMP_EXTRA_ARRAY[@]}")
-          fi
-          
-          # 4. 生成 tar.gz 归档包
-          # 使用 "${OPTS[@]}" 展开数组，能绝对保证里面带有空格的 aptopt 参数不被拆散
-          echo "Generating tar.gz rootfs..."
-          if [ -n "$URL" ]; then
-            mmdebstrap "${OPTS[@]}" "$SUITE" "rootfs-${SUITE}-${ARCH}.tar.gz" "$URL"
+          if [ "$ENABLE_DEB_SRC" = "true" ]; then
+            TYPES="deb deb-src"
           else
-            mmdebstrap "${OPTS[@]}" "$SUITE" "rootfs-${SUITE}-${ARCH}.tar.gz"
+            TYPES="deb"
           fi
 
-          # 5. 生成 ext4 原始镜像
-          echo "Generating ext4 raw filesystem image..."
-          if [ -n "$URL" ]; then
-            mmdebstrap "${OPTS[@]}" "$SUITE" "rootfs-${SUITE}-${ARCH}.ext4" "$URL"
-          else
-            mmdebstrap "${OPTS[@]}" "$SUITE" "rootfs-${SUITE}-${ARCH}.ext4"
+          # 生成与 Ubuntu 官方 ARM64 一致的完整两段式 DEB822 源
+          cat <<EOF > ubuntu.sources
+          Types: ${TYPES}
+          URIs: http://ports.ubuntu.com/ubuntu-ports/
+          Suites: ${SUITE} ${SUITE}-updates ${SUITE}-backports
+          Components: main restricted universe multiverse
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+          Types: ${TYPES}
+          URIs: http://ports.ubuntu.com/ubuntu-ports/
+          Suites: ${SUITE}-security
+          Components: main restricted universe multiverse
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
+
+          # 安全写入初始化脚本（通过 %q 转义密码中的 ! @ 等特殊符号）
+          {
+            echo '#!/bin/bash'
+            echo 'set -e'
+            printf 'TARGET_USER=%q\n' "$USERNAME"
+            printf 'TARGET_PASS=%q\n' "$PASSWORD"
+            printf 'TARGET_SUDO_NOPASSWD=%q\n' "$SUDO_NOPASSWD"
+            printf 'HOST_SOURCES_FILE=%q\n' "$PWD/ubuntu.sources"
+          } > init_user.sh
+
+          cat <<'HOOK' >> init_user.sh
+          ROOTFS="$1"
+
+          # 1. 创建用户并设置密码
+          chroot "$ROOTFS" useradd -m -s /bin/bash -G sudo "$TARGET_USER"
+          printf '%s:%s\n' "$TARGET_USER" "$TARGET_PASS" | chroot "$ROOTFS" chpasswd
+
+          if [ "$TARGET_SUDO_NOPASSWD" = "true" ]; then
+            echo "$TARGET_USER ALL=(ALL:ALL) NOPASSWD: ALL" > "$ROOTFS/etc/sudoers.d/$TARGET_USER"
+            chmod 0440 "$ROOTFS/etc/sudoers.d/$TARGET_USER"
           fi
+
+          # 2. 清理 mmdebstrap 临时生成的文件及任何跳过签名校验的配置，替换为规范的 ubuntu.sources
+          rm -f "$ROOTFS/etc/apt/apt.conf.d/99mmdebstrap" \
+                "$ROOTFS/etc/apt/sources.list" \
+                "$ROOTFS/etc/apt/sources.list.d/"*.list \
+                "$ROOTFS/etc/apt/sources.list.d/"*.sources
+          mkdir -p "$ROOTFS/etc/apt/sources.list.d"
+          cp "$HOST_SOURCES_FILE" "$ROOTFS/etc/apt/sources.list.d/ubuntu.sources"
+          chmod 0644 "$ROOTFS/etc/apt/sources.list.d/ubuntu.sources"
+
+          # 3. 用正式 GPG 校验刷新全部 4 个 Suite 的索引
+          chroot "$ROOTFS" apt-get update
+          HOOK
+          chmod +x init_user.sh
+
+          OPTS=(
+            "--arch=$ARCH"
+            "--variant=$VARIANT"
+            "--keyring=/usr/share/keyrings/ubuntu-archive-keyring.gpg"
+            "--include=sudo,sudo-rs,ca-certificates"
+            "--customize-hook=./init_user.sh \"\$1\""
+          )
+
+          sudo mmdebstrap "${OPTS[@]}" "$SUITE" "rootfs-${SUITE}-${ARCH}.tar.gz" ./ubuntu.sources
+          sudo mmdebstrap "${OPTS[@]}" "$SUITE" "rootfs-${SUITE}-${ARCH}.ext4" ./ubuntu.sources
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: rootfs-${{ inputs.suite }}-${{ matrix.arch }}
+          name: ubuntu-${{ github.event.inputs.suite }}-arm64
           path: |
-            rootfs-${{ inputs.suite }}-${{ matrix.arch }}.tar.gz
-            rootfs-${{ inputs.suite }}-${{ matrix.arch }}.ext4
+            rootfs-*.tar.gz
+            rootfs-*.ext4
+          retention-days: 7
