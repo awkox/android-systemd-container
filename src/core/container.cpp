@@ -107,11 +107,9 @@ int start_rootfs(const char *container_name, const char *config_path) {
     }
   }
 
+  // 前台模式不再要求 stdin/stdout 都是 TTY。
+  // stdout 可以是文件或管道，PTY 输出仍然由 CLI 转发。
   rt.foreground = true;
-  if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) {
-    rt.foreground = false;
-    log_warn("无交互式终端 - 自动转入后台运行。");
-  }
 
   log_info("正在分配并设置容器虚拟控制台 (PTY Console)...");
   if (terminal_create(rt.console) < 0) {

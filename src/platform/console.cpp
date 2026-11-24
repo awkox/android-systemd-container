@@ -71,6 +71,26 @@ static void handle_stdin_event(ConsoleContext &ctx, uint32_t /* events */) {
   }
 }
 
+static bool write_stdout_all(const char *data, size_t len) {
+    size_t offset = 0;
+
+    while (offset < len) {
+        ssize_t n = write(STDOUT_FILENO, data + offset, len - offset);
+
+        if (n > 0) {
+            offset += static_cast<size_t>(n);
+            continue;
+        }
+
+        if (n < 0 && errno == EINTR)
+            continue;
+
+        return false;
+    }
+
+    return true;
+}
+
 /* 2. 处理容器 PTY Master 的事件 (读输出、写挂起数据、挂断) */
 static void handle_pty_event(ConsoleContext &ctx, uint32_t events) {
   if (ctx.console_master_fd < 0)
@@ -106,8 +126,9 @@ static void handle_pty_event(ConsoleContext &ctx, uint32_t events) {
     char buf[4096];
     ssize_t n = read(ctx.console_master_fd, buf, sizeof(buf));
     if (n > 0) {
-      [[maybe_unused]] ssize_t w =
-          write(STDOUT_FILENO, buf, static_cast<size_t>(n));
+      if (!write_stdout_all(buf, static_cast<size_t>(n))) {
+        log_error("转发容器控制台输出失败: {}", strerror(errno));
+      }
     } else {
       epoll_ctl(ctx.epfd, EPOLL_CTL_DEL, ctx.console_master_fd, nullptr);
       close(ctx.console_master_fd);
@@ -152,6 +173,7 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid,
   int ret = 0;
   int is_tty = -1;
   termios oldtios;
+  bool stdin_is_tty = false;
 
   ConsoleContext ctx = {
       .epfd = -1,
@@ -200,10 +222,21 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid,
     goto cleanup;
   }
 
-  /* 注册监听事件 */
-  ev.events = EPOLLIN;
-  ev.data.fd = STDIN_FILENO;
-  epoll_ctl(ctx.epfd, EPOLL_CTL_ADD, STDIN_FILENO, &ev);
+  /* stdin 只有在连接真实终端时才需要监听。
+   * stdin 是管道、文件或 /dev/null 时，不注册，避免 EOF 导致 epoll 忙循环。
+   */
+  stdin_is_tty = isatty(STDIN_FILENO);
+    
+  if (stdin_is_tty) {
+    ev.events = EPOLLIN;
+    ev.data.fd = STDIN_FILENO;
+            
+    if (epoll_ctl(ctx.epfd, EPOLL_CTL_ADD, STDIN_FILENO, &ev) < 0) {
+      log_error("无法监听标准输入: {}", strerror(errno));
+      ret = -1;
+      goto cleanup;
+    }
+  }
 
   ev.events = EPOLLIN | EPOLLHUP | EPOLLERR;
   ev.data.fd = ctx.console_master_fd;
@@ -223,12 +256,15 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid,
     fcntl(ctx.console_master_fd, F_SETFL, fl | O_NONBLOCK);
   }
 
-  /* 设置终端为原始(raw)模式 */
-  is_tty = setup_tios(STDIN_FILENO, oldtios);
-  if (is_tty == 0) {
-    winsize ws;
-    if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
-      ioctl(ctx.console_master_fd, TIOCSWINSZ, &ws);
+  /* 只有真实终端才设置 raw 模式 */
+  if (stdin_is_tty) {
+    is_tty = setup_tios(STDIN_FILENO, oldtios);
+
+    if (is_tty == 0) {
+        winsize ws;
+        if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0)
+            ioctl(ctx.console_master_fd, TIOCSWINSZ, &ws);
+    }
   }
 
   /* 3. 进入主事件分发循环 (Dispatcher) */
@@ -245,7 +281,7 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid,
       const int fd = events[i].data.fd;
       const uint32_t ev_mask = events[i].events;
 
-      if (fd == STDIN_FILENO) {
+      if (stdin_is_tty && fd == STDIN_FILENO) {
         handle_stdin_event(ctx, ev_mask);
       } else if (fd == ctx.console_master_fd) {
         handle_pty_event(ctx, ev_mask);
