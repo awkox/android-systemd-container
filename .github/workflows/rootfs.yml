@@ -111,7 +111,7 @@ jobs:
             "--arch=$ARCH"
             "--variant=$VARIANT"
             "--keyring=/usr/share/keyrings/ubuntu-archive-keyring.gpg"
-            "--include=sudo,sudo-rs,ca-certificates"
+            "--include=sudo,sudo-rs,ca-certificates,openssh-server"
             "--customize-hook=./init_user.sh \"\$1\""
           )
 
